@@ -31,7 +31,8 @@ _KM_TO_M = 1000
 class Point:
     """A representation of point source."""
 
-    point_coordinates: np.ndarray
+    # The bounds of a point source are just the coordinates of the point
+    bounds: np.ndarray
     # used to approximate point source as a small planar patch (metres).
     length_m: float
     # The usual strike, dip, dip direction, etc cannot be calculated
@@ -39,6 +40,18 @@ class Point:
     strike: float
     dip: float
     dip_dir: float
+
+    @property
+    def coordinates(self) -> np.ndarray:
+        """Return the coordinates of the point in (lat, lon, depth) format.
+
+        Returns
+        -------
+        np.ndarray
+            The coordinates of the point in (lat, lon, depth) format.
+            Depth is in metres.
+        """
+        return coordinates.wgs_depth_to_nztm(self.bounds)
 
     @property
     def length(self) -> float:
@@ -88,7 +101,7 @@ class Point:
             coordinates are just the location of the point source.
         """
 
-        return self.point_coordinates
+        return self.coordinates
 
     def wgs_depth_coordinates_to_fault_coordinates(
         self, wgs_depth_coordinates: np.ndarray
@@ -113,10 +126,7 @@ class Point:
             If the point is not near the source point.
         """
         nztm_coordinates = coordinates.wgs_depth_to_nztm(wgs_depth_coordinates)
-        if np.all(
-            np.abs(nztm_coordinates - self.point_coordinates)[:2] / _KM_TO_M
-            < self.length
-        ):
+        if np.all(np.abs(nztm_coordinates - self.bounds)[:2] / _KM_TO_M < self.length):
             return np.array([1 / 2, 1 / 2])  # Point is in the centre of the small patch
         raise ValueError("Given global coordinates out of bounds for point source.")
 
@@ -149,7 +159,8 @@ class Plane:
          3            2
     """
 
-    corners_nztm: np.ndarray
+    # Bounds for plane are just the corners
+    bounds: np.ndarray
 
     @property
     def corners(self) -> np.ndarray:
@@ -160,7 +171,7 @@ class Plane:
             The corners of the fault plane in (lat, lon, depth) format. The
             corners are the same as in corners_nztm.
         """
-        return coordinates.nztm_to_wgs_depth(self.corners_nztm)
+        return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
     def length_m(self) -> float:
@@ -170,7 +181,7 @@ class Plane:
         float
             The length of the fault plane (in metres).
         """
-        return np.linalg.norm(self.corners_nztm[1] - self.corners_nztm[0])
+        return np.linalg.norm(self.bounds[1] - self.bounds[0])
 
     @property
     def width_m(self) -> float:
@@ -180,7 +191,7 @@ class Plane:
         float
             The width of the fault plane (in metres).
         """
-        return np.linalg.norm(self.corners_nztm[-1] - self.corners_nztm[0])
+        return np.linalg.norm(self.bounds[-1] - self.bounds[0])
 
     @property
     def bottom_m(self) -> float:
@@ -190,7 +201,7 @@ class Plane:
         float
             The bottom depth (in metres).
         """
-        return self.corners_nztm[-1, -1]
+        return self.bounds[-1, -1]
 
     @property
     def width(self) -> float:
@@ -244,7 +255,7 @@ class Plane:
 
         north_direction = np.array([1, 0, 0])
         up_direction = np.array([0, 0, 1])
-        strike_direction = self.corners_nztm[1] - self.corners_nztm[0]
+        strike_direction = self.bounds[1] - self.bounds[0]
         return geo.oriented_bearing_wrt_normal(
             north_direction, strike_direction, up_direction
         )
@@ -261,7 +272,7 @@ class Plane:
             return 0  # TODO: Is this right for this case?
         north_direction = np.array([1, 0, 0])
         up_direction = np.array([0, 0, 1])
-        dip_direction = self.corners_nztm[-1] - self.corners_nztm[0]
+        dip_direction = self.bounds[-1] - self.bounds[0]
         dip_direction[-1] = 0
         return geo.oriented_bearing_wrt_normal(
             north_direction, dip_direction, up_direction
@@ -358,9 +369,9 @@ class Plane:
         np.ndarray
             An 3d-vector of (lat, lon, depth) transformed coordinates.
         """
-        origin = self.corners_nztm[0]
-        top_right = self.corners_nztm[1]
-        bottom_left = self.corners_nztm[-1]
+        origin = self.bounds[0]
+        top_right = self.bounds[1]
+        bottom_left = self.bounds[-1]
         frame = np.vstack((top_right - origin, bottom_left - origin))
 
         return coordinates.nztm_to_wgs_depth(origin + plane_coordinates @ frame)
@@ -390,9 +401,9 @@ class Plane:
         ValueError
             If the given coordinates do not lie in the fault plane.
         """
-        origin = self.corners_nztm[0]
-        top_right = self.corners_nztm[1]
-        bottom_left = self.corners_nztm[-1]
+        origin = self.bounds[0]
+        top_right = self.bounds[1]
+        bottom_left = self.bounds[-1]
         frame = np.vstack((top_right - origin, bottom_left - origin))
         offset = coordinates.wgs_depth_to_nztm(global_coordinates) - origin
         plane_coordinates, residual, _, _ = np.linalg.lstsq(frame.T, offset, rcond=None)
@@ -440,7 +451,7 @@ class Plane:
         """
 
         return coordinates.nztm_to_wgs_depth(
-            np.mean(self.corners_nztm, axis=0).reshape((1, -1))
+            np.mean(self.bounds, axis=0).reshape((1, -1))
         ).ravel()
 
 
@@ -546,7 +557,8 @@ class Fault:
         """
         return np.vstack([plane.corners for plane in self.planes])
 
-    def corners_nztm(self) -> np.ndarray:
+    @property
+    def bounds(self) -> np.ndarray:
         """Get all corners of a fault.
 
         Returns
@@ -554,7 +566,7 @@ class Fault:
         np.ndarray of shape (4n x 3)
             The corners in NZTM format of each fault plane in the fault, stacked vertically.
         """
-        return np.vstack([plane.corners_nztm for plane in self.planes])
+        return np.vstack([plane.bounds for plane in self.planes])
 
     def wgs_depth_coordinates_to_fault_coordinates(
         self, global_coordinates: np.ndarray
@@ -650,8 +662,10 @@ class Fault:
         )
 
 
-class HasCoordinates(Protocol):
+class IsSource(Protocol):
     """Type definition for a source with local coordinates."""
+
+    bounds: np.ndarray
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self,
@@ -665,7 +679,7 @@ class HasCoordinates(Protocol):
 
 
 def closest_point_between_sources(
-    source_a: HasCoordinates, source_b: HasCoordinates
+    source_a: IsSource, source_b: IsSource
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 
