@@ -87,7 +87,7 @@ While we have five types of sources (per [Source Modelling for GMSim](https://wi
 2. **Plane Geometry**: This a 2-dimensional source geometry consisting of a single plane. The extents of the geometry are its corners. The `qcore.sources` module uses the `Plane` class to model single plane geometry.
 3. **Multi-Planar Geometry**: This is a 2-dimensional source geometry consisting of a number of connected planes. The extents of the geometry are the corners of the end fault planes. The `qcore.sources` module uses the `Fault` class to model multi-planar geometry.
 
-Type-I fault are an instance of the the first geometry, type-2 faults
+Type-1 fault are an instance of the the first geometry, type-2 faults
 are plane geometries, and type-4 and type-5 are multi-planar
 geometries.
 
