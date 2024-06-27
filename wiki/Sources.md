@@ -1,4 +1,4 @@
-# Source Geometry 
+# Source Geometry
 
 A number of packages need to deal with fault geometry including:
 
