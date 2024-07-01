@@ -41,6 +41,25 @@ class Point:
     dip: float
     dip_dir: float
 
+    @staticmethod
+    def from_lat_lon_depth(point_coordinates: np.ndarray, **kwargs) -> "Point":
+        """Construct a point source from a lat, lon, depth format.
+
+        Parameters
+        ----------
+        point_coordinates : np.ndarray
+            The coordinates of the point in lat, lon, depth format.
+        kwargs
+            The remaining point source arguments (see the class-level docstring)
+
+        Returns
+        -------
+        Point
+            The Point source representing this geometry.
+
+        """
+        return Point(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
+
     @property
     def coordinates(self) -> np.ndarray:
         """Return the coordinates of the point in (lat, lon, depth) format.
@@ -141,7 +160,7 @@ class Plane:
 
     Attributes
     ----------
-    corners_nztm : np.ndarray
+    bounds : np.ndarray
         The corners of the fault plane, in NZTM format. The order of the
         corners is given clockwise from the top left (according to strike
         and dip). See the diagram below.
@@ -161,6 +180,22 @@ class Plane:
 
     # Bounds for plane are just the corners
     bounds: np.ndarray
+
+    @staticmethod
+    def from_lat_lon_depth(corners: np.ndarray) -> "Plane":
+        """Construct a plane point source from its corners.
+
+        Parameters
+        ----------
+        corners : np.ndarray
+            The corners in lat, lon, depth format. Has shape (4 x 3).
+
+        Returns
+        -------
+        Plane
+            The plane source representing this geometry.
+        """
+        return Plane(coordinates.wgs_depth_to_nztm(corners))
 
     @property
     def corners(self) -> np.ndarray:
@@ -488,6 +523,22 @@ class Fault:
     """
 
     planes: list[Plane]
+
+    @staticmethod
+    def from_lat_lon_depth(fault_corners: np.ndarray) -> "Fault":
+        """Construct a plane source geometry from the corners of the plane.
+
+        Parameters
+        ----------
+        corners : np.ndarray
+            The corners of the plane in lat, lon, depth format. Has shape (n x 4 x 3).
+
+        Returns
+        -------
+        Fault
+            The fault object representing this geometry.
+        """
+        return Fault([Plane.from_lat_lon_depth(corners) for corners in fault_corners])
 
     def area(self) -> float:
         """Compute the area of a fault.
