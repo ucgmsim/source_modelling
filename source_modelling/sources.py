@@ -70,7 +70,7 @@ class Point:
             The coordinates of the point in (lat, lon, depth) format.
             Depth is in metres.
         """
-        return coordinates.wgs_depth_to_nztm(self.bounds)
+        return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
     def length(self) -> float:
