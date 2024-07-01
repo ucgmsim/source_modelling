@@ -3,14 +3,17 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "PACKAGE NAME HERE"
+name = "source_modelling"
 authors = [
     {name = "QuakeCoRE" },
 ]
-description = "PACKAGE DESCRIPTION HERE"
+description = "Source modelling library"
 readme = "README.md"
 requires-python = ">=3.9"
 dynamic = ["version", "dependencies"]
+
+[tool.setuptools.package-dir]
+source_modelling = "source_modelling"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
