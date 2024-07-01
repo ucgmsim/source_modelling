@@ -182,7 +182,7 @@ class Plane:
     bounds: np.ndarray
 
     @staticmethod
-    def from_lat_lon_depth(corners: np.ndarray) -> "Plane":
+    def from_corners(corners: np.ndarray) -> "Plane":
         """Construct a plane point source from its corners.
 
         Parameters
@@ -525,7 +525,7 @@ class Fault:
     planes: list[Plane]
 
     @staticmethod
-    def from_lat_lon_depth(fault_corners: np.ndarray) -> "Fault":
+    def from_corners(fault_corners: np.ndarray) -> "Fault":
         """Construct a plane source geometry from the corners of the plane.
 
         Parameters
@@ -538,7 +538,7 @@ class Fault:
         Fault
             The fault object representing this geometry.
         """
-        return Fault([Plane.from_lat_lon_depth(corners) for corners in fault_corners])
+        return Fault([Plane.from_corners(corners) for corners in fault_corners])
 
     def area(self) -> float:
         """Compute the area of a fault.
