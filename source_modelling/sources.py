@@ -597,6 +597,7 @@ class Fault:
         """
         return self.planes[0].dip_dir
 
+    @property
     def corners(self) -> np.ndarray:
         """Get all corners of a fault.
 
