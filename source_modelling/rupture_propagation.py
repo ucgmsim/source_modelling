@@ -30,7 +30,7 @@ DistanceGraph = dict[str, dict[str, int]]
 ProbabilityGraph = defaultdict[str, dict[str, float]]
 RuptureCausalityTree = dict[str, Optional[str]]
 
-JumpPair = namedtuple("JumpPair", ["from", "to"])
+JumpPair = namedtuple("JumpPair", ["from_point", "to_point"])
 
 
 def shaw_dieterich_distance_model(distance: float, d0, delta) -> float:
