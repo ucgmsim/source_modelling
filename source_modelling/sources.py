@@ -239,6 +239,16 @@ class Plane:
         return self.bounds[-1, -1]
 
     @property
+    def top_m(self) -> float:
+        """
+        Returns
+        -------
+        float
+            The top depth of the fault.
+        """
+        return self.bounds[0, -1]
+
+    @property
     def width(self) -> float:
         """
         Returns
@@ -321,7 +331,7 @@ class Plane:
         float
             The dip angle of the fault.
         """
-        return np.degrees(np.arcsin(np.abs(self.bottom_m) / self.width_m))
+        return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
     @staticmethod
     def from_centroid_strike_dip(
