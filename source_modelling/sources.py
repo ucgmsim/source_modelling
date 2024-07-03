@@ -1,4 +1,4 @@
-"""Module for representing the geometry seismic sources: point sources, fault planes and faults.
+"""Module for representing the geometry of seismic sources: point sources, fault planes and faults.
 
 This module provides classes and functions for representing fault planes and
 faults, along with methods for calculating various properties such as
@@ -6,7 +6,7 @@ dimensions, orientation, and coordinate transformations.
 
 Classes
 -------
-PointSource:
+Point:
     A representation of a point source.
 
 Plane:
@@ -29,7 +29,21 @@ _KM_TO_M = 1000
 
 @dataclasses.dataclass
 class Point:
-    """A representation of point source."""
+    """A representation of point source.
+
+    Attributes
+    ----------
+    bounds : np.ndarray
+        The coordinates (NZTM) of the point source.
+    length_m : float
+        Length used to approximate the point source as a small planar patch (metres).
+    strike : float
+        The strike angle of the point source in degrees.
+    dip : float
+        The dip angle of the point source in degrees.
+    dip_dir : float
+        The dip direction of the point source in degrees.
+    """
 
     # The bounds of a point source are just the coordinates of the point
     bounds: np.ndarray
@@ -519,21 +533,6 @@ class Fault:
     ----------
     planes : list[Plane]
         A list containing all the Planes that constitute the fault.
-
-    Methods
-    -------
-    area:
-        Compute the area of a fault.
-    widths:
-        Get the widths of all fault planes.
-    lengths:
-        Get the lengths of all fault planes.
-    corners:
-        Get all corners of a fault.
-    global_coordinates_to_fault_coordinates:
-        Convert global coordinates to fault coordinates.
-    fault_coordinates_to_wgsdepth_coordinates:
-        Convert fault coordinates to global coordinates.
     """
 
     planes: list[Plane]
