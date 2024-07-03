@@ -674,7 +674,7 @@ class Fault:
             If the given point does not lie on the fault.
 
         """
-        # the right edges as a cumulative proportion of the fault length (e.g. [0.1, ..., 0.8])
+        # the left edges as a cumulative proportion of the fault length (e.g. [0.1, ..., 0.8])
         left_edges = self.lengths.cumsum() / self.length
         left_edges = np.insert(left_edges, 0, 0)
         for i, plane in enumerate(self.planes):
