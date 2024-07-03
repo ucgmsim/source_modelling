@@ -446,15 +446,24 @@ class Plane:
         ValueError
             If the given coordinates do not lie in the fault plane.
         """
-        origin = self.bounds[0]
-        top_right = self.bounds[1]
-        bottom_left = self.bounds[-1]
-        frame = np.vstack((top_right - origin, bottom_left - origin))
-        offset = coordinates.wgs_depth_to_nztm(global_coordinates) - origin
-        plane_coordinates, residual, _, _ = np.linalg.lstsq(frame.T, offset, rcond=None)
-        if not np.isclose(residual[0], 0, atol=1e-02):
-            raise ValueError("Coordinates do not lie in fault plane.")
-        return np.clip(plane_coordinates, 0, 1)
+        strike_direction = self.bounds[1, :2] - self.bounds[0, :2]
+        dip_direction = self.bounds[-1, :2] - self.bounds[0, :2]
+        offset = (
+            coordinates.wgs_depth_to_nztm(global_coordinates[:2]) - self.bounds[0, :2]
+        )
+        projection_matrix = np.array(
+            [
+                strike_direction / (strike_direction**2).sum(),
+                dip_direction / (dip_direction**2).sum(),
+            ]
+        ).T
+        fault_local_coordinates = offset @ projection_matrix
+        if not np.all(
+            (fault_local_coordinates > 0 | np.isclose(fault_local_coordinates, 0))
+            & (fault_local_coordinates < 1 | np.isclose(fault_local_coordinates, 1))
+        ):
+            raise ValueError("Specified coordinates do not lie in plane")
+        return np.clip(fault_local_coordinates, 0, 1)
 
     def wgs_depth_coordinates_in_plane(self, global_coordinates: np.ndarray) -> bool:
         """Test if some global coordinates lie in the bounds of a plane.
@@ -475,12 +484,7 @@ class Plane:
             plane_coordinates = self.wgs_depth_coordinates_to_fault_coordinates(
                 global_coordinates
             )
-            return np.all(
-                np.logical_or(
-                    np.abs(plane_coordinates) < 1 / 2,
-                    np.isclose(np.abs(plane_coordinates), 1 / 2, atol=1e-3),
-                )
-            )
+            return True
         except ValueError:
             return False
 
@@ -672,16 +676,18 @@ class Fault:
 
         """
         # the right edges as a cumulative proportion of the fault length (e.g. [0.1, ..., 0.8])
-        right_edges = self.lengths.cumsum() / self.length
-        right_edges = np.append(right_edges, 1)
+        left_edges = self.lengths.cumsum() / self.length
+        left_edges = np.insert(left_edges, 0, 0)
         for i, plane in enumerate(self.planes):
-            if plane.wgs_depth_coordinates_in_plane(global_coordinates):
+            try:
                 plane_coordinates = plane.wgs_depth_coordinates_to_fault_coordinates(
                     global_coordinates
                 )
-                return np.array([right_edges[i], 0]) + plane_coordinates * np.array(
-                    [right_edges[i + 1] - right_edges[i], 1]
+                return np.array([left_edges[i], 0]) + plane_coordinates * np.array(
+                    [left_edges[i + 1] - left_edges[i], 1]
                 )
+            except ValueError:
+                continue
         raise ValueError("Given coordinates are not on fault.")
 
     def fault_coordinates_to_wgs_depth_coordinates(
