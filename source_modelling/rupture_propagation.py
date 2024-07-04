@@ -21,6 +21,8 @@ Typing Aliases:
 
 from collections import defaultdict, namedtuple
 from typing import Optional, Tuple
+from qcore import coordinates
+
 
 import numpy as np
 
@@ -113,17 +115,19 @@ def probability_graph(
     """
     probabilities_raw = {
         fault_u: {
-            fault_v: shaw_dieterich_distance_model(distance, d0, delta)
+            fault_v: shaw_dieterich_distance_model(distance / 1000, d0, delta)
             for fault_v, distance in neighbours_fault_u.items()
         }
         for fault_u, neighbours_fault_u in distances.items()
     }
-
     probabilities_log = defaultdict(dict)
     for fault_u, neighbours_fault_u in probabilities_raw.items():
         normalising_constant = sum(neighbours_fault_u.values())
+        if normalising_constant == 0:
+            for fault_v, _ in neighbours_fault_u.items():
+                probabilities_log[fault_u][fault_v] = 1/len(neighbours_fault_u)
         for fault_v, prob in neighbours_fault_u.items():
-            probabilities_log[fault_u][fault_v] = normalising_constant - np.log(prob)
+            probabilities_log[fault_u][fault_v] = prob / normalising_constant
     return probabilities_log
 
 
@@ -162,16 +166,21 @@ def probabilistic_minimum_spanning_tree(
             key=lambda fault: path_probabilities[fault],
         )
         processed_faults.add(current_fault)
-        for fault_neighbour, log_probability in probability_graph[
+        for fault_neighbour, probability in probability_graph[
             current_fault
         ].items():
             if (
                 fault_neighbour not in processed_faults
-                and log_probability < path_probabilities[fault_neighbour]
+                and probability < path_probabilities[fault_neighbour]
             ):
-                path_probabilities[fault_neighbour] = log_probability
+                path_probabilities[fault_neighbour] = probability
                 rupture_causality_tree[fault_neighbour] = current_fault
     return rupture_causality_tree
+
+def distance_between(source_a: sources.IsSource, source_b: sources.IsSource, source_a_point: np.ndarray, source_b_point: np.ndarray) -> float:
+    global_point_a = source_a.fault_coordinates_to_wgs_depth_coordinates(source_a_point)
+    global_point_b = source_b.fault_coordinates_to_wgs_depth_coordinates(source_b_point)
+    return coordinates.distance_between_wgs_depth_coordinates(global_point_a, global_point_b)
 
 
 def estimate_most_likely_rupture_propagation(
@@ -181,8 +190,9 @@ def estimate_most_likely_rupture_propagation(
 ) -> RuptureCausalityTree:
     distance_graph = {
         source_a_name: {
-            source_b_name: sources.closest_point_between_sources(source_a, source_b)
+            source_b_name: distance_between(source_a, source_b, *sources.closest_point_between_sources(source_a, source_b))
             for source_b_name, source_b in sources_map.items()
+            if source_a_name != source_b_name
         }
         for source_a_name, source_a in sources_map.items()
     }
@@ -200,7 +210,7 @@ def jump_points_from_rupture_tree(
     rupture_causality_tree: RuptureCausalityTree,
 ) -> dict[str, JumpPair]:
     jump_points = {}
-    for source, parent in source_map.items():
+    for source, parent in rupture_causality_tree.items():
         if parent is None:
             continue
         source_point, parent_point = sources.closest_point_between_sources(
