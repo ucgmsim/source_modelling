@@ -399,7 +399,7 @@ class Plane:
             length,
             width,
         )
-        return Plane(corners)
+        return Plane(coordinates.wgs_depth_to_nztm(corners))
 
     @property
     def centroid(self) -> np.ndarray:
