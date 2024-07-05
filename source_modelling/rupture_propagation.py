@@ -21,11 +21,10 @@ Typing Aliases:
 
 from collections import defaultdict, namedtuple
 from typing import Optional, Tuple
-from qcore import coordinates
-
 
 import numpy as np
 
+from qcore import coordinates
 from source_modelling import sources
 
 DistanceGraph = dict[str, dict[str, int]]
@@ -125,7 +124,7 @@ def probability_graph(
         normalising_constant = sum(neighbours_fault_u.values())
         if normalising_constant == 0:
             for fault_v, _ in neighbours_fault_u.items():
-                probabilities_log[fault_u][fault_v] = 1/len(neighbours_fault_u)
+                probabilities_log[fault_u][fault_v] = 1 / len(neighbours_fault_u)
         for fault_v, prob in neighbours_fault_u.items():
             probabilities_log[fault_u][fault_v] = prob / normalising_constant
     return probabilities_log
@@ -166,9 +165,7 @@ def probabilistic_minimum_spanning_tree(
             key=lambda fault: path_probabilities[fault],
         )
         processed_faults.add(current_fault)
-        for fault_neighbour, probability in probability_graph[
-            current_fault
-        ].items():
+        for fault_neighbour, probability in probability_graph[current_fault].items():
             if (
                 fault_neighbour not in processed_faults
                 and probability < path_probabilities[fault_neighbour]
@@ -177,10 +174,18 @@ def probabilistic_minimum_spanning_tree(
                 rupture_causality_tree[fault_neighbour] = current_fault
     return rupture_causality_tree
 
-def distance_between(source_a: sources.IsSource, source_b: sources.IsSource, source_a_point: np.ndarray, source_b_point: np.ndarray) -> float:
+
+def distance_between(
+    source_a: sources.IsSource,
+    source_b: sources.IsSource,
+    source_a_point: np.ndarray,
+    source_b_point: np.ndarray,
+) -> float:
     global_point_a = source_a.fault_coordinates_to_wgs_depth_coordinates(source_a_point)
     global_point_b = source_b.fault_coordinates_to_wgs_depth_coordinates(source_b_point)
-    return coordinates.distance_between_wgs_depth_coordinates(global_point_a, global_point_b)
+    return coordinates.distance_between_wgs_depth_coordinates(
+        global_point_a, global_point_b
+    )
 
 
 def estimate_most_likely_rupture_propagation(
@@ -190,7 +195,11 @@ def estimate_most_likely_rupture_propagation(
 ) -> RuptureCausalityTree:
     distance_graph = {
         source_a_name: {
-            source_b_name: distance_between(source_a, source_b, *sources.closest_point_between_sources(source_a, source_b))
+            source_b_name: distance_between(
+                source_a,
+                source_b,
+                *sources.closest_point_between_sources(source_a, source_b),
+            )
             for source_b_name, source_b in sources_map.items()
             if source_a_name != source_b_name
         }
