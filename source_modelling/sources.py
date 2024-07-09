@@ -118,6 +118,14 @@ class Point:
 
     @property
     def centroid(self) -> np.ndarray:
+        """
+
+        Returns
+        -------
+        np.ndarray
+            The centroid of the point source (which is just the
+            point's coordinates).
+        """
         return self.coordinates
 
     def fault_coordinates_to_wgs_depth_coordinates(
@@ -406,6 +414,17 @@ class Plane:
     def centroid(self) -> np.ndarray:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
+    @property
+    def centroid(self) -> np.ndarray:
+        """
+
+        Returns
+        -------
+        np.ndarray
+            The centre of the fault plane.
+        """
+        return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
+
     def fault_coordinates_to_wgs_depth_coordinates(
         self, plane_coordinates: np.ndarray
     ) -> np.ndarray:
@@ -643,6 +662,12 @@ class Fault:
 
     @property
     def centroid(self) -> np.ndarray:
+        """
+        Returns
+        -------
+        np.ndarray
+            The centre of the fault.
+        """
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     def wgs_depth_coordinates_to_fault_coordinates(
@@ -739,8 +764,7 @@ class Fault:
         segment_proportion = (fault_coordinates[0] - left_proportion) / (
             right_proportion - left_proportion
         )
-        if fault_segment_index >= len(self.planes):
-            breakpoint()
+
         return self.planes[
             fault_segment_index
         ].fault_coordinates_to_wgs_depth_coordinates(
@@ -812,5 +836,4 @@ def closest_point_between_sources(
         raise ValueError(
             f"Optimisation failed to converge for provided sources: {res.message}"
         )
-
     return res.x[:2], res.x[2:]
