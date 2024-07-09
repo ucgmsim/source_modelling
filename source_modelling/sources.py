@@ -116,6 +116,10 @@ class Point:
         """
         return self.width_m / _KM_TO_M
 
+    @property
+    def centroid(self) -> np.ndarray:
+        return self.coordinates
+
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
     ) -> np.ndarray:
@@ -396,7 +400,11 @@ class Plane:
             length,
             width,
         )
-        return Plane(corners)
+        return Plane(coordinates.wgs_depth_to_nztm(corners))
+
+    @property
+    def centroid(self) -> np.ndarray:
+        return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, plane_coordinates: np.ndarray
@@ -633,6 +641,10 @@ class Fault:
         """
         return np.vstack([plane.bounds for plane in self.planes])
 
+    @property
+    def centroid(self) -> np.ndarray:
+        return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
+
     def wgs_depth_coordinates_to_fault_coordinates(
         self, global_coordinates: np.ndarray
     ) -> np.ndarray:
@@ -674,7 +686,7 @@ class Fault:
             If the given point does not lie on the fault.
 
         """
-        # the right edges as a cumulative proportion of the fault length (e.g. [0.1, ..., 0.8])
+        # the left edges as a cumulative proportion of the fault length (e.g. [0.1, ..., 0.8])
         left_edges = self.lengths.cumsum() / self.length
         left_edges = np.insert(left_edges, 0, 0)
         for i, plane in enumerate(self.planes):
@@ -710,7 +722,12 @@ class Fault:
 
         # the right edges as a cumulative proportion of the fault length (e.g. [0.1, ..., 0.8])
         right_edges = self.lengths.cumsum() / self.length
-        fault_segment_index = np.searchsorted(right_edges, fault_coordinates[0])
+        for i in range(len(self.planes)):
+            if fault_coordinates[0] < right_edges[i] or np.isclose(
+                fault_coordinates[0], right_edges[i]
+            ):
+                break
+        fault_segment_index = i
         left_proportion = (
             right_edges[fault_segment_index - 1] if fault_segment_index > 0 else 0
         )
@@ -722,6 +739,8 @@ class Fault:
         segment_proportion = (fault_coordinates[0] - left_proportion) / (
             right_proportion - left_proportion
         )
+        if fault_segment_index >= len(self.planes):
+            breakpoint()
         return self.planes[
             fault_segment_index
         ].fault_coordinates_to_wgs_depth_coordinates(
@@ -785,9 +804,11 @@ def closest_point_between_sources(
         fault_coordinate_distance,
         np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
         bounds=[(0, 1)] * 4,
+        options={"ftol": 1e-2},
     )
 
     if not res.success:
+        breakpoint()
         raise ValueError(
             f"Optimisation failed to converge for provided sources: {res.message}"
         )
