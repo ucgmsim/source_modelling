@@ -7,15 +7,28 @@ See https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+On+GM
 for details on the SRF format.
 
 
-Classes:
+Classes
+-------
 - SrfFile: Representation of an SRF file.
 
-Exceptions:
+Exceptions
+----------
 - SrfParseError: Exception raised for errors in parsing SRF files.
 
-Functions:
+Functions
+---------
 - read_srf: Read an SRF file into memory.
 - write_srf: Write an SRF object to a filepath.
+
+Example
+-------
+>>> srf_file = srf.read_srf('/path/to/srf')
+>>> srf_file.points['tinit'].max() # get the last time any point in the SRF ruptures
+>>> srf_file.points['tinit'] += 1 # delay all points by one second
+>>> coordinates.wgs_depth_to_nztm(srf_file.header[['elat', 'elon']].to_numpy())
+#   ^ get the coordinates all the fault plane centres in the rupture in NZTM format
+# etc...
+>>> srf.write_srf('/path/to/srf', srf_file)
 """
 
 import dataclasses
