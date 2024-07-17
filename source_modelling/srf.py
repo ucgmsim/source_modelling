@@ -1,11 +1,25 @@
-"""
-Module for handling SRF (Standard Rupture Format) files.
+"""Module for handling SRF (Standard Rupture Format) files.
 
 This module provides classes and functions for reading and writing SRF files,
 as well as representing their contents.
 See https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+On+GM
 for details on the SRF format.
 
+Why Not qcore.srf?
+------------------
+You might use this module instead of the `qcore.srf` module because:
+
+1. The `qcore.srf` module does not support writing SRF files.
+
+2. Exposing SRF points as a pandas dataframe allows manipulation of
+   the points using efficient vectorised operations. We use this in
+   rupture propagation to delay ruptures by adding to the `tinit` column.
+
+3. There is better documentation for the new module than the old one.
+
+You should use `qcore.srf` if you do not eventually intend to read all
+points of the SRF file (it is memory efficient), or you are working
+with code that already uses `qcore.srf`.
 
 Classes
 -------
