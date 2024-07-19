@@ -84,50 +84,6 @@ class SrfParseError(Exception):
     pass
 
 
-def read_srf_headers(srf_file: TextIO) -> pd.DataFrame:
-    """Read the header section of an SRF file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file object to read the headers from.
-
-    Raises
-    ------
-    SrfParseError
-        An SrfParseError is raised if an error occurs parsing the SRF file headers.
-
-    Returns
-    -------
-    list[SrfSegment]
-        A list of all the planes listed in the header of the SRF file.
-    """
-    plane_count_line = srf_file.readline().strip()
-    plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
-    if not plane_count_match:
-        raise SrfParseError(f'Expecting PLANE header line, got: "{plane_count_line}"')
-    plane_count = int(plane_count_match.group(1))
-    segments = []
-
-    for _ in range(plane_count):
-        segments.append(
-            {
-                "elon": read_float(srf_file),
-                "elat": read_float(srf_file),
-                "nstk": read_int(srf_file),
-                "ndip": read_int(srf_file),
-                "len": read_float(srf_file),
-                "wid": read_float(srf_file),
-                "stk": read_float(srf_file),
-                "dip": read_float(srf_file),
-                "dtop": read_float(srf_file),
-                "shyp": read_float(srf_file),
-                "dhyp": read_float(srf_file),
-            }
-        )
-    return pd.DataFrame(segments)
-
-
 def read_float(srf_file: TextIO, label: Optional[str] = None) -> float:
     """Read a float from an SRF file.
 
@@ -255,7 +211,32 @@ def read_srf(srf_ffp: Path) -> SrfFile:
     with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
         version = float(srf_file_handle.readline())
 
-        headers = read_srf_headers(srf_file_handle)
+        plane_count_line = srf_file_handle.readline().strip()
+        plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
+        if not plane_count_match:
+            raise SrfParseError(
+                f'Expecting PLANE header line, got: "{plane_count_line}"'
+            )
+        plane_count = int(plane_count_match.group(1))
+        segments = []
+
+        for _ in range(plane_count):
+            segments.append(
+                {
+                    "elon": read_float(srf_file_handle),
+                    "elat": read_float(srf_file_handle),
+                    "nstk": read_int(srf_file_handle),
+                    "ndip": read_int(srf_file_handle),
+                    "len": read_float(srf_file_handle),
+                    "wid": read_float(srf_file_handle),
+                    "stk": read_float(srf_file_handle),
+                    "dip": read_float(srf_file_handle),
+                    "dtop": read_float(srf_file_handle),
+                    "shyp": read_float(srf_file_handle),
+                    "dhyp": read_float(srf_file_handle),
+                }
+            )
+        headers = pd.DataFrame(segments)
 
         points_count_line = srf_file_handle.readline().strip()
         points_count_match = re.match(POINT_COUNT_RE, points_count_line)
@@ -282,20 +263,6 @@ def write_srf_header(srf_file: TextIO, header: pd.DataFrame) -> None:
     header : pd.DataFrame
         The list of SrfSegments to write.
     """
-    srf_file.write(f"PLANE {len(header)}\n")
-    srf_file.write(
-        header.to_string(
-            index=False,
-            header=None,
-            formatters={
-                "elon": lambda elon: f"{elon:.6f}",
-                "elat": lambda elat: f"{elat:.6f}",
-                "len": lambda len: f"{len:.4f}",
-                "wid": lambda wid: f"{wid:.4f}",
-            },
-        )
-        + "\n"
-    )
 
 
 def write_slip(srf_file: TextIO, slips: np.ndarray) -> None:
@@ -352,6 +319,19 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
     """
     with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
         srf_file_handle.write("1.0\n")
-        write_srf_header(srf_file_handle, srf.header)
+        srf_file_handle.write(f"PLANE {len(srf.header)}\n")
+        srf_file_handle.write(
+            srf.header.to_string(
+                index=False,
+                header=None,
+                formatters={
+                    "elon": lambda elon: f"{elon:.6f}",
+                    "elat": lambda elat: f"{elat:.6f}",
+                    "len": lambda len: f"{len:.4f}",
+                    "wid": lambda wid: f"{wid:.4f}",
+                },
+            )
+            + "\n"
+        )
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
         srf.points.apply(functools.partial(write_srf_point, srf_file_handle), axis=1)
