@@ -253,18 +253,6 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         return SrfFile(version, headers, points)
 
 
-def write_srf_header(srf_file: TextIO, header: pd.DataFrame) -> None:
-    """Write a list of SRF plane segments as a header.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to write to.
-    header : pd.DataFrame
-        The list of SrfSegments to write.
-    """
-
-
 def write_slip(srf_file: TextIO, slips: np.ndarray) -> None:
     """Write out slip values to an SRF file.
 
