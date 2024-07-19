@@ -46,6 +46,7 @@ Example
 """
 
 import dataclasses
+import functools
 import re
 from pathlib import Path
 from typing import Optional, TextIO
@@ -81,28 +82,6 @@ class SrfParseError(Exception):
     """Exception raised for errors in parsing SRF files."""
 
     pass
-
-
-def read_version(srf_file: TextIO):
-    """Read the version value from an srf file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file object to read from.
-    """
-    return float(srf_file.readline())
-
-
-def write_version(srf_file: TextIO):
-    """Write version value to an srf file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file object to write to.
-    """
-    srf_file.write("1.0\n")
 
 
 def read_srf_headers(srf_file: TextIO) -> pd.DataFrame:
@@ -216,32 +195,6 @@ def read_int(srf_file: TextIO, label: Optional[str] = None) -> int:
             raise SrfParseError(f'Expecting int, got: "{int_str}"')
 
 
-def read_points_count(srf_file: TextIO) -> int:
-    """Read the number of points contained in an srf file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file object to read from.
-
-    Raises
-    ------
-    SrfParseError
-        If the current line does not match the expected syntax for the number
-        of points in an SRF file (see POINT_COUNT_RE).
-
-    Returns
-    -------
-    int
-        The number of points contained in the SRF file.
-    """
-    points_count_line = srf_file.readline().strip()
-    points_count_match = re.match(POINT_COUNT_RE, points_count_line)
-    if not points_count_match:
-        raise SrfParseError(f'Expecting POINTS header line, got: "{points_count_line}"')
-    return int(points_count_match.group(1))
-
-
 def read_srf_point(srf_file: TextIO) -> dict[str, int | float]:
     """Read a single SRF point from a file handle.
 
@@ -300,12 +253,22 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         The filepath of the SRF file.
     """
     with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
-        version = read_version(srf_file_handle)
+        version = float(srf_file_handle.readline())
+
         headers = read_srf_headers(srf_file_handle)
-        point_count = read_points_count(srf_file_handle)
+
+        points_count_line = srf_file_handle.readline().strip()
+        points_count_match = re.match(POINT_COUNT_RE, points_count_line)
+        if not points_count_match:
+            raise SrfParseError(
+                f'Expecting POINTS header line, got: "{points_count_line}"'
+            )
+        point_count = int(points_count_match.group(1))
+
         points = pd.DataFrame(
             (read_srf_point(srf_file_handle) for _ in range(point_count))
         )
+
         return SrfFile(version, headers, points)
 
 
@@ -333,19 +296,6 @@ def write_srf_header(srf_file: TextIO, header: pd.DataFrame) -> None:
         )
         + "\n"
     )
-
-
-def write_point_count(srf_file: TextIO, point_count: int) -> None:
-    """Write out a POINTS declaration for the number of points in an SRF file..
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to write to.
-    point_count : int
-        The number of points to write.
-    """
-    srf_file.write(f"POINTS {point_count}\n")
 
 
 def write_slip(srf_file: TextIO, slips: np.ndarray) -> None:
@@ -401,7 +351,7 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
         The SRF object.
     """
     with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
-        write_version(srf_file_handle)
+        srf_file_handle.write("1.0\n")
         write_srf_header(srf_file_handle, srf.header)
-        write_point_count(srf_file_handle, len(srf.points))
-        srf.points.apply(lambda point: write_srf_point(srf_file_handle, point), axis=1)
+        srf_file_handle.write(f"POINTS {len(srf.points)}\n")
+        srf.points.apply(functools.partial(write_srf_point, srf_file_handle), axis=1)
