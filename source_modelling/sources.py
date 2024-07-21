@@ -21,7 +21,6 @@ from typing import Optional, Protocol
 
 import numpy as np
 import scipy as sp
-
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -76,56 +75,27 @@ class Point:
 
     @property
     def coordinates(self) -> np.ndarray:
-        """Return the coordinates of the point in (lat, lon, depth) format.
-
-        Returns
-        -------
-        np.ndarray
-            The coordinates of the point in (lat, lon, depth) format.
-            Depth is in metres.
-        """
+        """np.ndarray: The coordinates of the point in (lat, lon, depth) format. Depth is in metres."""
         return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
     def length(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The length of the approximating planar patch (in kilometres).
-        """
+        """float: The length of the approximating planar patch (in kilometres)."""
         return self.length_m / _KM_TO_M
 
     @property
     def width_m(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The width of the approximating planar patch (in metres).
-        """
+        """float: The width of the approximating planar patch (in metres)."""
         return self.length_m
 
     @property
     def width(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The width of the approximating planar patch (in kilometres).
-        """
+        """float: The width of the approximating planar patch (in kilometres)."""
         return self.width_m / _KM_TO_M
 
     @property
     def centroid(self) -> np.ndarray:
-        """
-
-        Returns
-        -------
-        np.ndarray
-            The centroid of the point source (which is just the
-            point's coordinates).
-        """
+        """np.ndarray: The centroid of the point source (which is just the point's coordinates)."""
         return self.coordinates
 
     def fault_coordinates_to_wgs_depth_coordinates(
@@ -145,7 +115,6 @@ class Point:
             coordinates. Because this is a point-source, the global
             coordinates are just the location of the point source.
         """
-
         return self.coordinates
 
     def wgs_depth_coordinates_to_fault_coordinates(
@@ -225,105 +194,52 @@ class Plane:
 
     @property
     def corners(self) -> np.ndarray:
-        """
-        Returns
-        -------
-        np.ndarray
-            The corners of the fault plane in (lat, lon, depth) format. The
-            corners are the same as in corners_nztm.
-        """
+        """np.ndarray: The corners of the fault plane in (lat, lon, depth) format. The corners are the same as in corners_nztm."""
         return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
     def length_m(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The length of the fault plane (in metres).
-        """
+        """float: The length of the fault plane (in metres)."""
         return np.linalg.norm(self.bounds[1] - self.bounds[0])
 
     @property
     def width_m(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The width of the fault plane (in metres).
-        """
+        """float: The width of the fault plane (in metres)."""
         return np.linalg.norm(self.bounds[-1] - self.bounds[0])
 
     @property
     def bottom_m(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The bottom depth (in metres).
-        """
+        """float: The bottom depth (in metres)."""
         return self.bounds[-1, -1]
 
     @property
     def top_m(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The top depth of the fault.
-        """
+        """float: The top depth of the fault."""
         return self.bounds[0, -1]
 
     @property
     def width(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The width of the fault plane (in kilometres).
-        """
+        """float: The width of the fault plane (in kilometres)."""
         return self.width_m / _KM_TO_M
 
     @property
     def length(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The length of the fault plane (in kilometres).
-        """
+        """float: The length of the fault plane (in kilometres)."""
         return self.length_m / _KM_TO_M
 
     @property
     def projected_width_m(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The projected width of the fault plane (in metres).
-        """
+        """float: The projected width of the fault plane (in metres)."""
         return self.length_m * np.cos(np.radians(self.dip))
 
     @property
     def projected_width(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The projected width of the fault plane (in kilometres).
-        """
+        """float: The projected width of the fault plane (in kilometres)."""
         return self.projected_width_m / _KM_TO_M
 
     @property
     def strike(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The bearing of the strike direction of the fault
-            (from north; in degrees)
-        """
-
+        """float: The bearing of the strike direction of the fault (from north; in degrees)."""
         north_direction = np.array([1, 0, 0])
         up_direction = np.array([0, 0, 1])
         strike_direction = self.bounds[1] - self.bounds[0]
@@ -333,12 +249,7 @@ class Plane:
 
     @property
     def dip_dir(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The bearing of the dip direction (from north; in degrees).
-        """
+        """float: The bearing of the dip direction (from north; in degrees)."""
         if np.isclose(self.dip, 90):
             return 0  # TODO: Is this right for this case?
         north_direction = np.array([1, 0, 0])
@@ -351,12 +262,7 @@ class Plane:
 
     @property
     def dip(self) -> float:
-        """
-        Returns
-        -------
-        float
-            The dip angle of the fault.
-        """
+        """float: The dip angle of the fault."""
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
     @staticmethod
@@ -369,7 +275,7 @@ class Plane:
         length: float,
         width: float,
     ) -> "Plane":
-        """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width
+        """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
         This is used for older descriptions of sources. Internally
         converts everything to corners so self.strike ~ strike (but
@@ -378,7 +284,7 @@ class Plane:
         Parameters
         ----------
         centroid : np.ndarray
-            The centre of the fault plane in lat, lon coordinate.s
+            The centre of the fault plane in lat, lon coordinates.
         strike : float
             The strike of the fault (in degrees).
         dip_dir : Optional[float]
@@ -412,17 +318,7 @@ class Plane:
 
     @property
     def centroid(self) -> np.ndarray:
-        return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
-
-    @property
-    def centroid(self) -> np.ndarray:
-        """
-
-        Returns
-        -------
-        np.ndarray
-            The centre of the fault plane.
-        """
+        """np.ndarray: The centre of the fault plane."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     def fault_coordinates_to_wgs_depth_coordinates(
@@ -522,27 +418,10 @@ class Plane:
         """
 
         try:
-            plane_coordinates = self.wgs_depth_coordinates_to_fault_coordinates(
-                global_coordinates
-            )
+            self.wgs_depth_coordinates_to_fault_coordinates(global_coordinates)
             return True
         except ValueError:
             return False
-
-    def centroid(self) -> np.ndarray:
-        """Returns the centre of the fault plane.
-
-        Returns
-        -------
-        np.ndarray
-            A 1 x 3 dimensional vector representing the centroid of the fault
-            plane in (lat, lon, depth) format.
-
-        """
-
-        return coordinates.nztm_to_wgs_depth(
-            np.mean(self.bounds, axis=0).reshape((1, -1))
-        ).ravel()
 
 
 @dataclasses.dataclass
@@ -592,25 +471,12 @@ class Fault:
 
     @property
     def lengths(self) -> np.ndarray:
-        """The lengths of each plane in the fault.
-
-        Returns
-        -------
-        np.ndarray
-           A numpy array of each plane length (in km).
-        """
+        """np.ndarray: A numpy array of each plane length (in km)."""
         return np.array([fault.length for fault in self.planes])
 
     @property
     def length(self) -> float:
-        """The length of the fault.
-
-        Returns
-        -------
-        float
-            The total length of each fault plane.
-        """
-
+        """float: The total length of each fault plane."""
         return self.lengths.sum()
 
     @property
@@ -627,47 +493,22 @@ class Fault:
 
     @property
     def dip_dir(self) -> float:
-        """The dip direction of the fault.
-
-        Returns
-        -------
-        float
-            The dip direction of the first fault plane (A fault is
-            assumed to have planes of constant dip direction).
-        """
+        """float: The dip direction of the first fault plane (A fault is assumed to have planes of constant dip direction)."""
         return self.planes[0].dip_dir
 
     @property
     def corners(self) -> np.ndarray:
-        """Get all corners of a fault.
-
-        Returns
-        -------
-        np.ndarray of shape (4n x 3)
-            The corners in (lat, lon, depth) format of each fault plane in the
-            fault, stacked vertically.
-        """
+        """np.ndarray of shape (4n x 3): The corners in (lat, lon, depth) format of each fault plane in the fault, stacked vertically."""
         return np.vstack([plane.corners for plane in self.planes])
 
     @property
     def bounds(self) -> np.ndarray:
-        """Get all corners of a fault.
-
-        Returns
-        -------
-        np.ndarray of shape (4n x 3)
-            The corners in NZTM format of each fault plane in the fault, stacked vertically.
-        """
+        """np.ndarray of shape (4n x 3): The corners in NZTM format of each fault plane in the fault, stacked vertically."""
         return np.vstack([plane.bounds for plane in self.planes])
 
     @property
     def centroid(self) -> np.ndarray:
-        """
-        Returns
-        -------
-        np.ndarray
-            The centre of the fault.
-        """
+        """np.ndarray: The centre of the fault."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     def wgs_depth_coordinates_to_fault_coordinates(
