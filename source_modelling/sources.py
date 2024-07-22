@@ -21,6 +21,7 @@ from typing import Optional, Protocol
 
 import numpy as np
 import scipy as sp
+
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -230,7 +231,7 @@ class Plane:
     @property
     def projected_width_m(self) -> float:
         """float: The projected width of the fault plane (in metres)."""
-        return self.length_m * np.cos(np.radians(self.dip))
+        return self.width_m * np.cos(np.radians(self.dip))
 
     @property
     def projected_width(self) -> float:
@@ -270,10 +271,10 @@ class Plane:
         centroid: np.ndarray,
         strike: float,
         dip_dir: Optional[float],
-        top: float,
-        bottom: float,
+        dtop: float,
+        dbottom: float,
         length: float,
-        width: float,
+        projected_width: float,
     ) -> "Plane":
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -309,12 +310,13 @@ class Plane:
             centroid,
             strike,
             dip_dir if dip_dir is not None else (strike + 90),
-            top,
-            bottom,
+            dtop,
+            dbottom,
             length,
-            width,
+            projected_width,
         )
-        return Plane(coordinates.wgs_depth_to_nztm(corners))
+        corners[[2, 3]] = corners[[3, 2]]
+        return Plane(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
     def centroid(self) -> np.ndarray:
@@ -388,16 +390,12 @@ class Plane:
         offset = (
             coordinates.wgs_depth_to_nztm(global_coordinates[:2]) - self.bounds[0, :2]
         )
-        projection_matrix = np.array(
-            [
-                strike_direction / (strike_direction**2).sum(),
-                dip_direction / (dip_direction**2).sum(),
-            ]
-        ).T
-        fault_local_coordinates = offset @ projection_matrix
+        fault_local_coordinates, _, _, _ = np.linalg.lstsq(
+            np.array([strike_direction, dip_direction]).T, offset
+        )
         if not np.all(
-            (fault_local_coordinates > 0 | np.isclose(fault_local_coordinates, 0))
-            & (fault_local_coordinates < 1 | np.isclose(fault_local_coordinates, 1))
+            ((fault_local_coordinates > 0) | np.isclose(fault_local_coordinates, 0))
+            & ((fault_local_coordinates < 1) | np.isclose(fault_local_coordinates, 1))
         ):
             raise ValueError("Specified coordinates do not lie in plane")
         return np.clip(fault_local_coordinates, 0, 1)
@@ -416,7 +414,6 @@ class Plane:
             True if the given global coordinates (lat, lon, depth) lie on the
             fault plane.
         """
-
         try:
             self.wgs_depth_coordinates_to_fault_coordinates(global_coordinates)
             return True
@@ -585,7 +582,6 @@ class Fault:
         np.ndarray
             The global coordinates (lat, lon, depth) for this point.
         """
-
         # the right edges as a cumulative proportion of the fault length (e.g. [0.1, ..., 0.8])
         right_edges = self.lengths.cumsum() / self.length
         for i in range(len(self.planes)):

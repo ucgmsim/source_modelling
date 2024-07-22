@@ -1,3 +1,5 @@
 qcore @ git+https://github.com/ucgmsim/qcore@pegasus
 numpy
 scipy
+hypothesis[numpy, pandas]
+pytest
