@@ -21,7 +21,6 @@ from typing import Optional, Protocol
 
 import numpy as np
 import scipy as sp
-
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -593,11 +592,7 @@ class Fault:
         left_proportion = (
             right_edges[fault_segment_index - 1] if fault_segment_index > 0 else 0
         )
-        right_proportion = (
-            right_edges[fault_segment_index + 1]
-            if fault_segment_index < len(right_edges) - 1
-            else 1
-        )
+        right_proportion = right_edges[fault_segment_index]
         segment_proportion = (fault_coordinates[0] - left_proportion) / (
             right_proportion - left_proportion
         )
