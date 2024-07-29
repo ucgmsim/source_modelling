@@ -20,7 +20,7 @@ Typing Aliases:
 """
 
 from collections import defaultdict, namedtuple
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -34,7 +34,7 @@ RuptureCausalityTree = dict[str, Optional[str]]
 JumpPair = namedtuple("JumpPair", ["from_point", "to_point"])
 
 
-def shaw_dieterich_distance_model(distance: float, d0, delta) -> float:
+def shaw_dieterich_distance_model(distance: float, d0: float, delta: float) -> float:
     """
     Compute fault jump probabilities using the Shaw-Dieterich distance model[0].
 
