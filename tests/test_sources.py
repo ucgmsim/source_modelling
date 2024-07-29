@@ -206,5 +206,59 @@ def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray)
             fault.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
         ),
         local_coordinates,
-        atol=1e-2,
+        atol=1e-6,
+    )
+
+
+# p print('\n'.join([f"{c[0]},{c[1]},red" for c in source_a.corners]))
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        strike=st.just(0),
+        width=st.floats(0.1, 10),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    other_fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        strike=st.just(0),
+        width=st.floats(0.1, 10),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+)
+def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
+    n = min(len(fault.corners), len(other_fault.corners))
+    assume(not np.allclose(fault.corners[:n], other_fault.corners[:n]))
+    point_a, point_b = sources.closest_point_between_sources(fault, other_fault)
+    X, Y = np.meshgrid(np.linspace(0, 1, num=10), np.linspace(0, 1, num=10))
+    local_coords = np.c_[X.ravel(), Y.ravel()]
+    points_on_a = np.array(
+        [
+            fault.fault_coordinates_to_wgs_depth_coordinates(coord)
+            for coord in local_coords
+        ]
+    )
+    points_on_b = np.array(
+        [
+            other_fault.fault_coordinates_to_wgs_depth_coordinates(coord)
+            for coord in local_coords
+        ]
+    )
+    min_distance = np.min(
+        coordinates.distance_between_wgs_depth_coordinates(points_on_a, points_on_b)
+    )
+    assume(min_distance > 0)
+    computed_distance = coordinates.distance_between_wgs_depth_coordinates(
+        fault.fault_coordinates_to_wgs_depth_coordinates(point_a),
+        other_fault.fault_coordinates_to_wgs_depth_coordinates(point_b),
+    )
+    assert computed_distance < min_distance or np.isclose(
+        computed_distance, min_distance, atol=1e-2
     )
