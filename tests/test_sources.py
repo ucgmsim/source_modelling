@@ -1,14 +1,16 @@
+import functools
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import pandas as pd
+import scipy as sp
 from hypothesis import assume, given
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
-
 from qcore import coordinates
+
 from source_modelling import sources
-from source_modelling.sources import Plane
+from source_modelling.sources import Fault, Plane
 
 
 def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndarray:
@@ -139,11 +141,125 @@ def fault_plane(
         float, (2,), elements={"min_value": 0, "max_value": 1}
     ),
 )
-def test_fault_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
+def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
     assume(not np.isclose(plane.dip_dir, plane.strike))
     assert np.allclose(
         plane.wgs_depth_coordinates_to_fault_coordinates(
             plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
         ),
         local_coordinates,
+        atol=1e-6,
+    )
+
+
+def connected_fault(
+    lengths: list[float], width: float, strike: float, start_coordinates: np.ndarray
+) -> Fault:
+    strike_direction = np.array(
+        [np.cos(np.radians(strike)), np.sin(np.radians(strike)), 0]
+    )
+    dip = 45  # Fixed dip for now
+    dip_rotation = sp.spatial.transform.Rotation.from_rotvec(
+        dip * strike_direction, degrees=True
+    )
+    dip_direction = np.array(
+        [np.cos(np.radians(strike + 90)), np.sin(np.radians(strike + 90)), 0]
+    )
+    dip_direction = width * 1000 * dip_rotation.apply(dip_direction)
+    start = np.append(coordinates.wgs_depth_to_nztm(start_coordinates), 0)
+    cumulative_lengths = np.cumsum(np.array(lengths) * 1000)
+    leading_edges = np.vstack(
+        (start, start + np.outer(cumulative_lengths, strike_direction))
+    )
+    planes = [
+        Plane(
+            np.array(
+                [
+                    leading_edges[i],
+                    leading_edges[i + 1],
+                    leading_edges[i + 1] + dip_direction,
+                    leading_edges[i] + dip_direction,
+                ]
+            )
+        )
+        for i in range(len(leading_edges) - 1)
+    ]
+    return Fault(planes)
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    local_coordinates=nst.arrays(
+        float, (2,), elements={"min_value": 0, "max_value": 1}
+    ),
+)
+def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray):
+    assert np.allclose(
+        fault.wgs_depth_coordinates_to_fault_coordinates(
+            fault.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
+        ),
+        local_coordinates,
+        atol=1e-6,
+    )
+
+
+# p print('\n'.join([f"{c[0]},{c[1]},red" for c in source_a.corners]))
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        strike=st.just(0),
+        width=st.floats(0.1, 10),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    other_fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        strike=st.just(0),
+        width=st.floats(0.1, 10),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+)
+def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
+    n = min(len(fault.corners), len(other_fault.corners))
+    assume(not np.allclose(fault.corners[:n], other_fault.corners[:n]))
+    point_a, point_b = sources.closest_point_between_sources(fault, other_fault)
+    X, Y = np.meshgrid(np.linspace(0, 1, num=10), np.linspace(0, 1, num=10))
+    local_coords = np.c_[X.ravel(), Y.ravel()]
+    points_on_a = np.array(
+        [
+            fault.fault_coordinates_to_wgs_depth_coordinates(coord)
+            for coord in local_coords
+        ]
+    )
+    points_on_b = np.array(
+        [
+            other_fault.fault_coordinates_to_wgs_depth_coordinates(coord)
+            for coord in local_coords
+        ]
+    )
+    min_distance = np.min(
+        coordinates.distance_between_wgs_depth_coordinates(points_on_a, points_on_b)
+    )
+    assume(min_distance > 0)
+    computed_distance = coordinates.distance_between_wgs_depth_coordinates(
+        fault.fault_coordinates_to_wgs_depth_coordinates(point_a),
+        other_fault.fault_coordinates_to_wgs_depth_coordinates(point_b),
+    )
+    assert computed_distance < min_distance or np.isclose(
+        computed_distance, min_distance, atol=1e-2
     )
