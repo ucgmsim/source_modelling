@@ -10,7 +10,7 @@ from pygmt_helper import plotting
 from source_modelling import srf
 
 
-def main(
+def plot_rakes(
     srf_ffp: Annotated[
         Path, typer.Argument(help="Path to SRF file to plot.", exists=True)
     ],
@@ -66,5 +66,9 @@ def main(
     )
 
 
+def main():
+    typer.run(plot_rakes)
+
+
 if __name__ == "__main__":
-    typer.run(main)
+    main()

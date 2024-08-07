@@ -11,7 +11,7 @@ from pygmt_helper import plotting
 from source_modelling import srf
 
 
-def main(
+def plot_rise(
     srf_ffp: Annotated[
         Path, typer.Argument(help="Path to SRF file to plot.", exists=True)
     ],
@@ -103,5 +103,9 @@ def main(
     )
 
 
-if __name__ == "__main__":
+def main():
     typer.run(main)
+
+
+if __name__ == "__main__":
+    main()

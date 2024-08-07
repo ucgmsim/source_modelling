@@ -15,6 +15,9 @@ dynamic = ["version", "dependencies"]
 
 [project.scripts]
 plot-srf-moment = "source_modelling.scripts.plot_srf_moment:main"
+plot-srf = "source_modelling.scripts.plot_srf:main"
+plot-srf-rakes = "source_modelling.scripts.plot_srf_rakes:main"
+plot-srf-rise = "source_modelling.scripts.plot_srf_rise:main"
 
 [tool.setuptools.package-dir]
 source_modelling = "source_modelling"

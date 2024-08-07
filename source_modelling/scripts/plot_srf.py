@@ -11,7 +11,7 @@ from pygmt_helper import plotting
 from source_modelling import srf
 
 
-def main(
+def plot_srf(
     srf_ffp: Annotated[
         Path, typer.Argument(help="Path to SRF file to plot.", exists=True)
     ],
@@ -27,7 +27,7 @@ def main(
         typer.Option(
             help="Plot time as contours of every LEVELS seconds", metavar="LEVELS"
         ),
-    ] = 3,
+    ] = 1,
 ):
     srf_data = srf.read_srf(srf_ffp)
     region = (
@@ -48,7 +48,6 @@ def main(
 
     fig = plotting.gen_region_fig(title, region=region, map_data=None)
     i = 0
-    tinit_max = srf_data.points["tinit"].max()
     for _, segment in srf_data.header.iterrows():
         nstk = int(segment["nstk"])
         ndip = int(segment["ndip"])
@@ -111,5 +110,9 @@ def main(
     )
 
 
+def main():
+    typer.run(plot_srf)
+
+
 if __name__ == "__main__":
-    typer.run(main)
+    main()
