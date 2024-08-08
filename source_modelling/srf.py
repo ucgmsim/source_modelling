@@ -60,23 +60,35 @@ POINT_COUNT_RE = r"POINTS (\d+)"
 
 
 class Segments(Sequence):
-    header: pd.DataFrame
-    points: pd.DataFrame
+    """A read-only view for SRF segments."""
 
     def __init__(self, header: pd.DataFrame, points: pd.DataFrame):
-        self.header = header
-        self.points = points
+        self._header = header
+        self._points = points
 
     def __getitem__(self, index: int) -> pd.DataFrame:
-        points_offset = (self.header["nstk"] * self.header["ndip"]).cumsum()
+        """Get the nth segment in the SRF.
+
+        Parameters
+        ----------
+        index : int
+            The index of the segment.
+
+        Returns
+        -------
+        int
+            The nth segment in the SRF.
+        """
+        points_offset = (self._header["nstk"] * self._header["ndip"]).cumsum()
         if index == 0:
-            return self.points.iloc[: points_offset.iloc[index]]
-        return self.points.iloc[
+            return self._points.iloc[: points_offset.iloc[index]]
+        return self._points.iloc[
             points_offset.iloc[index - 1] : points_offset.iloc[index]
         ]
 
-    def __len__(self):
-        return len(self.header)
+    def __len__(self) -> int:
+        """int: The number of segments in the SRF."""
+        return len(self._header)
 
 
 @dataclasses.dataclass
@@ -100,7 +112,7 @@ class SrfFile:
 
     @property
     def segments(self) -> Segments:
-        """Segments: Return a sequence of segments in the SRF."""
+        """Segments: A sequence of segments in the SRF."""
         return Segments(self.header, self.points)
 
 
