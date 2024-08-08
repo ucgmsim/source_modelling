@@ -1,8 +1,10 @@
 qcore @ git+https://github.com/ucgmsim/qcore@pegasus
 pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
+matplotlib
 numpy
 pandas
 scipy
 hypothesis[numpy, pandas]
 pytest
 typer
+tqdm
