@@ -48,6 +48,7 @@ Example
 import dataclasses
 import functools
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Optional, TextIO
 
@@ -56,6 +57,40 @@ import pandas as pd
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
+
+
+class Segments(Sequence):
+    """A read-only view for SRF segments."""
+
+    def __init__(self, header: pd.DataFrame, points: pd.DataFrame):
+        self._header = header
+        self._points = points
+
+    def __getitem__(self, index: int) -> pd.DataFrame:
+        """Get the nth segment in the SRF.
+
+        Parameters
+        ----------
+        index : int
+            The index of the segment.
+
+        Returns
+        -------
+        int
+            The nth segment in the SRF.
+        """
+        if not isinstance(index, int):
+            raise TypeError("Segment index must an integer, not slice or tuple")
+        points_offset = (self._header["nstk"] * self._header["ndip"]).cumsum()
+        if index == 0:
+            return self._points.iloc[: points_offset.iloc[index]]
+        return self._points.iloc[
+            points_offset.iloc[index - 1] : points_offset.iloc[index]
+        ]
+
+    def __len__(self) -> int:
+        """int: The number of segments in the SRF."""
+        return len(self._header)
 
 
 @dataclasses.dataclass
@@ -69,13 +104,60 @@ class SrfFile:
         The version of this SrfFile
     header : pd.DataFrame
         A list of SrfSegment objects representing the header of the SRF file.
+        The columns of the header are:
+
+        - elon: The centre longitude of the plane.
+        - elot: The centre latitude of the plane.
+        - nstk: The number of patches along strike for the plane.
+        - ndip: The number of patches along dip for the plane.
+        - len: The length of the plane (in km).
+        - wid: The width of the plane (in km).
+        - stk: The plane strike.
+        - dip: The plane dip.
+        - dtop: The top of the plane.
+        - dbottom: The bottom of the plane.
+        - shyp: The hypocentre location in strike coordinates.
+        - dhyp: The hypocentre location in dip coordinates.
+
+
     points : pd.DataFrame
-        A list of SrfPoint objects representing the points in the SRF file.
+        A list of SrfPoint objects representing the points in the SRF
+        file. The columns of the points dataframe are:
+
+        - lon: longitude of the patch.
+        - lat: latitude of the patch.
+        - dep: depth of the patch (in kilometres).
+        - stk: local strike.
+        - dip: local dip.
+        - area: area of the patch (in cm^2).
+        - tinit: initial rupture time for this patch (in seconds).
+        - dt: the timestep for all slipt* columns (in seconds).
+        - rake: local rake.
+        - slip1: total slip in the first component.
+        - slip2: total slip in the second component.
+        - slip3: total slip in the third component.
+        - slipt1: slip in the first component over time.
+        - slipt2: slip in the second component over time.
+        - slipt3: slip in the third component over time.
+        - slipt: total slip over time.
+        - slip: total slip.
+
+        The final two columns are computed from the SRF and are not saved to
+        disk. See the linked documentation on the SRF format for more details.
+
+    References
+    ----------
+    SRF File Format Doc: https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+On+GM
     """
 
     version: str
     header: pd.DataFrame
     points: pd.DataFrame
+
+    @property
+    def segments(self) -> Segments:
+        """Segments: A sequence of segments in the SRF."""
+        return Segments(self.header, self.points)
 
 
 class SrfParseError(Exception):
@@ -192,6 +274,12 @@ def read_srf_point(srf_file: TextIO) -> dict[str, int | float]:
     row["slipt3"] = np.fromiter(
         (read_float(srf_file, label="slipt2") for _ in range(nt3)), float
     )
+    length = max(len(row["slipt1"]), len(row["slipt2"]), len(row["slipt3"]))
+    row["slipt"] = np.sqrt(
+        np.pad(row["slipt1"], (0, length - len(row["slipt1"])), mode="constant") ** 2
+        + np.pad(row["slipt2"], (0, length - len(row["slipt2"])), mode="constant") ** 2
+        + np.pad(row["slipt3"], (0, length - len(row["slipt3"])), mode="constant") ** 2
+    )
     return row
 
 
@@ -209,7 +297,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         The filepath of the SRF file.
     """
     with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
-        version = float(srf_file_handle.readline())
+        version = srf_file_handle.readline()
 
         plane_count_line = srf_file_handle.readline().strip()
         plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
@@ -248,6 +336,9 @@ def read_srf(srf_ffp: Path) -> SrfFile:
 
         points = pd.DataFrame(
             (read_srf_point(srf_file_handle) for _ in range(point_count))
+        )
+        points["slip"] = np.sqrt(
+            points["slip1"] ** 2 + points["slip2"] ** 2 + points["slip3"] ** 2
         )
 
         return SrfFile(version, headers, points)
