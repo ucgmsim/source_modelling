@@ -36,13 +36,20 @@ def plot_srf(
             help="Path to realisation, used to mark jump points.", exists=True
         ),
     ] = None,
+    latitude_pad: Annotated[
+        float, typer.Option(help="Latitude padding to apply (degrees)")
+    ] = 0,
+    longitude_pad: Annotated[
+        float, typer.Option(help="longitude padding to apply (degrees)")
+    ] = 0,
+    annotations: Annotated[bool, typer.Option(help="Label contours")] = True,
 ):
     srf_data = srf.read_srf(srf_ffp)
     region = (
-        srf_data.points["lon"].min(),
-        srf_data.points["lon"].max(),
-        srf_data.points["lat"].min(),
-        srf_data.points["lat"].max(),
+        srf_data.points["lon"].min() - longitude_pad,
+        srf_data.points["lon"].max() + longitude_pad,
+        srf_data.points["lat"].min() - latitude_pad,
+        srf_data.points["lat"].max() + latitude_pad,
     )
 
     srf_data.points["slip"] = np.sqrt(
@@ -55,12 +62,12 @@ def plot_srf(
     cmap_limits = (0, slip_cb_max, slip_cb_max / 10)
 
     fig = plotting.gen_region_fig(title, region=region, map_data=None)
-    i = 0
-    for _, segment in srf_data.header.iterrows():
-        nstk = int(segment["nstk"])
-        ndip = int(segment["ndip"])
-        point_count = nstk * ndip
-        segment_points = srf_data.points.iloc[i : i + point_count]
+
+    for (_, segment), segment_points in zip(
+        srf_data.header.iterrows(), srf_data.segments
+    ):
+        nstk = segment["nstk"]
+        ndip = segment["ndip"]
 
         cur_grid = plotting.create_grid(
             segment_points,
@@ -111,7 +118,8 @@ def plot_srf(
             y=corners["lat"].iloc[:2].to_list(),
             pen="0.8p,black",
         )
-
+        if not annotations:
+            continue
         tinit_max = int(np.round(segment_points["tinit"].max()))
         tinit_min = int(np.round(segment_points["tinit"].min()))
         if tinit_max - tinit_min >= 1:
@@ -128,7 +136,6 @@ def plot_srf(
                         font="5p",
                         fill="white",
                     )
-        i += point_count
 
     hypocentre = srf_data.points[
         srf_data.points["tinit"] == srf_data.points["tinit"].min()
