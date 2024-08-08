@@ -1,14 +1,16 @@
-"""Plot multi-segment rupture with time-slip-rise"""
+"""Plot multi-segment rupture with time-slip-rise."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import numpy as np
-import pandas as pd
 import typer
-from pygmt_helper import plotting
 
+from pygmt_helper import plotting
+from qcore import coordinates
 from source_modelling import srf
+from workflow import realisations
+from workflow.realisations import RupturePropagationConfig, SourceConfig
 
 
 def plot_srf(
@@ -28,13 +30,19 @@ def plot_srf(
             help="Plot time as contours of every LEVELS seconds", metavar="LEVELS"
         ),
     ] = 1,
+    realisation_ffp: Annotated[
+        Optional[Path],
+        typer.Option(
+            help="Path to realisation, used to mark jump points.", exists=True
+        ),
+    ] = None,
 ):
     srf_data = srf.read_srf(srf_ffp)
     region = (
-        srf_data.points["lon"].min() - 0.5,
-        srf_data.points["lon"].max() + 0.5,
-        srf_data.points["lat"].min() - 0.25,
-        srf_data.points["lat"].max() + 0.25,
+        srf_data.points["lon"].min(),
+        srf_data.points["lon"].max(),
+        srf_data.points["lat"].min(),
+        srf_data.points["lat"].max(),
     )
 
     srf_data.points["slip"] = np.sqrt(
@@ -53,6 +61,7 @@ def plot_srf(
         ndip = int(segment["ndip"])
         point_count = nstk * ndip
         segment_points = srf_data.points.iloc[i : i + point_count]
+
         cur_grid = plotting.create_grid(
             segment_points,
             "slip",
@@ -89,19 +98,96 @@ def plot_srf(
             ),
             set_water_to_nan=False,
         )
-        fig.grdcontour(
-            levels=levels,
-            grid=time_grid,
-            pen="0.1p",
-        )
+        fig.grdcontour(levels=1, grid=time_grid, pen="0.1p")
+
         corners = segment_points.iloc[[0, nstk - 1, -1, (ndip - 1) * nstk]]
         fig.plot(
             x=corners["lon"].iloc[list(range(len(corners))) + [0]].to_list(),
             y=corners["lat"].iloc[list(range(len(corners))) + [0]].to_list(),
             pen="0.5p,black,-",
         )
+        fig.plot(
+            x=corners["lon"].iloc[:2].to_list(),
+            y=corners["lat"].iloc[:2].to_list(),
+            pen="0.8p,black",
+        )
 
+        tinit_max = int(np.round(segment_points["tinit"].max()))
+        tinit_min = int(np.round(segment_points["tinit"].min()))
+        if tinit_max - tinit_min >= 1:
+            for j in range(tinit_min, tinit_max):
+                min_delta = (segment_points["tinit"] - j).abs().min()
+                if min_delta < 0.1:
+                    closest_point = segment_points[
+                        (segment_points["tinit"] - j).abs() == min_delta
+                    ].iloc[0]
+                    fig.text(
+                        text=f"{j}",
+                        x=closest_point["lon"],
+                        y=closest_point["lat"],
+                        font="5p",
+                        fill="white",
+                    )
         i += point_count
+
+    hypocentre = srf_data.points[
+        srf_data.points["tinit"] == srf_data.points["tinit"].min()
+    ].iloc[0]
+    fig.plot(
+        x=hypocentre["lon"],
+        y=hypocentre["lat"],
+        style="a0.4c",
+        pen="1p,black",
+        fill="white",
+    )
+    if realisation_ffp:
+        rupture_propagation_config: RupturePropagationConfig = (
+            realisations.read_config_from_realisation(
+                RupturePropagationConfig, realisation_ffp
+            )
+        )
+        source_config: SourceConfig = realisations.read_config_from_realisation(
+            SourceConfig, realisation_ffp
+        )
+        for fault_name, jump_point in rupture_propagation_config.jump_points.items():
+            parent_name = rupture_propagation_config.rupture_causality_tree[fault_name]
+            if not parent_name:
+                continue
+            source = source_config.source_geometries[fault_name]
+            parent = source_config.source_geometries[parent_name]
+            from_point = parent.fault_coordinates_to_wgs_depth_coordinates(
+                jump_point.from_point
+            )[:2]
+            closest_from_point_distance_idx = (
+                coordinates.distance_between_wgs_depth_coordinates(
+                    srf_data.points[["lat", "lon"]].to_numpy(), from_point
+                )
+            ).argmin()
+            srf_jump_point = srf_data.points.iloc[closest_from_point_distance_idx]
+            to_point = source.fault_coordinates_to_wgs_depth_coordinates(
+                jump_point.to_point
+            )[:2]
+            fig.plot(
+                x=from_point[1],
+                y=from_point[0],
+                style="t0.4c",
+                pen="1p,black",
+                fill="white",
+            )
+            fig.text(
+                x=srf_jump_point["lon"],
+                y=srf_jump_point["lat"] - 0.01,
+                font="5p",
+                fill="white",
+                text=f"t_jump = {srf_jump_point['tinit']:.2f}",
+            )
+            fig.plot(
+                x=to_point[1],
+                y=to_point[0],
+                style="i0.4c",
+                pen="1p,black",
+                fill="white",
+            )
 
     fig.savefig(
         output_ffp,

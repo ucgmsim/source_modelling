@@ -1,4 +1,4 @@
-"""Utility script to plot moment over time for an SRF."""
+"""Utility script to plot cumulative moment over time for an SRF."""
 
 import collections
 import functools
@@ -82,7 +82,7 @@ def moment_over_time_from_srf(srf_points: pd.DataFrame, mu: float) -> pd.DataFra
     return binned_and_summed_moments
 
 
-def plot_srf_moment(
+def plot_srf_cumulative_moment(
     srf_ffp: Annotated[
         Path,
         typer.Argument(
@@ -102,19 +102,30 @@ def plot_srf_moment(
             help="Path to realisation, used to plot individual fault contribution."
         ),
     ] = None,
+    min_shade_cutoff: Annotated[
+        float, typer.Option(help="Minimum shading cutoff", min=0, max=1)
+    ] = 0.05,
+    max_shade_cutoff: Annotated[
+        float, typer.Option(help="Maximum shading cutoff", min=0, max=1)
+    ] = 0.95,
 ):
-    """Plot released moment for an SRF over time."""
+    """Plot cumulative moment for an SRF over time."""
     srf_data = srf.read_srf(srf_ffp)
 
-    magnitude = (
-        2
-        / 3
-        * np.log10(
-            mu * (srf_data.points["area"] * srf_data.points["slip1"] / (100**3)).sum()
-        )
-        - 6.03333
+    srf_data.points["slip"] = np.sqrt(
+        srf_data.points["slip1"] ** 2
+        + srf_data.points["slip2"] ** 2
+        + srf_data.points["slip3"] ** 2
     )
-    overall_moment = moment_over_time_from_srf(srf_data.points, mu)
+
+    overall_moment = moment_over_time_from_srf(srf_data.points, mu).cumsum()
+    total_moment = overall_moment["moment"].iloc[-1]
+
+    shaded_moments = overall_moment[
+        (overall_moment["moment"] >= total_moment * min_shade_cutoff)
+        & (overall_moment["moment"] <= total_moment * max_shade_cutoff)
+    ]
+    plt.fill_between(shaded_moments.index.values, shaded_moments["moment"], alpha=0.2)
     plt.plot(
         overall_moment.index.values, overall_moment["moment"], label="Overall Moment"
     )
@@ -138,27 +149,40 @@ def plot_srf_moment(
                 segment_counter : segment_counter + plane_count
             ]
             num_points = (segments["nstk"] * segments["ndip"]).sum()
-            individual_moment = moment_over_time_from_srf(
-                srf_data.points.iloc[point_counter : point_counter + num_points], mu
-            )
+            segment_points = srf_data.points.iloc[
+                point_counter : point_counter + num_points
+            ]
+            individual_moment = moment_over_time_from_srf(segment_points, mu).cumsum()
             plt.plot(
                 individual_moment.index.values,
                 individual_moment["moment"],
                 label=fault_name,
             )
+            total_moment = individual_moment["moment"].iloc[-1]
+            shaded_moments = individual_moment[
+                (individual_moment["moment"] >= total_moment * min_shade_cutoff)
+                & (individual_moment["moment"] <= total_moment * max_shade_cutoff)
+            ]
+            plt.fill_between(
+                shaded_moments.index.values, shaded_moments["moment"], alpha=0.2
+            )
             segment_counter += plane_count
             point_counter += num_points
 
-    plt.ylabel("Moment (Nm)")
+    plt.ylabel("Cumulative Moment (Nm)")
     plt.xlabel("Time (s)")
     plt.legend()
-    plt.title(f"Moment over Time (Total Mw: {magnitude:.2f})")
+    min_shade_percent = int(np.round(min_shade_cutoff * 100))
+    max_shade_percent = int(np.round(max_shade_cutoff * 100))
+    plt.title(
+        f"Cumulative Moment over Time (Shaded Area: {min_shade_percent}% - {max_shade_percent}%)"
+    )
 
     plt.savefig(output_png_ffp, dpi=dpi)
 
 
 def main():
-    typer.run(plot_srf_moment)
+    typer.run(plot_srf_cumulative_moment)
 
 
 if __name__ == "__main__":
