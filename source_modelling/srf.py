@@ -48,6 +48,7 @@ Example
 import dataclasses
 import functools
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Optional, TextIO
 
@@ -56,6 +57,26 @@ import pandas as pd
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
+
+
+class Segments(Sequence):
+    header: pd.DataFrame
+    points: pd.DataFrame
+
+    def __init__(self, header: pd.DataFrame, points: pd.DataFrame):
+        self.header = header
+        self.points = points
+
+    def __getitem__(self, index: int) -> pd.DataFrame:
+        points_offset = (self.header["nstk"] * self.header["ndip"]).cumsum()
+        if index == 0:
+            return self.points.iloc[: points_offset.iloc[index]]
+        return self.points.iloc[
+            points_offset.iloc[index - 1] : points_offset.iloc[index]
+        ]
+
+    def __len__(self):
+        return len(self.header)
 
 
 @dataclasses.dataclass
@@ -76,6 +97,11 @@ class SrfFile:
     version: str
     header: pd.DataFrame
     points: pd.DataFrame
+
+    @property
+    def segments(self) -> Segments:
+        """Segments: Return a sequence of segments in the SRF."""
+        return Segments(self.header, self.points)
 
 
 class SrfParseError(Exception):
@@ -248,6 +274,9 @@ def read_srf(srf_ffp: Path) -> SrfFile:
 
         points = pd.DataFrame(
             (read_srf_point(srf_file_handle) for _ in range(point_count))
+        )
+        points["slip"] = np.sqrt(
+            points["slip1"] ** 2 + points["slip2"] ** 2 + points["slip3"] ** 2
         )
 
         return SrfFile(version, headers, points)
