@@ -144,6 +144,10 @@ class SrfFile:
 
         The final two columns are computed from the SRF and are not saved to
         disk. See the linked documentation on the SRF format for more details.
+
+    References
+    ----------
+    SRF File Format Doc: https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+On+GM
     """
 
     version: str
