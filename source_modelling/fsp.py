@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import re
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -43,7 +44,7 @@ class FSPFile:
     data: pd.DataFrame
 
     @classmethod
-    def read_from_file(cls: FSPFile, fsp_ffp: Path) -> FSPFile:
+    def read_from_file(cls: Callable, fsp_ffp: Path) -> Callable:
         with open(fsp_ffp, "r") as fsp_file_handle:
             metadata: dict[str, float] = {}
             for line in fsp_file_handle:
@@ -68,7 +69,7 @@ class FSPFile:
             else:
                 raise FSPParseError("Cannot find columns for FSP file!")
 
-            columns = line.lstrip("% ").split()
+            columns = line.lower().lstrip("% ").split()
             data = pd.read_csv(
                 fsp_file_handle,
                 delimiter=r"\s+",
@@ -76,4 +77,5 @@ class FSPFile:
                 names=columns,
                 comment="%",
             )
+            data = data.rename(columns={"x==ew": "x", "y==ns": "y"})
             return cls(data=data, **metadata)

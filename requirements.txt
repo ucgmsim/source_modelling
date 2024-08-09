@@ -5,6 +5,7 @@ numpy
 pandas
 scipy
 hypothesis[numpy, pandas]
+parse
 pytest
 typer
 tqdm
