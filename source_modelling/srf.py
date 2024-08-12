@@ -249,56 +249,6 @@ def read_int(srf_file: TextIO, label: Optional[str] = None) -> int:
             raise SrfParseError(f'Expecting int, got: "{int_str}"')
 
 
-def read_srf_point(srf_file: TextIO) -> dict[str, int | float]:
-    """Read a single SRF point from a file handle.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The file handle of the SRF file, pointing to the start of the
-        line.
-
-    Returns
-    -------
-    dict[str, int | float]
-        A dictionary containing the values for the point.
-    """
-    # skip optional first spaces
-    row = {
-        "lon": read_float(srf_file, label="lon"),
-        "lat": read_float(srf_file, label="lat"),
-        "dep": read_float(srf_file, label="dep"),
-        "stk": read_float(srf_file, label="stk"),
-        "dip": read_float(srf_file, label="dip"),
-        "area": read_float(srf_file, label="area"),
-        "tinit": read_float(srf_file, label="tinit"),
-        "dt": read_float(srf_file, label="dt"),
-        "rake": read_float(srf_file, label="rake"),
-        "slip1": read_float(srf_file, label="slip1"),
-    }
-    nt1 = read_int(srf_file, label="nt1")
-    row["slip2"] = read_float(srf_file, label="slip2")
-    nt2 = read_int(srf_file, label="nt2")
-    row["slip3"] = read_float(srf_file, label="slip3")
-    nt3 = read_int(srf_file, label="nt3")
-    row["slipt1"] = np.fromiter(
-        (read_float(srf_file, label="slipt1") for _ in range(nt1)), float
-    )
-    row["slipt2"] = np.fromiter(
-        (read_float(srf_file, label="slipt2") for _ in range(nt2)), float
-    )
-    row["slipt3"] = np.fromiter(
-        (read_float(srf_file, label="slipt2") for _ in range(nt3)), float
-    )
-    length = max(len(row["slipt1"]), len(row["slipt2"]), len(row["slipt3"]))
-    row["slipt"] = np.sqrt(
-        np.pad(row["slipt1"], (0, length - len(row["slipt1"])), mode="constant") ** 2
-        + np.pad(row["slipt2"], (0, length - len(row["slipt2"])), mode="constant") ** 2
-        + np.pad(row["slipt3"], (0, length - len(row["slipt3"])), mode="constant") ** 2
-    )
-    return row
-
-
 def read_srf(srf_ffp: Path) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
