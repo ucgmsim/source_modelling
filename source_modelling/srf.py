@@ -54,6 +54,9 @@ from typing import Optional, TextIO
 
 import numpy as np
 import pandas as pd
+import scipy as sp
+
+from source_modelling import srf_reader
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
@@ -136,14 +139,14 @@ class SrfFile:
         - slip1: total slip in the first component.
         - slip2: total slip in the second component.
         - slip3: total slip in the third component.
-        - slipt1: slip in the first component over time.
-        - slipt2: slip in the second component over time.
-        - slipt3: slip in the third component over time.
-        - slipt: total slip over time.
         - slip: total slip.
 
         The final two columns are computed from the SRF and are not saved to
         disk. See the linked documentation on the SRF format for more details.
+
+    slipt{i}_matrix : csr_matrix
+        A sparse matrix containing the ith component of slip for each point and at each timestep, where
+        slipt{i}_matrix[i, j] is the slip for the ith patch at time t = j * dt. See also: SRFFile.slip.
 
     References
     ----------
@@ -153,6 +156,19 @@ class SrfFile:
     version: str
     header: pd.DataFrame
     points: pd.DataFrame
+    slipt1_matrix: sp.sparse.csr_matrix
+    slipt2_matrix: sp.sparse.csr_matrix
+    slipt3_matrix: sp.sparse.csr_matrix
+
+    @property
+    def slip(self):
+        """csr_matrix: sparse matrix representing slip in all components"""
+        slip_matrix = self.slipt1_matrix.power(2)
+        if self.slipt2_matrix:
+            slip_matrix += self.slipt2_matrix.power(2)
+        if self.slipt3_matrix:
+            slip_matrix += self.slipt3_matrix.power(2)
+        return slip_matrix.sqrt()
 
     @property
     def segments(self) -> Segments:
@@ -233,56 +249,6 @@ def read_int(srf_file: TextIO, label: Optional[str] = None) -> int:
             raise SrfParseError(f'Expecting int, got: "{int_str}"')
 
 
-def read_srf_point(srf_file: TextIO) -> dict[str, int | float]:
-    """Read a single SRF point from a file handle.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The file handle of the SRF file, pointing to the start of the
-        line.
-
-    Returns
-    -------
-    dict[str, int | float]
-        A dictionary containing the values for the point.
-    """
-    # skip optional first spaces
-    row = {
-        "lon": read_float(srf_file, label="lon"),
-        "lat": read_float(srf_file, label="lat"),
-        "dep": read_float(srf_file, label="dep"),
-        "stk": read_float(srf_file, label="stk"),
-        "dip": read_float(srf_file, label="dip"),
-        "area": read_float(srf_file, label="area"),
-        "tinit": read_float(srf_file, label="tinit"),
-        "dt": read_float(srf_file, label="dt"),
-        "rake": read_float(srf_file, label="rake"),
-        "slip1": read_float(srf_file, label="slip1"),
-    }
-    nt1 = read_int(srf_file, label="nt1")
-    row["slip2"] = read_float(srf_file, label="slip2")
-    nt2 = read_int(srf_file, label="nt2")
-    row["slip3"] = read_float(srf_file, label="slip3")
-    nt3 = read_int(srf_file, label="nt3")
-    row["slipt1"] = np.fromiter(
-        (read_float(srf_file, label="slipt1") for _ in range(nt1)), float
-    )
-    row["slipt2"] = np.fromiter(
-        (read_float(srf_file, label="slipt2") for _ in range(nt2)), float
-    )
-    row["slipt3"] = np.fromiter(
-        (read_float(srf_file, label="slipt2") for _ in range(nt3)), float
-    )
-    length = max(len(row["slipt1"]), len(row["slipt2"]), len(row["slipt3"]))
-    row["slipt"] = np.sqrt(
-        np.pad(row["slipt1"], (0, length - len(row["slipt1"])), mode="constant") ** 2
-        + np.pad(row["slipt2"], (0, length - len(row["slipt2"])), mode="constant") ** 2
-        + np.pad(row["slipt3"], (0, length - len(row["slipt3"])), mode="constant") ** 2
-    )
-    return row
-
-
 def read_srf(srf_ffp: Path) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
@@ -297,7 +263,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         The filepath of the SRF file.
     """
     with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
-        version = srf_file_handle.readline()
+        version = srf_file_handle.readline().strip()
 
         plane_count_line = srf_file_handle.readline().strip()
         plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
@@ -334,14 +300,32 @@ def read_srf(srf_ffp: Path) -> SrfFile:
             )
         point_count = int(points_count_match.group(1))
 
-        points = pd.DataFrame(
-            (read_srf_point(srf_file_handle) for _ in range(point_count))
+        points_metadata, slipt1_matrix, slipt2_matrix, slipt3_matrix = (
+            srf_reader.read_srf_points(srf_file_handle, point_count)
         )
-        points["slip"] = np.sqrt(
-            points["slip1"] ** 2 + points["slip2"] ** 2 + points["slip3"] ** 2
+        points_df = pd.DataFrame(
+            data=points_metadata,
+            columns=[
+                "lat",
+                "lon",
+                "dep",
+                "stk",
+                "dip",
+                "area",
+                "tinit",
+                "dt",
+                "rake",
+                "slip1",
+                "slip2",
+                "slip3",
+            ],
         )
-
-        return SrfFile(version, headers, points)
+        points_df["slip"] = np.sqrt(
+            points_df["slip1"] ** 2 + points_df["slip2"] ** 2 + points_df["slip3"] ** 2
+        )
+        return SrfFile(
+            version, headers, points_df, slipt1_matrix, slipt2_matrix, slipt3_matrix
+        )
 
 
 def write_slip(srf_file: TextIO, slips: np.ndarray) -> None:
