@@ -1,8 +1,10 @@
 cimport numpy as np
-import numpy as pnp
-import scipy as sp
 from libc.stdio cimport *
 from libc.stdlib cimport *
+
+import numpy as pnp
+import scipy as sp
+
 np.import_array()
 
 cdef struct sparse_matrix:

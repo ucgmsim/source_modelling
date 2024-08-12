@@ -1,5 +1,5 @@
-from Cython.Build import cythonize
 import numpy as np
+from Cython.Build import cythonize
 from setuptools import Extension, setup
 
 extensions = [
