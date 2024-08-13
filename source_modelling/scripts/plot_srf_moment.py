@@ -1,85 +1,14 @@
 """Utility script to plot moment over time for an SRF."""
 
-import collections
-import functools
 from pathlib import Path
-from typing import Annotated, Generator, Optional
+from typing import Annotated, Optional
 
-import numpy as np
-import pandas as pd
-import scipy as sp
 import typer
 from matplotlib import pyplot as plt
 
-from source_modelling import srf
+from source_modelling import moment, rupture_propagation, srf
 from workflow import realisations
 from workflow.realisations import RupturePropagationConfig, SourceConfig
-
-
-def tree_nodes_in_order(
-    tree: dict[str, str],
-) -> Generator[str, None, None]:
-    """Generate faults in topologically sorted order.
-
-    Parameters
-    ----------
-    faults : list[RealisationFault]
-        List of RealisationFault objects.
-
-    Yields
-    ------
-    RealisationFault
-        The next fault in the topologically sorted order.
-    """
-    tree_child_map = collections.defaultdict(list)
-    for cur, parent in tree.items():
-        if parent:
-            tree_child_map[parent].append(cur)
-
-    def in_order_traversal(
-        node: str,
-    ) -> Generator[str, None, None]:
-        yield node
-        for child in tree_child_map[node]:
-            yield from in_order_traversal(child)
-
-    initial_fault = next(cur for cur, parent in tree.items() if not parent)
-    yield from in_order_traversal(initial_fault)
-
-
-def moment_over_time_from_srf(srf_points: pd.DataFrame, mu: float) -> pd.DataFrame:
-    non_neglible_patches = srf_points[srf_points["slipt1"].apply(len) > 0]
-    time_values = non_neglible_patches.apply(
-        (
-            lambda row: np.concatenate(
-                (
-                    np.array([row["tinit"]]),
-                    np.full((len(row["slipt1"]) - 1,), row["dt"]),
-                )
-            ).cumsum()
-        ),
-        axis=1,
-    )
-    moment_rate = (
-        non_neglible_patches["area"]
-        / (100 * 100)
-        * non_neglible_patches["dt"]
-        * (non_neglible_patches["slipt1"] / 100).apply(
-            functools.partial(
-                sp.ndimage.convolve1d, weights=[1 / 2, 1 / 2], mode="constant", cval=0
-            )
-        )
-    )
-    patch_displacements = pd.DataFrame(
-        {
-            "t": np.concatenate(time_values.values),
-            "moment": np.concatenate(moment_rate.values),
-        }
-    )
-    patch_displacements["t"] = patch_displacements["t"].round(2)
-    binned_and_summed_moments = patch_displacements.groupby("t").sum()
-    binned_and_summed_moments = mu * binned_and_summed_moments
-    return binned_and_summed_moments
 
 
 def plot_srf_moment(
@@ -106,18 +35,15 @@ def plot_srf_moment(
     """Plot released moment for an SRF over time."""
     srf_data = srf.read_srf(srf_ffp)
 
-    magnitude = (
-        2
-        / 3
-        * np.log10(
-            mu * (srf_data.points["area"] * srf_data.points["slip1"] / (100**3)).sum()
-        )
-        - 6.03333
+    magnitude = moment.moment_to_magnitude(
+        mu * (srf_data.points["area"] * srf_data.points["slip"] / (100**3)).sum()
     )
-    overall_moment = moment_over_time_from_srf(srf_data.points, mu)
-    plt.plot(
-        overall_moment.index.values, overall_moment["moment"], label="Overall Moment"
+
+    dt = srf_data.points["dt"].iloc[0]
+    overall_moment = moment.moment_rate_over_time_from_slip(
+        srf_data.points["area"], srf_data.slip, dt, srf_data.nt, mu
     )
+    plt.plot(overall_moment.index.values, overall_moment["moment"], label="")
 
     if realisation_ffp:
         source_config: SourceConfig = realisations.read_config_from_realisation(
@@ -130,7 +56,7 @@ def plot_srf_moment(
         )
         segment_counter = 0
         point_counter = 0
-        for fault_name in tree_nodes_in_order(
+        for fault_name in rupture_propagation.tree_nodes_in_order(
             rupture_propogation_config.rupture_causality_tree
         ):
             plane_count = len(source_config.source_geometries[fault_name].planes)
@@ -138,8 +64,14 @@ def plot_srf_moment(
                 segment_counter : segment_counter + plane_count
             ]
             num_points = (segments["nstk"] * segments["ndip"]).sum()
-            individual_moment = moment_over_time_from_srf(
-                srf_data.points.iloc[point_counter : point_counter + num_points], mu
+            individual_moment = moment.moment_rate_over_time_from_slip(
+                srf_data.points["area"]
+                .iloc[point_counter : point_counter + num_points]
+                .to_numpy(),
+                srf_data.slip[point_counter : point_counter + num_points],
+                dt,
+                srf_data.nt,
+                mu,
             )
             plt.plot(
                 individual_moment.index.values,
@@ -149,7 +81,7 @@ def plot_srf_moment(
             segment_counter += plane_count
             point_counter += num_points
 
-    plt.ylabel("Moment (Nm)")
+    plt.ylabel("Moment Rate (Nm/s)")
     plt.xlabel("Time (s)")
     plt.legend()
     plt.title(f"Moment over Time (Total Mw: {magnitude:.2f})")
