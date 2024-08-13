@@ -18,7 +18,7 @@ cdef struct sparse_matrix:
 
      
 ctypedef np.double_t DTYPE_t
-ctypedef np.int_t ITYPE_t
+ctypedef np.int64_t ITYPE_t
 DTYPE = pnp.double
 
 
@@ -61,9 +61,7 @@ cdef void read_slipt_values(FILE* srf_file, int start_column, int slip_count, sp
             # printf("Storing %d at %d\n", start_column + slip_index - slip_matrix.entries + slip_count, slip_index)
             slip_matrix.col_ptr[slip_index] = start_column + slip_index - slip_matrix.entries + slip_count
             fscanf(srf_file, "%lf", &slip_matrix.data[slip_index])
-        
-
-
+    
 cdef void read_srf_points_loop(FILE* srf_file, int point_count, DTYPE_t[:, :] metadata, sparse_matrix* slipt1s, sparse_matrix* slipt2s, sparse_matrix* slipt3s):
     cdef int nt1
     cdef int nt2
@@ -98,16 +96,18 @@ cdef sparse_matrix_to_csr(sparse_matrix matrix):
         return None
     cdef np.ndarray[DTYPE_t, ndim=1] data = pnp.zeros(matrix.entries, dtype=DTYPE)
     cdef np.ndarray[ITYPE_t, ndim=1] col_indices = pnp.zeros(matrix.entries, dtype=pnp.int64)
-    cdef np.ndarray[ITYPE_t, ndim=1] row_indices = pnp.zeros(matrix.rows, dtype=pnp.int64)
+    cdef np.ndarray[ITYPE_t, ndim=1] row_indices = pnp.zeros(matrix.rows + 1, dtype=pnp.int64)
     cdef int i = 0
-    
+    cdef int max_col_ind = 0  
     for i in range(matrix.entries):
         data[i] = matrix.data[i]
         col_indices[i] = matrix.col_ptr[i]
+        if max_col_ind <  matrix.col_ptr[i]:
+            max_col_ind = matrix.col_ptr[i]
     i = 0
     for i in range(matrix.rows):
         row_indices[i] = matrix.row_ptr[i]
-    
+    row_indices[matrix.rows] = matrix.entries
     return sp.sparse.csr_matrix((data, col_indices, row_indices))
         
     

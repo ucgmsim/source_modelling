@@ -171,6 +171,16 @@ class SrfFile:
         return slip_matrix.sqrt()
 
     @property
+    def nt(self):
+        """int: The number of timeslices in the SRF."""
+        return self.slipt1_matrix.shape[1]
+
+    @property
+    def dt(self):
+        """float: time resolution of SRF."""
+        return self.points["dt"].iloc[0]
+
+    @property
     def segments(self) -> Segments:
         """Segments: A sequence of segments in the SRF."""
         return Segments(self.header, self.points)
@@ -306,8 +316,8 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         points_df = pd.DataFrame(
             data=points_metadata,
             columns=[
-                "lat",
                 "lon",
+                "lat",
                 "dep",
                 "stk",
                 "dip",
