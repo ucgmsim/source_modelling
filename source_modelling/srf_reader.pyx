@@ -108,7 +108,7 @@ cdef sparse_matrix_to_csr(sparse_matrix matrix):
     for i in range(matrix.rows):
         row_indices[i] = matrix.row_ptr[i]
     row_indices[matrix.rows] = matrix.entries
-    return sp.sparse.csr_matrix((data, col_indices, row_indices))
+    return sp.sparse.csr_array((data, col_indices, row_indices))
         
     
         

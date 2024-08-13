@@ -144,9 +144,9 @@ class SrfFile:
         The final two columns are computed from the SRF and are not saved to
         disk. See the linked documentation on the SRF format for more details.
 
-    slipt{i}_matrix : csr_matrix
-        A sparse matrix containing the ith component of slip for each point and at each timestep, where
-        slipt{i}_matrix[i, j] is the slip for the ith patch at time t = j * dt. See also: SRFFile.slip.
+    slipt{i}_array : csr_array
+        A sparse array containing the ith component of slip for each point and at each timestep, where
+        slipt{i}_array[i, j] is the slip for the ith patch at time t = j * dt. See also: SRFFile.slip.
 
     References
     ----------
@@ -156,24 +156,24 @@ class SrfFile:
     version: str
     header: pd.DataFrame
     points: pd.DataFrame
-    slipt1_matrix: sp.sparse.csr_matrix
-    slipt2_matrix: sp.sparse.csr_matrix
-    slipt3_matrix: sp.sparse.csr_matrix
+    slipt1_array: sp.sparse.csr_array
+    slipt2_array: sp.sparse.csr_array
+    slipt3_array: sp.sparse.csr_array
 
     @property
     def slip(self):
-        """csr_matrix: sparse matrix representing slip in all components"""
-        slip_matrix = self.slipt1_matrix.power(2)
-        if self.slipt2_matrix:
-            slip_matrix += self.slipt2_matrix.power(2)
-        if self.slipt3_matrix:
-            slip_matrix += self.slipt3_matrix.power(2)
-        return slip_matrix.sqrt()
+        """csr_array: sparse array representing slip in all components"""
+        slip_array = self.slipt1_array.power(2)
+        if self.slipt2_array:
+            slip_array += self.slipt2_array.power(2)
+        if self.slipt3_array:
+            slip_array += self.slipt3_array.power(2)
+        return slip_array.sqrt()
 
     @property
     def nt(self):
         """int: The number of timeslices in the SRF."""
-        return self.slipt1_matrix.shape[1]
+        return self.slipt1_array.shape[1]
 
     @property
     def dt(self):
@@ -310,7 +310,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
             )
         point_count = int(points_count_match.group(1))
 
-        points_metadata, slipt1_matrix, slipt2_matrix, slipt3_matrix = (
+        points_metadata, slipt1_array, slipt2_array, slipt3_array = (
             srf_reader.read_srf_points(srf_file_handle, point_count)
         )
         points_df = pd.DataFrame(
@@ -334,7 +334,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
             points_df["slip1"] ** 2 + points_df["slip2"] ** 2 + points_df["slip3"] ** 2
         )
         return SrfFile(
-            version, headers, points_df, slipt1_matrix, slipt2_matrix, slipt3_matrix
+            version, headers, points_df, slipt1_array, slipt2_array, slipt3_array
         )
 
 
