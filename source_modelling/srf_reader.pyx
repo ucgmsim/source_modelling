@@ -29,17 +29,17 @@ cdef struct sparse_matrix:
     # Attributes
     # -----------
     # rows : int
-    # Counts the number of rows in the sparse matrix.
+    #     Counts the number of rows in the sparse matrix.
     # row_counter : int
-    # Records the current row.
+    #     Records the current row.
     # row_ptr : int*
-    # Row index value array.
+    #     Row index value array.
     # entries : int
-    # Counts the total number of entries in the array.
+    #     Counts the total number of entries in the array.
     # col_ptr : int*
-    # Column index value array.
+    #     Column index value array.
     # data : double*
-    # Entry value array.
+    #     Entry value array.
     # 
     # References
     # ----------
