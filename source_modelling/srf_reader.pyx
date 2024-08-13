@@ -208,7 +208,7 @@ cdef sparse_matrix_to_csr(sparse_matrix matrix):
 
     i = 0
     for i in range(matrix.rows):
-        # Aso Python assignment.
+        # Also Python assignment.
         row_indices[i] = matrix.row_ptr[i]
     row_indices[matrix.rows] = matrix.entries
     return sp.sparse.csr_array((data, col_indices, row_indices))
@@ -232,13 +232,13 @@ def read_srf_points(
     metadata : array
         The metadata for each point.
     slip1ts : sparse matrix
-        The sparse matrix of slip values in the first compenent for each
+        The sparse matrix of slip values in the first component for each
         point.
     slip2ts : sparse matrix
-        The sparse matrix of slip values in the second compenent for each
+        The sparse matrix of slip values in the second component for each
         point.
     slip3ts : sparse matrix
-        The sparse matrix of slip values in the third compenent for each
+        The sparse matrix of slip values in the third component for each
         point.
     """
     cdef np.ndarray[DTYPE_t, ndim=2] metadata = pnp.zeros([point_count, 12], dtype=DTYPE)
