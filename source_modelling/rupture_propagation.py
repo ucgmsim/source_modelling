@@ -20,7 +20,7 @@ Typing Aliases:
 """
 
 from collections import defaultdict, namedtuple
-from typing import Optional, Tuple
+from typing import Generator, Optional
 
 import numpy as np
 
@@ -227,3 +227,34 @@ def jump_points_from_rupture_tree(
         )
         jump_points[source] = JumpPair(parent_point, source_point)
     return jump_points
+
+
+def tree_nodes_in_order(
+    tree: dict[str, str],
+) -> Generator[str, None, None]:
+    """Generate faults in topologically sorted order.
+
+    Parameters
+    ----------
+    faults : list[RealisationFault]
+        List of RealisationFault objects.
+
+    Yields
+    ------
+    RealisationFault
+        The next fault in the topologically sorted order.
+    """
+    tree_child_map = defaultdict(list)
+    for cur, parent in tree.items():
+        if parent:
+            tree_child_map[parent].append(cur)
+
+    def in_order_traversal(
+        node: str,
+    ) -> Generator[str, None, None]:
+        yield node
+        for child in tree_child_map[node]:
+            yield from in_order_traversal(child)
+
+    initial_fault = next(cur for cur, parent in tree.items() if not parent)
+    yield from in_order_traversal(initial_fault)
