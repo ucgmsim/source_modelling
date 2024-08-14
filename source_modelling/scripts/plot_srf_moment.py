@@ -41,10 +41,14 @@ def plot_srf_moment(
 
     dt = srf_data.points["dt"].iloc[0]
 
-    overall_moment = moment.moment_rate_over_time_from_slip(
+    overall_moment_rate = moment.moment_rate_over_time_from_slip(
         srf_data.points["area"], srf_data.slip, dt, srf_data.nt, mu
     )
-    plt.plot(overall_moment.index.values, overall_moment["moment"], label="")
+    plt.plot(
+        overall_moment_rate.index.values,
+        overall_moment_rate["moment_rate"],
+        label="Overall Moment Rate",
+    )
 
     if realisation_ffp:
         source_config: SourceConfig = realisations.read_config_from_realisation(
@@ -65,7 +69,7 @@ def plot_srf_moment(
                 segment_counter : segment_counter + plane_count
             ]
             num_points = (segments["nstk"] * segments["ndip"]).sum()
-            individual_moment = moment.moment_rate_over_time_from_slip(
+            individual_moment_rate = moment.moment_rate_over_time_from_slip(
                 srf_data.points["area"]
                 .iloc[point_counter : point_counter + num_points]
                 .to_numpy(),
@@ -75,8 +79,8 @@ def plot_srf_moment(
                 mu,
             )
             plt.plot(
-                individual_moment.index.values,
-                individual_moment["moment"],
+                individual_moment_rate.index.values,
+                individual_moment_rate["moment_rate"],
                 label=fault_name,
             )
             segment_counter += plane_count
