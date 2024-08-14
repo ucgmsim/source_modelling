@@ -1,5 +1,8 @@
-numpy
-qcore @ git+https://github.com/ucgmsim/qcore.git
-numpy
+qcore @ git+https://github.com/ucgmsim/qcore@pegasus
+pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
+matplotlib
+numpy<2
 pandas
 scipy
+typer
+tqdm
