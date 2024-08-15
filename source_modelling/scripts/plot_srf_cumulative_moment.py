@@ -11,75 +11,9 @@ import scipy as sp
 import typer
 from matplotlib import pyplot as plt
 
-from source_modelling import srf
+from source_modelling import moment, rupture_propagation, srf
 from workflow import realisations
 from workflow.realisations import RupturePropagationConfig, SourceConfig
-
-
-def tree_nodes_in_order(
-    tree: dict[str, str],
-) -> Generator[str, None, None]:
-    """Generate faults in topologically sorted order.
-
-    Parameters
-    ----------
-    faults : list[RealisationFault]
-        List of RealisationFault objects.
-
-    Yields
-    ------
-    RealisationFault
-        The next fault in the topologically sorted order.
-    """
-    tree_child_map = collections.defaultdict(list)
-    for cur, parent in tree.items():
-        if parent:
-            tree_child_map[parent].append(cur)
-
-    def in_order_traversal(
-        node: str,
-    ) -> Generator[str, None, None]:
-        yield node
-        for child in tree_child_map[node]:
-            yield from in_order_traversal(child)
-
-    initial_fault = next(cur for cur, parent in tree.items() if not parent)
-    yield from in_order_traversal(initial_fault)
-
-
-def moment_over_time_from_srf(srf_points: pd.DataFrame, mu: float) -> pd.DataFrame:
-    non_neglible_patches = srf_points[srf_points["slipt1"].apply(len) > 0]
-    time_values = non_neglible_patches.apply(
-        (
-            lambda row: np.concatenate(
-                (
-                    np.array([row["tinit"]]),
-                    np.full((len(row["slipt1"]) - 1,), row["dt"]),
-                )
-            ).cumsum()
-        ),
-        axis=1,
-    )
-    moment_rate = (
-        non_neglible_patches["area"]
-        / (100 * 100)
-        * non_neglible_patches["dt"]
-        * (non_neglible_patches["slipt1"] / 100).apply(
-            functools.partial(
-                sp.ndimage.convolve1d, weights=[1 / 2, 1 / 2], mode="constant", cval=0
-            )
-        )
-    )
-    patch_displacements = pd.DataFrame(
-        {
-            "t": np.concatenate(time_values.values),
-            "moment": np.concatenate(moment_rate.values),
-        }
-    )
-    patch_displacements["t"] = patch_displacements["t"].round(2)
-    binned_and_summed_moments = patch_displacements.groupby("t").sum()
-    binned_and_summed_moments = mu * binned_and_summed_moments
-    return binned_and_summed_moments
 
 
 def plot_srf_cumulative_moment(
@@ -118,7 +52,14 @@ def plot_srf_cumulative_moment(
         + srf_data.points["slip3"] ** 2
     )
 
-    overall_moment = moment_over_time_from_srf(srf_data.points, mu).cumsum()
+    overall_moment = moment.moment_over_time_from_moment_rate(
+        moment.moment_rate_over_time_from_slip(
+            srf_data.points["area"],
+            srf_data.slip,
+            srf_data.dt,
+            srf_data.nt,
+        )
+    )
     total_moment = overall_moment["moment"].iloc[-1]
 
     shaded_moments = overall_moment[
@@ -135,7 +76,7 @@ def plot_srf_cumulative_moment(
         rupture_propogation_config = RupturePropagationConfig.read_from_realisation(realisation_ffp)
         segment_counter = 0
         point_counter = 0
-        for fault_name in tree_nodes_in_order(
+        for fault_name in rupture_propagation(
             rupture_propogation_config.rupture_causality_tree
         ):
             plane_count = len(source_config.source_geometries[fault_name].planes)
@@ -146,7 +87,16 @@ def plot_srf_cumulative_moment(
             segment_points = srf_data.points.iloc[
                 point_counter : point_counter + num_points
             ]
-            individual_moment = moment_over_time_from_srf(segment_points, mu).cumsum()
+
+            individual_moment = moment.moment_over_time_from_moment_rate(
+                moment.moment_rate_over_time_from_slip(
+                    segment_points["area"],
+                    srf_data.slip[point_counter : point_counter + num_points],
+                    srf_data.dt,
+                    srf_data.nt,
+                )
+            )
+
             plt.plot(
                 individual_moment.index.values,
                 individual_moment["moment"],

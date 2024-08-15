@@ -1,12 +1,11 @@
-"""Plot multi-segment rupture with time-slip-rise"""
+"""Plot a sample of rake values across a multi-segment rupture."""
 
 from pathlib import Path
 from typing import Annotated
 
-import numpy as np
 import typer
-from pygmt_helper import plotting
 
+from pygmt_helper import plotting
 from source_modelling import srf
 
 
@@ -28,6 +27,7 @@ def plot_rakes(
         float, typer.Option(help="Length of rake vectors (cm).")
     ] = 0.2,
 ):
+    """Plot a sample of rake values across a multi-segment rupture."""
     srf_data = srf.read_srf(srf_ffp)
     region = (
         srf_data.points["lon"].min() - 0.5,
@@ -38,9 +38,11 @@ def plot_rakes(
 
     fig = plotting.gen_region_fig(title, region=region, map_data=None)
     i = 0
+
     vectors = srf_data.points[["lon", "lat", "rake"]].sample(sample_size)
     vectors["rake"] = (vectors["rake"] + 90) % 360
     vectors["length"] = vector_length
+
     fig.plot(
         data=vectors.values.tolist(), style="v0.1c+e+a30", pen="0.2p", fill="black"
     )

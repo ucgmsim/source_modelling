@@ -44,7 +44,9 @@ def plot_srf(
     ] = 0,
     annotations: Annotated[bool, typer.Option(help="Label contours")] = True,
 ):
+    """Plot multi-segment rupture with time-slip-rise."""
     srf_data = srf.read_srf(srf_ffp)
+
     region = (
         srf_data.points["lon"].min() - longitude_pad,
         srf_data.points["lon"].max() + longitude_pad,
@@ -52,11 +54,7 @@ def plot_srf(
         srf_data.points["lat"].max() + latitude_pad,
     )
 
-    srf_data.points["slip"] = np.sqrt(
-        srf_data.points["slip1"] ** 2
-        + srf_data.points["slip2"] ** 2
-        + srf_data.points["slip3"] ** 2
-    )
+    # Compute slip limits
     slip_quantile = srf_data.points["slip"].quantile(0.98)
     slip_cb_max = max(int(np.round(slip_quantile, -1)), 10)
     cmap_limits = (0, slip_cb_max, slip_cb_max / 10)
@@ -69,6 +67,7 @@ def plot_srf(
         nstk = segment["nstk"]
         ndip = segment["ndip"]
 
+        # Create standard slip heatmap.
         cur_grid = plotting.create_grid(
             segment_points,
             "slip",
@@ -81,6 +80,7 @@ def plot_srf(
             ),
             set_water_to_nan=False,
         )
+
         plotting.plot_grid(
             fig,
             cur_grid,
@@ -93,6 +93,8 @@ def plot_srf(
             cb_label="slip",
             continuous_cmap=True,
         )
+
+        # Plot time contours
         time_grid = plotting.create_grid(
             segment_points,
             "tinit",
@@ -107,6 +109,7 @@ def plot_srf(
         )
         fig.grdcontour(levels=1, grid=time_grid, pen="0.1p")
 
+        # Plot bounds of the current segment.
         corners = segment_points.iloc[[0, nstk - 1, -1, (ndip - 1) * nstk]]
         fig.plot(
             x=corners["lon"].iloc[list(range(len(corners))) + [0]].to_list(),
@@ -118,17 +121,27 @@ def plot_srf(
             y=corners["lat"].iloc[:2].to_list(),
             pen="0.8p,black",
         )
+
         if not annotations:
             continue
+
+        # Custom annotation implementation. Rough algorithm is:
+        # 1. Compute the number of whole second incerments in tinit
         tinit_max = int(np.round(segment_points["tinit"].max()))
         tinit_min = int(np.round(segment_points["tinit"].min()))
+        # 2. Provided we have a non-trivial number of increments
         if tinit_max - tinit_min >= 1:
+            # 3. Iterate over every second between the two and
             for j in range(tinit_min, tinit_max):
+                # 4. Find the segement point with the closest tinit value to the current second.
                 min_delta = (segment_points["tinit"] - j).abs().min()
+                # 5. Provided that this point has a tinit closest enough to the current second.
                 if min_delta < 0.1:
+                    # 6. Get that point and
                     closest_point = segment_points[
                         (segment_points["tinit"] - j).abs() == min_delta
                     ].iloc[0]
+                    # Add an annotation label to the plot.
                     fig.text(
                         text=f"{j}",
                         x=closest_point["lon"],
@@ -137,6 +150,7 @@ def plot_srf(
                         fill="white",
                     )
 
+    # Plot the hypocentre.
     hypocentre = srf_data.points[
         srf_data.points["tinit"] == srf_data.points["tinit"].min()
     ].iloc[0]
@@ -147,6 +161,8 @@ def plot_srf(
         pen="1p,black",
         fill="white",
     )
+
+    # If we are supplied a JSON realisation, we can add lobels for jump points.
     if realisation_ffp:
         rupture_propagation_config = RupturePropagationConfig.read_from_realisation(
             realisation_ffp
@@ -158,18 +174,24 @@ def plot_srf(
                 continue
             source = source_config.source_geometries[fault_name]
             parent = source_config.source_geometries[parent_name]
+
+            # Ruptures jump from_point --> to_point
             from_point = parent.fault_coordinates_to_wgs_depth_coordinates(
                 jump_point.from_point
             )[:2]
+
+            # Find the closest point to the theoretical jump point (so we can lookup the time).
             closest_from_point_distance_idx = (
                 coordinates.distance_between_wgs_depth_coordinates(
                     srf_data.points[["lat", "lon"]].to_numpy(), from_point
                 )
             ).argmin()
             srf_jump_point = srf_data.points.iloc[closest_from_point_distance_idx]
+
             to_point = source.fault_coordinates_to_wgs_depth_coordinates(
                 jump_point.to_point
             )[:2]
+
             fig.plot(
                 x=from_point[1],
                 y=from_point[0],

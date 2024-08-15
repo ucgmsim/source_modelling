@@ -6,8 +6,8 @@ from typing import Annotated
 import numpy as np
 import pandas as pd
 import typer
-from pygmt_helper import plotting
 
+from pygmt_helper import plotting
 from source_modelling import srf
 
 
@@ -23,6 +23,7 @@ def plot_rise(
     ] = 300,
     title: Annotated[str, typer.Option(help="Plot title to use")] = "Title",
 ):
+    """Plot multi-segment rupture with time-slip-rise"""
     srf_data = srf.read_srf(srf_ffp)
     region = (
         srf_data.points["lon"].min() - 0.5,
