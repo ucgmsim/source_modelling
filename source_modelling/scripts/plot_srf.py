@@ -148,14 +148,10 @@ def plot_srf(
         fill="white",
     )
     if realisation_ffp:
-        rupture_propagation_config: RupturePropagationConfig = (
-            realisations.read_config_from_realisation(
-                RupturePropagationConfig, realisation_ffp
-            )
+        rupture_propagation_config = RupturePropagationConfig.read_from_realisation(
+            realisation_ffp
         )
-        source_config: SourceConfig = realisations.read_config_from_realisation(
-            SourceConfig, realisation_ffp
-        )
+        source_config = SourceConfig.read_from_realisation(realisation_ffp)
         for fault_name, jump_point in rupture_propagation_config.jump_points.items():
             parent_name = rupture_propagation_config.rupture_causality_tree[fault_name]
             if not parent_name:

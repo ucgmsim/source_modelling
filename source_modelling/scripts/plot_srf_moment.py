@@ -46,14 +46,8 @@ def plot_srf_moment(
     plt.plot(overall_moment.index.values, overall_moment["moment"], label="")
 
     if realisation_ffp:
-        source_config: SourceConfig = realisations.read_config_from_realisation(
-            SourceConfig, realisation_ffp
-        )
-        rupture_propogation_config: RupturePropagationConfig = (
-            realisations.read_config_from_realisation(
-                RupturePropagationConfig, realisation_ffp
-            )
-        )
+        source_config = SourceConfig.read_from_realisation(realisation_ffp)
+        rupture_propogation_config = RupturePropagationConfig.read_from_realisation(realisation_ffp)
         segment_counter = 0
         point_counter = 0
         for fault_name in rupture_propagation.tree_nodes_in_order(
