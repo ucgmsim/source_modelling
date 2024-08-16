@@ -356,7 +356,7 @@ def write_slip(srf_file: TextIO, slips: np.ndarray) -> None:
         )
 
 
-def write_srf_point(srf_file: TextIO, point: pd.Series) -> None:
+def write_srf_point(srf_file: TextIO, srf: SrfFile, point: pd.Series) -> None:
     """Write out a single SRF point.
 
     Parameters
@@ -366,18 +366,40 @@ def write_srf_point(srf_file: TextIO, point: pd.Series) -> None:
     point : pd.Series
         The point to write.
     """
+    index = point.name
+    slipt1 = (
+        srf.slipt1_array.data[
+            srf.slipt1_array.indptr[index] : srf.slipt1_array.indptr[index + 1]
+        ]
+        if srf.slipt1_array is not None
+        else None
+    )
+    slipt2 = (
+        srf.slipt2_array.data[
+            srf.slipt2_array.indptr[index] : srf.slipt2_array.indptr[index + 1]
+        ]
+        if srf.slipt2_array is not None
+        else None
+    )
+    slipt3 = (
+        srf.slipt3_array.data[
+            srf.slipt3_array.indptr[index] : srf.slipt3_array.indptr[index + 1]
+        ]
+        if srf.slipt3_array is not None
+        else None
+    )
     srf_file.write(
         f"{point['lon']:.6f} {point['lat']:.6f} {point['dep']:g} {point['stk']:g} {point['dip']:g} {point['area']:.4E} {point['tinit']:.4f} {point['dt']:.6E}\n"
     )
     srf_file.write(
-        f"{point['rake']:g} {point['slip1']:.4f} {len(point['slipt1'])} {point['slip2']:.4f} {len(point['slipt2'])} {point['slip3']:.4f} {len(point['slipt3'])}\n"
+        f"{point['rake']:g} {point['slip1']:.4f} {len(slipt1) if slipt1 is not None else 0} {point['slip2']:.4f} {len(slipt2) if slipt2 is not None else 0} {point['slip3']:.4f} {len(slipt3) if slipt3 is not None else 0}\n"
     )
-    if len(point["slipt1"]):
-        write_slip(srf_file, point["slipt1"])
-    if len(point["slipt2"]):
-        write_slip(srf_file, point["slipt2"])
-    if len(point["slipt3"]):
-        write_slip(srf_file, point["slipt3"])
+    if slipt1 is not None:
+        write_slip(srf_file, slipt1)
+    if slipt2 is not None:
+        write_slip(srf_file, slipt2)
+    if slipt3 is not None:
+        write_slip(srf_file, slipt3)
 
 
 def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
@@ -407,4 +429,6 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
             + "\n"
         )
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
-        srf.points.apply(functools.partial(write_srf_point, srf_file_handle), axis=1)
+        srf.points.apply(
+            functools.partial(write_srf_point, srf_file_handle, srf), axis=1
+        )
