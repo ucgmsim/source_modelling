@@ -367,24 +367,30 @@ def write_srf_point(srf_file: TextIO, srf: SrfFile, point: pd.Series) -> None:
         The point to write.
     """
     index = point.name
-    slipt1 = np.trim_zeros(
-        srf.slipt1_array.data[
-            srf.slipt1_array.indptr[index] : srf.slipt1_array.indptr[index + 1]
-        ]
+    slipt1 = (
+        np.trim_zeros(
+            srf.slipt1_array.data[
+                srf.slipt1_array.indptr[index] : srf.slipt1_array.indptr[index + 1]
+            ]
+        )
         if srf.slipt1_array is not None
         else None
     )
-    slipt2 = np.trim_zeros(
-        srf.slipt2_array.data[
-            srf.slipt2_array.indptr[index] : srf.slipt2_array.indptr[index + 1]
-        ]
+    slipt2 = (
+        np.trim_zeros(
+            srf.slipt2_array.data[
+                srf.slipt2_array.indptr[index] : srf.slipt2_array.indptr[index + 1]
+            ]
+        )
         if srf.slipt2_array is not None
         else None
     )
-    slipt3 = np.trim_zeros(
-        srf.slipt3_array.data[
-            srf.slipt3_array.indptr[index] : srf.slipt3_array.indptr[index + 1]
-        ]
+    slipt3 = (
+        np.trim_zeros(
+            srf.slipt3_array.data[
+                srf.slipt3_array.indptr[index] : srf.slipt3_array.indptr[index + 1]
+            ]
+        )
         if srf.slipt3_array is not None
         else None
     )
