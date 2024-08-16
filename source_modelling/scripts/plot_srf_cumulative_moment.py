@@ -46,12 +46,6 @@ def plot_srf_cumulative_moment(
     """Plot cumulative moment for an SRF over time."""
     srf_data = srf.read_srf(srf_ffp)
 
-    srf_data.points["slip"] = np.sqrt(
-        srf_data.points["slip1"] ** 2
-        + srf_data.points["slip2"] ** 2
-        + srf_data.points["slip3"] ** 2
-    )
-
     overall_moment = moment.moment_over_time_from_moment_rate(
         moment.moment_rate_over_time_from_slip(
             srf_data.points["area"],
@@ -73,10 +67,12 @@ def plot_srf_cumulative_moment(
 
     if realisation_ffp:
         source_config = SourceConfig.read_from_realisation(realisation_ffp)
-        rupture_propogation_config = RupturePropagationConfig.read_from_realisation(realisation_ffp)
+        rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
+            realisation_ffp
+        )
         segment_counter = 0
         point_counter = 0
-        for fault_name in rupture_propagation(
+        for fault_name in rupture_propagation.tree_nodes_in_order(
             rupture_propogation_config.rupture_causality_tree
         ):
             plane_count = len(source_config.source_geometries[fault_name].planes)
