@@ -178,12 +178,14 @@ def plot_srf(
             # Ruptures jump from_point --> to_point
             from_point = parent.fault_coordinates_to_wgs_depth_coordinates(
                 jump_point.from_point
-            )[:2]
+            )
 
             # Find the closest point to the theoretical jump point (so we can lookup the time).
             closest_from_point_distance_idx = (
                 coordinates.distance_between_wgs_depth_coordinates(
-                    srf_data.points[["lat", "lon"]].to_numpy(), from_point
+                    srf_data.points[["lat", "lon", "dep"]].to_numpy()
+                    * np.array([1, 1, 1000]),
+                    from_point,
                 )
             ).argmin()
             srf_jump_point = srf_data.points.iloc[closest_from_point_distance_idx]
