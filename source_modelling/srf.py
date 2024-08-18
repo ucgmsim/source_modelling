@@ -434,4 +434,4 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
         srf.points.apply(
             functools.partial(write_srf_point, srf_file_handle, srf), axis=1
         )
-        srf.points.drop("point_index")
+        srf.points = srf.points.drop(columns="point_index")
