@@ -162,7 +162,7 @@ class SrfFile:
 
     @property
     def slip(self):
-        """csr_array: sparse array representing slip in all components"""
+        """csr_array: sparse array representing slip in all components."""
         slip_array = self.slipt1_array.power(2)
         if self.slipt2_array:
             slip_array += self.slipt2_array.power(2)
@@ -366,7 +366,7 @@ def write_srf_point(srf_file: TextIO, srf: SrfFile, point: pd.Series) -> None:
     point : pd.Series
         The point to write.
     """
-    index = point.name
+    index = int(point["point_index"])
     slipt1 = (
         srf.slipt1_array.data[
             srf.slipt1_array.indptr[index] : srf.slipt1_array.indptr[index + 1]
@@ -429,6 +429,9 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
             + "\n"
         )
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
+        srf.points["point_index"] = np.arange(len(srf.points))
+
         srf.points.apply(
             functools.partial(write_srf_point, srf_file_handle, srf), axis=1
         )
+        srf.points.drop("point_index")
