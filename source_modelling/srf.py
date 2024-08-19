@@ -301,6 +301,8 @@ def read_srf(srf_ffp: Path) -> SrfFile:
                 }
             )
         headers = pd.DataFrame(segments)
+        headers["nstk"] = headers["nstk"].astype(int)
+        headers["ndip"] = headers["ndip"].astype(int)
 
         points_count_line = srf_file_handle.readline().strip()
         points_count_match = re.match(POINT_COUNT_RE, points_count_line)
@@ -330,6 +332,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
                 "slip3",
             ],
         )
+
         points_df["slip"] = np.sqrt(
             points_df["slip1"] ** 2 + points_df["slip2"] ** 2 + points_df["slip3"] ** 2
         )
@@ -439,19 +442,19 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
     with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
         srf_file_handle.write("1.0\n")
         srf_file_handle.write(f"PLANE {len(srf.header)}\n")
-        srf_file_handle.write(
-            srf.header.to_string(
-                index=False,
-                header=None,
-                formatters={
-                    "elon": lambda elon: f"{elon:.6f}",
-                    "elat": lambda elat: f"{elat:.6f}",
-                    "len": lambda len: f"{len:.4f}",
-                    "wid": lambda wid: f"{wid:.4f}",
-                },
+        # Cannot use srf.header.to_string because the newline separating headers is significant!
+        # This is ok because the number of headers is typically very small (< 100)
+        for _, plane in srf.header.iterrows():
+            srf_file_handle.write(
+                "\n".join(
+                    [
+                        f"{plane['elon']:.6f} {plane['elat']:.6f} {int(plane['nstk'])} {int(plane['ndip'])} {plane['len']:.4f} {plane['wid']:.4f}",
+                        f"{plane['stk']:.4f} {plane['dip']:.4f} {plane['dtop']:.4f} {plane['shyp']:.4f} {plane['dhyp']:.4f}",
+                        "",
+                    ]
+                )
             )
-            + "\n"
-        )
+
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
         srf.points["point_index"] = np.arange(len(srf.points))
 
