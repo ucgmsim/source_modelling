@@ -363,10 +363,34 @@ def write_srf_point(srf_file: TextIO, srf: SrfFile, point: pd.Series) -> None:
     ----------
     srf_file : TextIO
         The SRF file to write to.
+    srf : SrfFile
+        The SRF file object to write.
     point : pd.Series
         The point to write.
     """
     index = int(point["point_index"])
+    # We need to get the raw slip values for the slip arrays to write out to the SRF.
+    # The slip values for the ith point in the SRF are stored in the ith row of the slip array.
+    # The indptr array contains the indices for each row in the slip array, so:
+    #
+    # - indptr[i] is the start index in the data array for the ith row and
+    # - indptr[i + 1] is the start index in the data array for the (i + 1)th row.
+    #
+    # Hence, data[indptr[i]:indptr[i+1]] collects the slip values for the ith row.
+    # Note we cannot use standard multi-dimensional array indexing arr[i, :]
+    # because scipy sparse arrays do not support this kind of indexing.
+    #
+    # Visually:
+    #
+    # +----+-----+----+---+---+--+
+    # |    |     |    |   |   |  | indptr
+    # +----+---\-+----+---+-\-+--+
+    #           \            \
+    #            \            \
+    # +----------+\-----------+\----------+-------------+
+    # |   ...    |    row i   | row i + 1 |     ...     | data
+    # +----------+------------+-----------+-------------+
+    #            row_i = data[indptr[i]:indptr[i+1]]
     slipt1 = (
         srf.slipt1_array.data[
             srf.slipt1_array.indptr[index] : srf.slipt1_array.indptr[index + 1]
