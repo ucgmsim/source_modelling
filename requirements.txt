@@ -3,6 +3,7 @@ pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
 matplotlib
 numpy<2
 pandas
+parse
 scipy
 hypothesis[numpy, pandas]
 parse
