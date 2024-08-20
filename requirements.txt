@@ -5,5 +5,5 @@ parse
 pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
 qcore @ git+https://github.com/ucgmsim/qcore@pegasus
 scipy
-tqdm
 typer
+workflow
