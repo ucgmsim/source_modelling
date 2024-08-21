@@ -33,7 +33,7 @@ Before you can plot anything, you need to install the source modelling repositor
 
 ## How Do I Plot SRF Slip?
 
-You need _plot-srf_. With the source modelling repo installed execute
+You need `plot-srf`. With the source modelling repo installed execute
 
 ```bash
 $ plot-srf SRF_FFP OUTPUT_PLOT_FFP
@@ -83,6 +83,8 @@ $ plot-srf-cumulative-moment SRF_FFP OUTPUT_PLOT_FFP
 Which produces the cumulative moment function for the SRF and plots it.
 
 ![](images/srf_cumulative_moment_rate_example.png)
+
+The shaded area under the curve represents the time for the rupture to release 5-95% of its moment. 
 
 As you'd expect, you can break this down further to get the cumulative moment on each segment — if you have a realisation file for this SRF.
 
