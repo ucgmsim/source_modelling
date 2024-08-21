@@ -1,12 +1,12 @@
-qcore @ git+https://github.com/ucgmsim/qcore@pegasus
-pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
 matplotlib
 numpy<2
 pandas
 parse
+pygmt_helper
+qcore
 scipy
 hypothesis[numpy, pandas]
 parse
 pytest
 typer
-tqdm
+workflow

@@ -51,7 +51,6 @@ def plot_rakes(
         ndip = int(segment["ndip"])
         point_count = nstk * ndip
         segment_points = srf_data.points.iloc[i : i + point_count]
-        breakpoint()
         corners = segment_points.iloc[[0, nstk - 1, -1, (ndip - 1) * nstk]]
         fig.plot(
             x=corners["lon"].iloc[list(range(len(corners))) + [0]].to_list(),
