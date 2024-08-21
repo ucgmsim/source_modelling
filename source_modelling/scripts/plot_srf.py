@@ -1,4 +1,4 @@
-"""Plot multi-segment rupture with time-slip-rise."""
+"""Plot multi-segment rupture with slip."""
 
 from pathlib import Path
 from typing import Annotated, Optional
@@ -44,7 +44,7 @@ def plot_srf(
     ] = 0,
     annotations: Annotated[bool, typer.Option(help="Label contours")] = True,
 ):
-    """Plot multi-segment rupture with time-slip-rise."""
+    """Plot multi-segment rupture with slip."""
     srf_data = srf.read_srf(srf_ffp)
 
     region = (
