@@ -118,7 +118,6 @@ class SrfFile:
         - stk: The plane strike.
         - dip: The plane dip.
         - dtop: The top of the plane.
-        - dbottom: The bottom of the plane.
         - shyp: The hypocentre location in strike coordinates.
         - dhyp: The hypocentre location in dip coordinates.
 
