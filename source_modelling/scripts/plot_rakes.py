@@ -1,7 +1,7 @@
 """Plot a sample of rake values across a multi-segment rupture."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 
@@ -19,7 +19,7 @@ def plot_rakes(
     dpi: Annotated[
         float, typer.Option(help="Plot output DPI (higher is better).")
     ] = 300,
-    title: Annotated[str, typer.Option(help="Plot title to use.")] = "Title",
+    title: Annotated[Optional[str], typer.Option(help="Plot title to use.")] = None,
     sample_size: Annotated[
         int, typer.Option(help="Number of points to sample for rake.")
     ] = 200,

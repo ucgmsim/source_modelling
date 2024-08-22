@@ -9,7 +9,6 @@ import typer
 from pygmt_helper import plotting
 from qcore import coordinates
 from source_modelling import srf
-from workflow import realisations
 from workflow.realisations import RupturePropagationConfig, SourceConfig
 
 
@@ -23,7 +22,7 @@ def plot_srf(
     dpi: Annotated[
         float, typer.Option(help="Plot output DPI (higher is better)")
     ] = 300,
-    title: Annotated[str, typer.Option(help="Plot title to use")] = "Title",
+    title: Annotated[Optional[str], typer.Option(help="Plot title to use")] = None,
     levels: Annotated[
         float,
         typer.Option(

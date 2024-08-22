@@ -1,7 +1,7 @@
 """Plot multi-segment rupture with rise."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 
@@ -19,7 +19,7 @@ def plot_rise(
     dpi: Annotated[
         float, typer.Option(help="Plot output DPI (higher is better)")
     ] = 300,
-    title: Annotated[str, typer.Option(help="Plot title to use")] = "Title",
+    title: Annotated[Optional[str], typer.Option(help="Plot title to use")] = None,
 ):
     """Plot multi-segment rupture with rise."""
     srf_data = srf.read_srf(srf_ffp)
