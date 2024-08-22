@@ -43,6 +43,9 @@ def test_christchurch_srf():
     # Check that the segments code correctly identifies one segment
     assert len(christchurch_srf.segments) == 1
     assert len(christchurch_srf.segments[0]) == len(christchurch_srf.points)
+    # NOTE: This value is not validated in any way, it's more of a
+    # regression test for future parsing changes.
+    assert christchurch_srf.nt == 361
 
     assert christchurch_srf.points.iloc[0].to_dict() == {
         "lon": 172.6127,
