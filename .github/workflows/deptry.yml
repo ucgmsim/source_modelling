@@ -16,7 +16,7 @@ jobs:
       # Remove pyproject.toml so that deptry doesn't get confused
       - run: rm pyproject.toml
       # Remove the pytest modules because they are for testing only.
-      - run: sed '/pytest/d' requirements.txt
+      - run: sed -e '/pytest/d' -e '/hypothesis/d' requirements.txt
       # Install requirements
       - run: pip install -r requirements.txt
       # Run deptry to check that all dependencies are present.

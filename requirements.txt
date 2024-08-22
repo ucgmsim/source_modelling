@@ -4,5 +4,6 @@ numpy
 pandas
 parse
 pytest
+hypothesis
 pytest-cov
 scipy
