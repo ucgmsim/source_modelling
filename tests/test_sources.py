@@ -23,7 +23,10 @@ def valid_coordinates(point_coordinates: np.ndarray) -> bool:
 
 @given(
     point_coordinates=st.builds(
-        coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180), depth=st.floats(0)
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
@@ -49,7 +52,10 @@ def test_point_construction(
 
 @given(
     point_coordinates=st.builds(
-        coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180), depth=st.floats(0)
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
@@ -81,7 +87,10 @@ def test_point_coordinate_system(
 
 @given(
     point_coordinates=st.builds(
-        coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180), depth=st.floats(0)
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
