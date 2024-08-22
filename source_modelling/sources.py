@@ -653,9 +653,9 @@ def closest_point_between_sources(
         fault_coordinate_distance,
         np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
         bounds=([0] * 4, [1] * 4),
-        gtol=1e-4,
-        ftol=1e-4,
-        xtol=1e-4,
+        gtol=1e-5,
+        ftol=1e-5,
+        xtol=1e-5,
     )
 
     if not res.success and res.status != 0:

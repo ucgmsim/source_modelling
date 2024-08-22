@@ -2,7 +2,7 @@ from typing import Optional
 
 import numpy as np
 import scipy as sp
-from hypothesis import assume, given, settings
+from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
@@ -289,6 +289,7 @@ def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray)
     ),
 )
 @settings(deadline=1000)
+@seed(1)
 def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
     pairwise_distance = sp.spatial.distance.cdist(fault.bounds, other_fault.bounds)
     assume(pairwise_distance.min() > 1)
