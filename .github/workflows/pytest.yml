@@ -25,4 +25,4 @@ jobs:
           pytest --cov=source_modelling --cov-report=json tests
 
       - name: Test that module coverage is at least 95% for every module
-        run: "[[ $(jq '.files | to_entries[] | .value.summary.percent_covered | select(. < 95)' coverage.json) ]]"
+        run: "[[ -z $(jq '.files | to_entries[] | .value.summary.percent_covered | select(. < 95)' coverage.json) ]]"
