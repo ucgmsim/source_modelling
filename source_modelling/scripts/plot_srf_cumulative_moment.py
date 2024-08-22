@@ -1,13 +1,9 @@
 """Utility script to plot cumulative moment over time for an SRF."""
 
-import collections
-import functools
 from pathlib import Path
-from typing import Annotated, Generator, Optional
+from typing import Annotated, Optional
 
 import numpy as np
-import pandas as pd
-import scipy as sp
 import typer
 from matplotlib import pyplot as plt
 
@@ -15,7 +11,10 @@ from source_modelling import moment, rupture_propagation, srf
 from workflow import realisations
 from workflow.realisations import RupturePropagationConfig, SourceConfig
 
+app = typer.Typer()
 
+
+@app.command(help="Plot cumulative moment for an SRF over time.")
 def plot_srf_cumulative_moment(
     srf_ffp: Annotated[
         Path,
@@ -26,7 +25,6 @@ def plot_srf_cumulative_moment(
     output_png_ffp: Annotated[
         Path, typer.Argument(help="Output plot path", writable=True, dir_okay=False)
     ],
-    mu: Annotated[float, typer.Option(help="Shear rigidity constant")] = 3.3e10,
     dpi: Annotated[
         int, typer.Option(help="Plot image pixel density (higher = better)", min=300)
     ] = 300,
@@ -43,7 +41,24 @@ def plot_srf_cumulative_moment(
         float, typer.Option(help="Maximum shading cutoff", min=0, max=1)
     ] = 0.95,
 ):
-    """Plot cumulative moment for an SRF over time."""
+    """Plot cumulative moment for an SRF over time.
+
+    Parameters
+    ----------
+    srf_ffp : Annotated[ Path, typer.Argument( help
+        SRF filepath to plot.
+    output_png_ffp : Annotated[ Path, typer.Argument(help
+        Output plot path.
+    dpi : Annotated[ int, typer.Option(help
+        Plot image pixel density (higher = better).
+    realisation_ffp : Annotated[ Optional[Path], typer.Option( help
+        Path to realisation, used to plot individual fault
+        contribution.
+    min_shade_cutoff : Annotated[ float, typer.Option(help
+        Minimum shading cutoff.
+    max_shade_cutoff : Annotated[ float, typer.Option(help
+        Maximum shading cutoff.
+    """
     srf_data = srf.read_srf(srf_ffp)
 
     srf_data.points["slip"] = np.sqrt(
@@ -131,9 +146,5 @@ def plot_srf_cumulative_moment(
     plt.savefig(output_png_ffp, dpi=dpi)
 
 
-def main():
-    typer.run(plot_srf_cumulative_moment)
-
-
 if __name__ == "__main__":
-    main()
+    app()

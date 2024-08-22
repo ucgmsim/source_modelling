@@ -8,7 +8,10 @@ import typer
 from pygmt_helper import plotting
 from source_modelling import srf
 
+app = typer.Typer()
 
+
+@app.command(help="Plot multi-segment rupture with rise.")
 def plot_rise(
     srf_ffp: Annotated[
         Path, typer.Argument(help="Path to SRF file to plot.", exists=True)
@@ -20,8 +23,20 @@ def plot_rise(
         float, typer.Option(help="Plot output DPI (higher is better)")
     ] = 300,
     title: Annotated[Optional[str], typer.Option(help="Plot title to use")] = None,
-):
-    """Plot multi-segment rupture with rise."""
+) -> None:
+    """Plot multi-segment drupture with rise.
+
+    Parameters
+    ----------
+    srf_ffp : Path
+        Path to SRF file to plot.
+    output_ffp : Path
+        Output plot image.
+    dpi : float, default 300
+        Plot output DPI (higher is better).
+    title : Optional[str], default None
+        Plot title to use.
+    """
     srf_data = srf.read_srf(srf_ffp)
     region = (
         srf_data.points["lon"].min() - 0.5,
@@ -97,9 +112,5 @@ def plot_rise(
     )
 
 
-def main():
-    typer.run(plot_rise)
-
-
 if __name__ == "__main__":
-    main()
+    app()

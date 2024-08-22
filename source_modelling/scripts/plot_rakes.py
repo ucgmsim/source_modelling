@@ -8,7 +8,10 @@ import typer
 from pygmt_helper import plotting
 from source_modelling import srf
 
+app = typer.Typer()
 
+
+@app.command(help="Plot a sample of rake values across a multi-segment rupture.")
 def plot_rakes(
     srf_ffp: Annotated[
         Path, typer.Argument(help="Path to SRF file to plot.", exists=True)
@@ -26,8 +29,24 @@ def plot_rakes(
     vector_length: Annotated[
         float, typer.Option(help="Length of rake vectors (cm).")
     ] = 0.2,
-):
-    """Plot a sample of rake values across a multi-segment rupture."""
+) -> None:
+    """Plot an SRF file and output a PNG file.
+
+    Parameters
+    ----------
+    srf_ffp : Path
+        Path to the SRF file.
+    output_ffp : Path
+        Path of the output plot image.
+    dpi : float, default 300
+        Plot output DPI (higher is better).
+    title : Optional[str], default None
+        Plot title to use.
+    sample_size : int, default 200
+        Number of points to sample for rake.
+    vector_length : float, default 0.2cm
+        Length of rake vectors (cm).
+    """
     srf_data = srf.read_srf(srf_ffp)
     region = (
         srf_data.points["lon"].min() - 0.5,
@@ -67,9 +86,5 @@ def plot_rakes(
     )
 
 
-def main():
-    typer.run(plot_rakes)
-
-
 if __name__ == "__main__":
-    main()
+    app()

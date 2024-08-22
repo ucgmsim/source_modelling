@@ -11,7 +11,10 @@ from qcore import coordinates
 from source_modelling import srf
 from workflow.realisations import RupturePropagationConfig, SourceConfig
 
+app = typer.Typer()
 
+
+@app.command(help="Plot multi-segment rupture with slip.")
 def plot_srf(
     srf_ffp: Annotated[
         Path, typer.Argument(help="Path to SRF file to plot.", exists=True)
@@ -42,8 +45,30 @@ def plot_srf(
         float, typer.Option(help="longitude padding to apply (degrees)")
     ] = 0,
     annotations: Annotated[bool, typer.Option(help="Label contours")] = True,
-):
-    """Plot multi-segment rupture with slip."""
+) -> None:
+    """Plot multi-segment rupture with slip.
+
+    Parameters
+    ----------
+    srf_ffp : Path
+        Path to SRF file to plot.
+    output_ffp : Path
+        Output plot image.
+    dpi : float
+        Plot output DPI (higher is better).
+    title : Optional[str]
+        Plot title to use
+    levels : float
+        Plot time as contours of every `levels` seconds.
+    realisation_ffp : Optional[Path]
+        Path to realisation, used to mark jump points.
+    latitude_pad : float
+        Latitude padding to apply (degrees).
+    longitude_pad : float
+        Longitude padding to apply (degrees).
+    annotations : bool
+        Label contours.
+    """
     srf_data = srf.read_srf(srf_ffp)
 
     region = (
@@ -125,14 +150,14 @@ def plot_srf(
             continue
 
         # Custom annotation implementation. Rough algorithm is:
-        # 1. Compute the number of whole second incerments in tinit
+        # 1. Compute the number of whole second increments in tinit
         tinit_max = int(np.round(segment_points["tinit"].max()))
         tinit_min = int(np.round(segment_points["tinit"].min()))
         # 2. Provided we have a non-trivial number of increments
         if tinit_max - tinit_min >= 1:
             # 3. Iterate over every second between the two and
             for j in range(tinit_min, tinit_max):
-                # 4. Find the segement point with the closest tinit value to the current second.
+                # 4. Find the segment point with the closest tinit value to the current second.
                 min_delta = (segment_points["tinit"] - j).abs().min()
                 # 5. Provided that this point has a tinit closest enough to the current second.
                 if min_delta < 0.1:
@@ -161,7 +186,7 @@ def plot_srf(
         fill="white",
     )
 
-    # If we are supplied a JSON realisation, we can add lobels for jump points.
+    # If we are supplied a JSON realisation, we can add labels for jump points.
     if realisation_ffp:
         rupture_propagation_config: RupturePropagationConfig = (
             realisations.read_config_from_realisation(
@@ -224,9 +249,5 @@ def plot_srf(
     )
 
 
-def main():
-    typer.run(plot_srf)
-
-
 if __name__ == "__main__":
-    main()
+    app()

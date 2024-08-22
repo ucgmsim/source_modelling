@@ -10,7 +10,10 @@ from source_modelling import moment, rupture_propagation, srf
 from workflow import realisations
 from workflow.realisations import RupturePropagationConfig, SourceConfig
 
+app = typer.Typer()
 
+
+@app.command(help="Plot released moment for an SRF over time.")
 def plot_srf_moment(
     srf_ffp: Annotated[
         Path,
@@ -21,7 +24,6 @@ def plot_srf_moment(
     output_png_ffp: Annotated[
         Path, typer.Argument(help="Output plot path", writable=True, dir_okay=False)
     ],
-    mu: Annotated[float, typer.Option(help="Shear rigidity constant")] = 3.3e10,
     dpi: Annotated[
         int, typer.Option(help="Plot image pixel density (higher = better)", min=300)
     ] = 300,
@@ -31,18 +33,30 @@ def plot_srf_moment(
             help="Path to realisation, used to plot individual fault contribution."
         ),
     ] = None,
-):
-    """Plot released moment for an SRF over time."""
+) -> None:
+    """Plot released moment for an SRF over time.
+
+    Parameters
+    ----------
+    srf_ffp : Path
+        SRF filepath to plot.
+    output_png_ffp : Path
+        Output plot path.
+    dpi : float, default 300
+        Plot image pixel density (higher = better).
+    realisation_ffp : Optional[Path], default None
+        Path to realisation, used to plot individual fault contribution.
+    """
     srf_data = srf.read_srf(srf_ffp)
 
     magnitude = moment.moment_to_magnitude(
-        mu * (srf_data.points["area"] * srf_data.points["slip"] / (100**3)).sum()
+        moment.MU * (srf_data.points["area"] * srf_data.points["slip"] / (100**3)).sum()
     )
 
     dt = srf_data.points["dt"].iloc[0]
 
     overall_moment_rate = moment.moment_rate_over_time_from_slip(
-        srf_data.points["area"], srf_data.slip, dt, srf_data.nt, mu
+        srf_data.points["area"], srf_data.slip, dt, srf_data.nt
     )
     plt.plot(
         overall_moment_rate.index.values,
@@ -76,7 +90,6 @@ def plot_srf_moment(
                 srf_data.slip[point_counter : point_counter + num_points],
                 dt,
                 srf_data.nt,
-                mu,
             )
             plt.plot(
                 individual_moment_rate.index.values,
@@ -94,9 +107,5 @@ def plot_srf_moment(
     plt.savefig(output_png_ffp, dpi=dpi)
 
 
-def main():
-    typer.run(plot_srf_moment)
-
-
 if __name__ == "__main__":
-    main()
+    app()
