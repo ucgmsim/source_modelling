@@ -46,17 +46,11 @@ def plot_mw_contributions(
         Output plot DPI (higher is better).
     """
 
-    source_config: SourceConfig = realisations.read_config_from_realisation(
-        SourceConfig, realisation_ffp
+    source_config = SourceConfig.read_from_realisation(realisation_ffp)
+    rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
+        realisation_ffp
     )
-    rupture_propogation_config: RupturePropagationConfig = (
-        realisations.read_config_from_realisation(
-            RupturePropagationConfig, realisation_ffp
-        )
-    )
-    realisation_metadata: RealisationMetadata = (
-        realisations.read_config_from_realisation(RealisationMetadata, realisation_ffp)
-    )
+    realisation_metadata = RealisationMetadata.read_from_realisation(realisation_ffp)
     total_area = sum(fault.area() for fault in source_config.source_geometries.values())
     smallest_area = min(
         fault.area() for fault in source_config.source_geometries.values()
