@@ -162,7 +162,7 @@ def plot_srf(
         fill="white",
     )
 
-    # If we are supplied a JSON realisation, we can add lobels for jump points.
+    # If we are supplied a JSON realisation, we can add labels for jump points.
     if realisation_ffp:
         rupture_propagation_config: RupturePropagationConfig = (
             realisations.read_config_from_realisation(
