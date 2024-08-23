@@ -9,7 +9,6 @@ import typer
 from pygmt_helper import plotting
 from qcore import coordinates
 from source_modelling import srf
-from workflow.realisations import RupturePropagationConfig, SourceConfig
 
 app = typer.Typer()
 
@@ -188,6 +187,10 @@ def plot_srf(
 
     # If we are supplied a JSON realisation, we can add labels for jump points.
     if realisation_ffp:
+        # NOTE: this import is here because the workflow is, as yet,
+        # not ready to be installed along-side source modelling.
+        from workflow.realisations import RupturePropagationConfig, SourceConfig
+
         rupture_propagation_config = RupturePropagationConfig.read_from_realisation(
             realisation_ffp
         )

@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Annotated, Optional
 
+import numpy as np
 import typer
 
 from pygmt_helper import plotting
@@ -29,6 +30,9 @@ def plot_rakes(
     vector_length: Annotated[
         float, typer.Option(help="Length of rake vectors (cm).")
     ] = 0.2,
+    seed: Annotated[
+        Optional[int], typer.Option(help="Random seed to sample rakes with")
+    ] = None,
 ) -> None:
     """Plot an SRF file and output a PNG file.
 
@@ -58,6 +62,7 @@ def plot_rakes(
     fig = plotting.gen_region_fig(title, region=region, map_data=None)
     i = 0
 
+    np.random.seed(seed)
     vectors = srf_data.points[["lon", "lat", "rake"]].sample(sample_size)
     vectors["rake"] = (vectors["rake"] + 90) % 360
     vectors["length"] = vector_length

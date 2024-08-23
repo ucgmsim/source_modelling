@@ -7,8 +7,6 @@ import typer
 from matplotlib import pyplot as plt
 
 from source_modelling import moment, rupture_propagation, srf
-from workflow import realisations
-from workflow.realisations import RupturePropagationConfig, SourceConfig
 
 app = typer.Typer()
 
@@ -58,15 +56,22 @@ def plot_srf_moment(
     overall_moment_rate = moment.moment_rate_over_time_from_slip(
         srf_data.points["area"], srf_data.slip, dt, srf_data.nt
     )
-    plt.plot(
+    fig, ax = plt.subplots()
+    ax.plot(
         overall_moment_rate.index.values,
         overall_moment_rate["moment_rate"],
         label="Overall Moment Rate",
     )
 
     if realisation_ffp:
+        # NOTE: this import is here because the workflow is, as yet,
+        # not ready to be installed along-side source modelling.
+        from workflow.realisations import RupturePropagationConfig, SourceConfig
+
         source_config = SourceConfig.read_from_realisation(realisation_ffp)
-        rupture_propogation_config = RupturePropagationConfig.read_from_realisation(realisation_ffp)
+        rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
+            realisation_ffp
+        )
         segment_counter = 0
         point_counter = 0
         for fault_name in rupture_propagation.tree_nodes_in_order(
@@ -85,7 +90,7 @@ def plot_srf_moment(
                 dt,
                 srf_data.nt,
             )
-            plt.plot(
+            ax.plot(
                 individual_moment_rate.index.values,
                 individual_moment_rate["moment_rate"],
                 label=fault_name,
@@ -93,12 +98,12 @@ def plot_srf_moment(
             segment_counter += plane_count
             point_counter += num_points
 
-    plt.ylabel("Moment Rate (Nm/s)")
-    plt.xlabel("Time (s)")
-    plt.legend()
-    plt.title(f"Moment over Time (Total Mw: {magnitude:.2f})")
+    ax.set_ylabel("Moment Rate (Nm/s)")
+    ax.set_xlabel("Time (s)")
+    ax.legend()
+    ax.set_title(f"Moment over Time (Total Mw: {magnitude:.2f})")
 
-    plt.savefig(output_png_ffp, dpi=dpi)
+    fig.savefig(output_png_ffp, dpi=dpi)
 
 
 if __name__ == "__main__":

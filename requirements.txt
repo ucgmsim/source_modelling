@@ -2,8 +2,9 @@ matplotlib
 numpy<2
 pandas
 parse
-pygmt_helper
-qcore
+pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
+qcore @ git+https://github.com/ucgmsim/qcore
+pytest
 scipy
 typer
-workflow
+hypothesis[pandas, numpy]

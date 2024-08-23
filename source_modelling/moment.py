@@ -18,7 +18,7 @@ def moment_rate_over_time_from_slip(
     Parameters
     ----------
     area : array like
-        The area of each subfault (in km^2).
+        The area of each subfault (in cm^2).
     slip : csr_array
         A sparse containing the slip for each subfault and each time
         window. Has shape (number of points, number of time windows).

@@ -8,8 +8,6 @@ import typer
 from matplotlib import pyplot as plt
 
 from source_modelling import moment, rupture_propagation, srf
-from workflow import realisations
-from workflow.realisations import RupturePropagationConfig, SourceConfig
 
 app = typer.Typer()
 
@@ -75,12 +73,17 @@ def plot_srf_cumulative_moment(
         (overall_moment["moment"] >= total_moment * min_shade_cutoff)
         & (overall_moment["moment"] <= total_moment * max_shade_cutoff)
     ]
-    plt.fill_between(shaded_moments.index.values, shaded_moments["moment"], alpha=0.2)
-    plt.plot(
+    fig, ax = plt.subplots()
+    ax.fill_between(shaded_moments.index.values, shaded_moments["moment"], alpha=0.2)
+    ax.plot(
         overall_moment.index.values, overall_moment["moment"], label="Overall Moment"
     )
 
     if realisation_ffp:
+        # NOTE: this import is here because the workflow is, as yet,
+        # not ready to be installed along-side source modelling.
+        from workflow.realisations import RupturePropagationConfig, SourceConfig
+
         source_config = SourceConfig.read_from_realisation(realisation_ffp)
         rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
             realisation_ffp
@@ -108,7 +111,7 @@ def plot_srf_cumulative_moment(
                 )
             )
 
-            plt.plot(
+            ax.plot(
                 individual_moment.index.values,
                 individual_moment["moment"],
                 label=fault_name,
@@ -118,22 +121,22 @@ def plot_srf_cumulative_moment(
                 (individual_moment["moment"] >= total_moment * min_shade_cutoff)
                 & (individual_moment["moment"] <= total_moment * max_shade_cutoff)
             ]
-            plt.fill_between(
+            ax.fill_between(
                 shaded_moments.index.values, shaded_moments["moment"], alpha=0.2
             )
             segment_counter += plane_count
             point_counter += num_points
 
-    plt.ylabel("Cumulative Moment (Nm)")
-    plt.xlabel("Time (s)")
-    plt.legend()
+    ax.set_ylabel("Cumulative Moment (Nm)")
+    ax.set_xlabel("Time (s)")
+    ax.legend()
     min_shade_percent = int(np.round(min_shade_cutoff * 100))
     max_shade_percent = int(np.round(max_shade_cutoff * 100))
-    plt.title(
+    ax.set_title(
         f"Cumulative Moment over Time (Shaded Area: {min_shade_percent}% - {max_shade_percent}%)"
     )
 
-    plt.savefig(output_png_ffp, dpi=dpi)
+    fig.savefig(output_png_ffp, dpi=dpi)
 
 
 if __name__ == "__main__":

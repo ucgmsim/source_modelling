@@ -20,7 +20,7 @@ Typing Aliases:
 """
 
 from collections import defaultdict, namedtuple
-from typing import Optional
+from typing import Generator, Optional
 
 import numpy as np
 

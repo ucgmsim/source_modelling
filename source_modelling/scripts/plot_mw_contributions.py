@@ -6,7 +6,6 @@ import typer
 from matplotlib import pyplot as plt
 
 from source_modelling import moment, rupture_propagation, srf
-from workflow import realisations
 from workflow.realisations import (
     RealisationMetadata,
     RupturePropagationConfig,
@@ -45,7 +44,6 @@ def plot_mw_contributions(
     dpi : float, default 300
         Output plot DPI (higher is better).
     """
-
     source_config = SourceConfig.read_from_realisation(realisation_ffp)
     rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
         realisation_ffp
@@ -56,9 +54,10 @@ def plot_mw_contributions(
         fault.area() for fault in source_config.source_geometries.values()
     )
     area = np.linspace(smallest_area, total_area)
+    fig, ax = plt.subplots()
     # Mw = log(area) + 3.995 is the Leonard2014 magnitude scaling relation
     # for average rake.
-    plt.plot(
+    ax.plot(
         area, np.log10(area) + 3.995, label="Leonard 2014 Interplate (Average Rake)"
     )
 
@@ -66,7 +65,7 @@ def plot_mw_contributions(
     total_magnitude = moment.moment_to_magnitude(
         moment.MU * (srf_data.points["area"] * srf_data.points["slip"] / (100**3)).sum()
     )
-    plt.scatter(total_area, total_magnitude, label="Total Magnitude")
+    ax.scatter(total_area, total_magnitude, label="Total Magnitude")
 
     segment_counter = 0
     point_counter = 0
@@ -88,18 +87,18 @@ def plot_mw_contributions(
                 moment.MU * segment_points["area"] * segment_points["slip"] / (100**3)
             ).sum()
         )
-        plt.scatter(individual_area, individual_magnitude, label=fault_name)
+        ax.scatter(individual_area, individual_magnitude, label=fault_name)
 
         # advance segment counter and point counter to skip all points from the current point
         segment_counter += plane_count
         point_counter += num_points
 
-    plt.xlabel("Area (m^2)")
-    plt.ylabel("Mw")
-    plt.xscale("log")
-    plt.legend()
-    plt.title(f"Log Area vs Magnitude ({realisation_metadata.name})")
-    plt.savefig(output_ffp, dpi=dpi)
+    ax.set_xlabel("Area (m^2)")
+    ax.set_ylabel("Mw")
+    ax.set_xscale("log")
+    ax.legend()
+    ax.set_title(f"Log Area vs Magnitude ({realisation_metadata.name})")
+    fig.savefig(output_ffp, dpi=dpi)
 
 
 if __name__ == "__main__":
