@@ -20,12 +20,12 @@ PLOT_IMAGE_DIRECTORY = Path("wiki/images")
 SRF_FFP = Path(__file__).parent / "srfs" / "rupture_1.srf"
 
 
-# def test_plot_srf():
-#     with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
-#         plot_srf.plot_srf(SRF_FFP, Path(output_path.name))
-#         assert md5sum(PLOT_IMAGE_DIRECTORY / "srf_plot_example.png") == md5sum(
-#             output_path.name
-#         )
+def test_plot_srf():
+    with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
+        plot_srf.plot_srf(SRF_FFP, Path(output_path.name))
+        assert md5sum(PLOT_IMAGE_DIRECTORY / "srf_plot_example.png") == md5sum(
+            output_path.name
+        )
 
 
 def test_plot_srf_moment_rate():
