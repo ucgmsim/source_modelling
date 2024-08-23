@@ -10,6 +10,14 @@ from source_modelling import slip
 
 @given(t0=st.floats(0.1, 100), dt=st.floats(1e-6, 100), total_slip=st.floats(1, 1000))
 def test_box_car_slip(t0: float, dt: float, total_slip: float):
+    """Check that the box car slip function is a well-behaved slip function.
+
+    For the box car slip function we must have:
+
+    1. Slip is always non-negative,
+    2. Slip is zero at t0 and t1,
+    3. Slip function integrates to total slip over the interval [t0, t1].
+    """
     t1 = t0 + dt
     t = np.linspace(t0, t1, num=20)
     slip_function = slip.box_car_slip(t, t0, t1, total_slip)
@@ -31,6 +39,14 @@ def test_box_car_slip(t0: float, dt: float, total_slip: float):
     total_slip=st.floats(1, 1000),
 )
 def test_triangular_slip(t0: float, peak_position: float, dt: float, total_slip: float):
+    """Check that the triangular slip function is a well-behaved slip function.
+
+    For the triangular slip function we must have:
+
+    1. Slip is always non-negative,
+    2. Slip is zero at t0 and t1,
+    3. Slip function integrates to total slip over the interval [t0, t1].
+    """
     t1 = t0 + dt
     peak = t0 + peak_position * dt
     t = np.linspace(t0, t1, num=20)
@@ -54,6 +70,14 @@ def test_triangular_slip(t0: float, peak_position: float, dt: float, total_slip:
     total_slip=st.floats(1, 1000),
 )
 def test_isoceles_triangular_slip(t0: float, dt: float, total_slip: float):
+    """Check that the isoceles triangular slip function is a well-behaved slip function.
+
+    For the isoceles slip function we must have:
+
+    1. Slip is always non-negative,
+    2. Slip is zero at t0 and t1,
+    3. Slip function integrates to total slip over the interval [t0, t1].
+    """
     t1 = t0 + dt
     t = np.linspace(t0, t1, num=20)
     slip_function = slip.isoceles_triangular_slip(t, t0, t1, total_slip)
@@ -76,6 +100,14 @@ def test_isoceles_triangular_slip(t0: float, dt: float, total_slip: float):
     total_slip=st.floats(1, 1000),
 )
 def test_cosine_slip(t0: float, dt: float, total_slip: float):
+    """Check that the cosine slip function is a well-behaved slip function.
+
+    For the cosine slip function we must have:
+
+    1. Slip is always non-negative,
+    2. Slip is zero at t0 and t1,
+    3. Slip function integrates to total slip over the interval [t0, t1].
+    """
     t1 = t0 + dt
     t = np.linspace(t0, t1, num=20)
     slip_function = slip.cosine_slip(t, t0, t1, total_slip)

@@ -21,6 +21,7 @@ SRF_FFP = Path(__file__).parent / "srfs" / "rupture_1.srf"
 
 
 def test_plot_srf():
+    """Check that the plot-srf script produces the same output as the wiki still."""
     with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
         plot_srf.plot_srf(SRF_FFP, Path(output_path.name))
         assert md5sum(PLOT_IMAGE_DIRECTORY / "srf_plot_example.png") == md5sum(
@@ -28,6 +29,7 @@ def test_plot_srf():
         )
 
 
+# NOTE: subsequent tests are identical so we have not documented them
 def test_plot_srf_moment_rate():
     with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
         plot_srf_moment.plot_srf_moment(SRF_FFP, Path(output_path.name))
@@ -56,6 +58,7 @@ def test_plot_rise():
 
 def test_plot_rake():
     with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
+        # Supplying seed = 1 to get the same output as the wiki.
         plot_rakes.plot_rakes(SRF_FFP, Path(output_path.name), seed=1)
         assert md5sum(PLOT_IMAGE_DIRECTORY / "rakes_example.png") == md5sum(
             output_path.name
