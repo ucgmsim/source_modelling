@@ -302,8 +302,8 @@ class Plane:
             The bottom depth of the plane (in km).
         length : float
             The length of the fault plane (in km).
-        width : float
-            The width of the fault plane (in km).
+        projected_width : float
+            The projected width of the fault plane (in km).
 
         Returns
         -------
