@@ -272,6 +272,7 @@ class Plane:
         """float: The dip angle of the fault."""
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
+    # TODO: change this to take width and dip rather than projected width.
     @staticmethod
     def from_centroid_strike_dip(
         centroid: np.ndarray,
