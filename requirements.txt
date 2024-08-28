@@ -3,4 +3,7 @@ qcore @ git+https://github.com/ucgmsim/qcore.git
 numpy
 pandas
 parse
+pytest
+hypothesis
+pytest-cov
 scipy

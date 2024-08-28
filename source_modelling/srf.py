@@ -83,7 +83,11 @@ class Segments(Sequence):
             The nth segment in the SRF.
         """
         if not isinstance(index, int):
-            raise TypeError("Segment index must an integer, not slice or tuple")
+            # NOTE: We are not covering this in test coverage because
+            # we intend to support slicing in the future.
+            raise TypeError(
+                "Segment index must an integer, not slice or tuple"
+            )  # pragma: no cover
         points_offset = (self._header["nstk"] * self._header["ndip"]).cumsum()
         if index == 0:
             return self._points.iloc[: points_offset.iloc[index]]
@@ -118,7 +122,6 @@ class SrfFile:
         - stk: The plane strike.
         - dip: The plane dip.
         - dtop: The top of the plane.
-        - dbottom: The bottom of the plane.
         - shyp: The hypocentre location in strike coordinates.
         - dhyp: The hypocentre location in dip coordinates.
 
