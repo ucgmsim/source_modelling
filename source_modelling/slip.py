@@ -26,13 +26,13 @@ def rise_time_from_moment(moment: npt.ArrayLike) -> npt.NDArray[np.floating]:
 
 
 def box_car_slip(
-    t: np.floating, t0: npt.ArrayLike, t1: npt.ArrayLike, slip: npt.ArrayLike
+    t: npt.ArrayLike, t0: npt.ArrayLike, t1: npt.ArrayLike, slip: npt.ArrayLike
 ) -> npt.NDArray[np.floating]:
     """Boxcar slip velocity function.
 
     Parameters
     ----------
-    t : float
+    t : array-like
         Time to compute slip for.
     t0 : array-like
         Time slip begins.
@@ -51,12 +51,13 @@ def box_car_slip(
     """
     t0 = np.asarray(t0)
     t1 = np.asarray(t1)
+    t = np.asarray(t)
     slip = np.asarray(slip)
     return np.where((t >= t0) & (t <= t1), slip / (t1 - t0), 0)
 
 
 def triangular_slip(
-    t: np.floating,
+    t: npt.ArrayLike,
     t0: npt.ArrayLike,
     t1: npt.ArrayLike,
     peak: npt.ArrayLike,
@@ -66,7 +67,7 @@ def triangular_slip(
 
     Parameters
     ----------
-    t : float
+    t : array-like
         Time to compute slip for.
     t0 : array-like
         Time slip begins.
@@ -86,6 +87,7 @@ def triangular_slip(
         f(t) = 2 * slip / (t1 - t0) * (1 - (t - peak) / (t1 - peak))
         f(t) = 0 otherwise
     """
+    t = np.asarray(t)
     t0 = np.asarray(t0)
     t1 = np.asarray(t1)
     peak = np.asarray(peak)
@@ -103,13 +105,13 @@ def triangular_slip(
 
 
 def isoceles_triangular_slip(
-    t: np.floating, t0: npt.ArrayLike, t1: npt.ArrayLike, slip: npt.ArrayLike
+    t: npt.ArrayLike, t0: npt.ArrayLike, t1: npt.ArrayLike, slip: npt.ArrayLike
 ) -> npt.NDArray[np.floating]:
     """Symmetric triangular slip function.
 
     Parameters
     ----------
-    t : float
+    t : array-like
         Time to compute slip for.
     t0 : array-like
         Time slip begins.
@@ -130,13 +132,13 @@ def isoceles_triangular_slip(
 
 
 def cosine_slip(
-    t: np.floating, t0: npt.ArrayLike, t1: npt.ArrayLike, slip: npt.ArrayLike
+    t: npt.ArrayLike, t0: npt.ArrayLike, t1: npt.ArrayLike, slip: npt.ArrayLike
 ) -> npt.NDArray[np.floating]:
     """Cosine slip velocity function.
 
     Parameters
     ----------
-    t : float
+    t : array-like
         The time to evaluate the SVF at.
     t0 : array-like
         The time for slip to begin.
@@ -159,40 +161,3 @@ def cosine_slip(
     return (np.pi * slip / (2 * (t1 - t0))) * np.where(
         (t >= t0) & (t <= t1), np.cos((t - t0) / (t1 - t0) * np.pi - np.pi / 2), 0
     )
-
-
-def yoffe(
-    t: np.floating, t0: npt.ArrayLike, t1: npt.ArrayLike, slip: npt.ArrayLike
-) -> npt.NDArray[np.floating]:
-    """Yoffe slip function.
-
-    Parameters
-    ----------
-    t : float
-        The time to evaluate the SVF at.
-    t0 : array-like
-        The time for slip to begin.
-    t1 : array-like
-        The time for slip to end.
-    slip : array-like
-        The total slip.
-
-    Returns
-    -------
-    np.ndarray
-        The slip for time t, according to the Yoffe slip velocity function[0].
-
-    References
-    ----------
-    Yoffe, E. (1951). The moving Griffith crack, Phil. Mag. 42, 739–750.
-    """
-    t1 = np.asarray(t1)
-    t0 = np.asarray(t0)
-    slip = np.asarray(slip)
-    tau = t1 - t0
-    t = t - t0
-    # The following is ok because the where clause ensures that values of t <= 0 map to zero anyway.
-    with np.errstate(divide="ignore", invalid="ignore"):
-        return slip * np.where(
-            (t > 0) & (t <= tau), 2 / (np.pi * tau) * np.sqrt((tau - t) / t), 0
-        )

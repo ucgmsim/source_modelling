@@ -6,14 +6,16 @@ import typer
 from matplotlib import pyplot as plt
 
 from source_modelling import moment, rupture_propagation, srf
-from workflow import realisations
 from workflow.realisations import (
     RealisationMetadata,
     RupturePropagationConfig,
     SourceConfig,
 )
 
+app = typer.Typer()
 
+
+@app.command(help="Plot segment magnitudes against the Leonard scaling relation.")
 def plot_mw_contributions(
     srf_ffp: Annotated[
         Path, typer.Argument(help="Path to SRF file", exists=True, dir_okay=False)
@@ -25,11 +27,23 @@ def plot_mw_contributions(
     output_ffp: Annotated[
         Path, typer.Argument(help="Output plot path.", writable=True, dir_okay=False)
     ],
-    mu: Annotated[float, typer.Option(help="Shear rigidity constant")] = moment.MU,
     dpi: Annotated[
         float, typer.Option(help="Output plot DPI (higher is better).")
     ] = 300,
 ) -> None:
+    """Plot segment magnitudes against the Leonard scaling relation.
+
+    Parameters
+    ----------
+    srf_ffp : Path
+        Path to SRF file.
+    realisation_ffp : Path
+        Realisation filepath.
+    output_ffp : Path
+        Output plot path.
+    dpi : float, default 300
+        Output plot DPI (higher is better).
+    """
     source_config = SourceConfig.read_from_realisation(realisation_ffp)
     rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
         realisation_ffp
@@ -40,17 +54,18 @@ def plot_mw_contributions(
         fault.area() for fault in source_config.source_geometries.values()
     )
     area = np.linspace(smallest_area, total_area)
+    fig, ax = plt.subplots()
     # Mw = log(area) + 3.995 is the Leonard2014 magnitude scaling relation
     # for average rake.
-    plt.plot(
+    ax.plot(
         area, np.log10(area) + 3.995, label="Leonard 2014 Interplate (Average Rake)"
     )
 
     srf_data = srf.read_srf(srf_ffp)
     total_magnitude = moment.moment_to_magnitude(
-        mu * (srf_data.points["area"] * srf_data.points["slip"] / (100**3)).sum()
+        moment.MU * (srf_data.points["area"] * srf_data.points["slip"] / (100**3)).sum()
     )
-    plt.scatter(total_area, total_magnitude, label="Total Magnitude")
+    ax.scatter(total_area, total_magnitude, label="Total Magnitude")
 
     segment_counter = 0
     point_counter = 0
@@ -68,25 +83,23 @@ def plot_mw_contributions(
             point_counter : point_counter + num_points
         ]
         individual_magnitude = moment.moment_to_magnitude(
-            (mu * segment_points["area"] * segment_points["slip"] / (100**3)).sum()
+            (
+                moment.MU * segment_points["area"] * segment_points["slip"] / (100**3)
+            ).sum()
         )
-        plt.scatter(individual_area, individual_magnitude, label=fault_name)
+        ax.scatter(individual_area, individual_magnitude, label=fault_name)
 
         # advance segment counter and point counter to skip all points from the current point
         segment_counter += plane_count
         point_counter += num_points
 
-    plt.xlabel("Area (m^2)")
-    plt.ylabel("Mw")
-    plt.xscale("log")
-    plt.legend()
-    plt.title(f"Log Area vs Magnitude ({realisation_metadata.name})")
-    plt.savefig(output_ffp, dpi=dpi)
-
-
-def main():
-    typer.run(plot_mw_contributions)
+    ax.set_xlabel("Area (m^2)")
+    ax.set_ylabel("Mw")
+    ax.set_xscale("log")
+    ax.legend()
+    ax.set_title(f"Log Area vs Magnitude ({realisation_metadata.name})")
+    fig.savefig(output_ffp, dpi=dpi)
 
 
 if __name__ == "__main__":
-    main()
+    app()

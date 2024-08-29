@@ -11,14 +11,14 @@ MU = 3.3e10
 
 
 def moment_rate_over_time_from_slip(
-    area: npt.ArrayLike, slip: csr_array, dt: float, nt: int, mu: float = MU
+    area: npt.ArrayLike, slip: csr_array, dt: float, nt: int
 ) -> pd.DataFrame:
     """Compute a moment rate dataframe from subfaults given with area and slip.
 
     Parameters
     ----------
     area : array like
-        The area of each subfault (in km^2).
+        The area of each subfault (in cm^2).
     slip : csr_array
         A sparse containing the slip for each subfault and each time
         window. Has shape (number of points, number of time windows).
@@ -26,8 +26,6 @@ def moment_rate_over_time_from_slip(
         Length of each time window (s).
     nt : int
         The number of time windows.
-    mu : float, default = MU
-        Shear scaling constant.
 
     Returns
     -------
@@ -37,7 +35,7 @@ def moment_rate_over_time_from_slip(
     slip_over_time = (
         np.asarray(sp.sparse.diags(np.asarray(area)).dot(slip).sum(axis=0))[0] / 1e6
     )
-    moment_rate = mu * slip_over_time
+    moment_rate = MU * slip_over_time
     time_values = np.arange(nt) * dt
 
     moment_rate_df = pd.DataFrame(
