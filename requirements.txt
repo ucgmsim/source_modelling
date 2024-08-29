@@ -1,7 +1,7 @@
 matplotlib
 numpy<2
-pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
-qcore @ git+https://github.com/ucgmsim/qcore.git
+pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
+qcore @ git+https://github.com/ucgmsim/qcore.git@pegasus
 pandas
 parse
 pytest
