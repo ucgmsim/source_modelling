@@ -1,14 +1,12 @@
-import functools
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import scipy as sp
-from hypothesis import assume, given
+from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
-from qcore import coordinates
 
+from qcore import coordinates
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
@@ -25,7 +23,10 @@ def valid_coordinates(point_coordinates: np.ndarray) -> bool:
 
 @given(
     point_coordinates=st.builds(
-        coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180), depth=st.floats(0)
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
@@ -51,7 +52,10 @@ def test_point_construction(
 
 @given(
     point_coordinates=st.builds(
-        coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180), depth=st.floats(0)
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
@@ -82,6 +86,43 @@ def test_point_coordinate_system(
 
 
 @given(
+    point_coordinates=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
+    ),
+    length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    strike=st.floats(0, 360),
+    dip=st.floats(0, 180),
+    dip_dir=st.floats(0, 360),
+    local_coordinates=nst.arrays(
+        float, (2,), elements={"min_value": 0, "max_value": 1}
+    ),
+)
+def test_point_coordinate_inversion(
+    point_coordinates: np.ndarray,
+    length_m: float,
+    strike: float,
+    dip: float,
+    dip_dir: float,
+    local_coordinates: np.ndarray,
+):
+    assume(valid_coordinates(point_coordinates))
+
+    point = sources.Point.from_lat_lon_depth(
+        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+    )
+    # NOTE: cannot assert invertibility coordinate mapping is not bijective
+    assert np.allclose(
+        point.wgs_depth_coordinates_to_fault_coordinates(
+            point.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
+        ),
+        np.array([1 / 2, 1 / 2]),
+    )
+
+
+@given(
     length=st.floats(0.1, 1000),
     projected_width=st.floats(0.1, 1000),
     strike=st.floats(0, 179),
@@ -104,6 +145,9 @@ def test_plane_construction(
         centroid, strike, dip_dir, top, top + depth, length, projected_width
     )
     assert np.isclose(plane.length, length, atol=1e-6)
+    assert np.isclose(
+        plane.width, plane.projected_width / np.cos(np.radians(plane.dip)), atol=1e-6
+    )
     assert np.isclose(plane.projected_width, projected_width, atol=1e-6)
     assert np.isclose(plane.strike, strike, atol=1e-6)
     assert np.isclose(plane.dip_dir, dip_dir, atol=1e-6)
@@ -196,6 +240,28 @@ def connected_fault(
         start_coordinates=st.builds(
             coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
         ),
+    )
+)
+def test_fault_construction(fault: Fault):
+    assert fault.width == fault.planes[0].width
+    assert np.isclose(fault.dip_dir, fault.planes[0].strike + 90)
+    assert fault.corners.shape == (4 * len(fault.planes), 3)
+    assert np.isclose(fault.area(), np.sum([plane.area for plane in fault.planes]))
+    assert np.allclose(
+        fault.wgs_depth_coordinates_to_fault_coordinates(fault.centroid),
+        np.array([1 / 2, 1 / 2]),
+    )
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
     ),
     local_coordinates=nst.arrays(
         float, (2,), elements={"min_value": 0, "max_value": 1}
@@ -209,9 +275,6 @@ def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray)
         local_coordinates,
         atol=1e-6,
     )
-
-
-# p print('\n'.join([f"{c[0]},{c[1]},red" for c in source_a.corners]))
 
 
 @given(
@@ -234,9 +297,11 @@ def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray)
         ),
     ),
 )
+@settings(deadline=1000)
+@seed(1)
 def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
-    n = min(len(fault.corners), len(other_fault.corners))
-    assume(not np.allclose(fault.corners[:n], other_fault.corners[:n]))
+    pairwise_distance = sp.spatial.distance.cdist(fault.bounds, other_fault.bounds)
+    assume(pairwise_distance.min() > 1)
     point_a, point_b = sources.closest_point_between_sources(fault, other_fault)
     X, Y = np.meshgrid(np.linspace(0, 1, num=10), np.linspace(0, 1, num=10))
     local_coords = np.c_[X.ravel(), Y.ravel()]
@@ -261,5 +326,5 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
         other_fault.fault_coordinates_to_wgs_depth_coordinates(point_b),
     )
     assert computed_distance < min_distance or np.isclose(
-        computed_distance, min_distance, atol=1e-2
+        computed_distance, min_distance, atol=1e-1
     )

@@ -1,13 +1,13 @@
 matplotlib
 numpy<2
-pandas
-parse
 pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
 qcore @ git+https://github.com/ucgmsim/qcore.git
-pytest
-scipy
-hypothesis[numpy, pandas]
+pandas
 parse
 pytest
-typer
 hypothesis[pandas, numpy]
+pytest-cov
+scipy
+parse
+typer
+

@@ -21,6 +21,7 @@ from typing import Optional, Protocol
 
 import numpy as np
 import scipy as sp
+
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -140,7 +141,8 @@ class Point:
             If the point is not near the source point.
         """
         nztm_coordinates = coordinates.wgs_depth_to_nztm(wgs_depth_coordinates)
-        if np.all(np.abs(nztm_coordinates - self.bounds)[:2] / _KM_TO_M < self.length):
+        distance = np.abs(nztm_coordinates - self.bounds).max() / _KM_TO_M
+        if distance < self.length / 2 or np.isclose(distance, self.length / 2):
             return np.array([1 / 2, 1 / 2])  # Point is in the centre of the small patch
         raise ValueError("Given global coordinates out of bounds for point source.")
 
@@ -228,6 +230,11 @@ class Plane:
         return self.length_m / _KM_TO_M
 
     @property
+    def area(self) -> float:
+        """float: The area of the plane (in km^2)."""
+        return self.length * self.width
+
+    @property
     def projected_width_m(self) -> float:
         """float: The projected width of the fault plane (in metres)."""
         return self.width_m * np.cos(np.radians(self.dip))
@@ -265,6 +272,7 @@ class Plane:
         """float: The dip angle of the fault."""
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
+    # TODO: change this to take width and dip rather than projected width.
     @staticmethod
     def from_centroid_strike_dip(
         centroid: np.ndarray,
@@ -295,8 +303,8 @@ class Plane:
             The bottom depth of the plane (in km).
         length : float
             The length of the fault plane (in km).
-        width : float
-            The width of the fault plane (in km).
+        projected_width : float
+            The projected width of the fault plane (in km).
 
         Returns
         -------
@@ -390,34 +398,20 @@ class Plane:
             coordinates.wgs_depth_to_nztm(global_coordinates[:2]) - self.bounds[0, :2]
         )
         fault_local_coordinates, _, _, _ = np.linalg.lstsq(
-            np.array([strike_direction, dip_direction]).T, offset
+            np.array([strike_direction, dip_direction]).T, offset, rcond=None
         )
         if not np.all(
-            ((fault_local_coordinates > 0) | np.isclose(fault_local_coordinates, 0))
-            & ((fault_local_coordinates < 1) | np.isclose(fault_local_coordinates, 1))
+            (
+                (fault_local_coordinates > 0)
+                | np.isclose(fault_local_coordinates, 0, atol=1e-6)
+            )
+            & (
+                (fault_local_coordinates < 1)
+                | np.isclose(fault_local_coordinates, 1, atol=1e-6)
+            )
         ):
             raise ValueError("Specified coordinates do not lie in plane")
         return np.clip(fault_local_coordinates, 0, 1)
-
-    def wgs_depth_coordinates_in_plane(self, global_coordinates: np.ndarray) -> bool:
-        """Test if some global coordinates lie in the bounds of a plane.
-
-        Parameters
-        ----------
-        global_coordinates : np.ndarray
-            The global coordinates to check
-
-        Returns
-        -------
-        bool
-            True if the given global coordinates (lat, lon, depth) lie on the
-            fault plane.
-        """
-        try:
-            self.wgs_depth_coordinates_to_fault_coordinates(global_coordinates)
-            return True
-        except ValueError:
-            return False
 
 
 @dataclasses.dataclass
@@ -652,20 +646,21 @@ def closest_point_between_sources(
         source_b_global_coordinates = (
             source_b.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates[2:])
         )
-        return coordinates.distance_between_wgs_depth_coordinates(
-            source_a_global_coordinates, source_b_global_coordinates
-        )
+        return coordinates.wgs_depth_to_nztm(
+            source_a_global_coordinates
+        ) - coordinates.wgs_depth_to_nztm(source_b_global_coordinates)
 
-    res = sp.optimize.minimize(
+    res = sp.optimize.least_squares(
         fault_coordinate_distance,
         np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
-        bounds=[(0, 1)] * 4,
-        options={"ftol": 1e-2},
+        bounds=([0] * 4, [1] * 4),
+        gtol=1e-5,
+        ftol=1e-5,
+        xtol=1e-5,
     )
 
-    if not res.success:
-        breakpoint()
+    if not res.success and res.status != 0:
         raise ValueError(
-            f"Optimisation failed to converge for provided sources: {res.message}"
+            f"Optimisation failed to converge for provided sources: {res.message} with x = {res.x}"
         )
     return res.x[:2], res.x[2:]

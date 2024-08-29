@@ -1,0 +1,57 @@
+% ----------------------------------  FINITE-SOURCE RUPTURE MODEL  --------------------------------
+% 
+% Event : Darfield, New Zealand   		09/03/2010 		[Atzori et al. (2012) ] 
+% EventTAG: s2010DARFIE01ATZO
+% 
+% Loc  : LAT  = -43.55 		LON = 172.2		DEP = 10.0
+% Size : LEN  = 75.0 km 	WID =  94.0 km		Mw = 7.10	Mo = 5.01e+19 Nm
+% Mech : STRK = 218.81354401805797		DIP = 73.16094808126424		RAKE = 163.33732382635753	Htop = 0.0 km 
+% Rupt : HypX = 4.15 km 	HypZ = 0.52 km 		avTr = 999.0 s	avVr = 999.0 km/s 
+% 
+% ----------------------------------  inversion-related parameters  --------------------------------
+% 
+% Invs :  Nx  =  9 	Nz  = 11 	Fmin = 999.00 Hz 	Fmax = 999.00 Hz 
+% Invs :  Dx  =  1.00 km 	Dz  = 1.00 km 
+% Invs :  Ntw =  0	Nsg =  8 			(# of time-windows,# of fault segments) 
+% Invs :  LEN =  0.0 s	SHF =  0.0 s 		(time-window length and time-shift) 
+% SVF  :  not-applicable 					(type of slip-velocity function used) 
+% 
+% Data :  	SGM 	TELE 	GPS 	hr-GPS 	level 	InSAR 	OTHER
+% Data :  	0 	0 	0 	0 	0 	28000 	0
+% PHImx:  	0 	0 	0 	0 	0 	999 	0
+% Rmin : 	0.0	0.0	0.0	0.0	0.0	999.0	0.0
+% 
+% --------------------------------------------------------------------------------------------------
+% 
+% VELOCITY-DENSITY STRUCTURE 
+% No. of layers =   1 
+% 
+% Crustal Model unknown for this model; 
+% See the refernce 
+% 999 
+% 
+% --------------------------------------------------------------------------------------------------
+% 21-Oct-2013 created by KSTH (thingbaijam@gmail.com)
+ 
+% --------------------------------------------------------------------------------------------------
+% 
+% SOURCE MODEL PARAMETERS 
+% 		X,Y,Z coordinates in km; SLIP in m 
+%  		if applicable: RAKE in deg, RISE in s, TRUP in s, slip in each TW in m 
+% 
+%   Coordinates are given for top-center of each subfault or segment: |'| 
+%   Origin of local coordinate system at epicenter: X (EW) = 0,  Y (NS) = 0  
+% --------------------------------------------------------------------------------------------------
+% -----------------------------   MULTISEGMENT MODEL   ---------------------------------------------
+% --------------------------------------------------------------------------------------------------
+% SEGMENT #  1:  STRIKE =  307.0 deg       DIP =  86.20000000000005 deg 
+%                   LEN  =  10.00 km       WID =  12.00 km 
+%		      Dx =   1.00 km       Dz = 1.00 km   
+%   depth to top:   Z2top = 0.00 km 
+%   coordinates of top-center: 
+%                   LAT =  -43.5721 ,       LON = 172.0226 
+%   hypocenter on SEG # 7 : along-strike (X) = 4.151557898146846 , down-dip (Z) = 0.5150635970119828 
+%   Nsbfs =  120 subfaults 
+% -------------------------------------------------------------------------------------------------- 
+%    HERE IS HERE THE COLUMNS WOULD NORMALLY BE
+% -------------------------------------------------------------------------------------------------- 
