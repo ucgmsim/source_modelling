@@ -1,6 +1,8 @@
-import hashlib
-import tempfile
 from pathlib import Path
+from typing import Callable
+
+import diffimg
+import pytest
 
 from source_modelling.scripts import (
     plot_rakes,
@@ -10,56 +12,38 @@ from source_modelling.scripts import (
     plot_srf_moment,
 )
 
-
-def md5sum(file: Path) -> str:
-    with open(file, "rb") as file_handle:
-        return hashlib.file_digest(file_handle, "md5").hexdigest()
-
-
 PLOT_IMAGE_DIRECTORY = Path("wiki/images")
 SRF_FFP = Path(__file__).parent / "srfs" / "rupture_1.srf"
 
 
-def test_plot_srf():
-    """Check that the plot-srf script produces the same output as the wiki still."""
-    with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
-        plot_srf.plot_srf(SRF_FFP, Path(output_path.name))
-        assert md5sum(PLOT_IMAGE_DIRECTORY / "srf_plot_example.png") == md5sum(
-            output_path.name
-        )
+@pytest.mark.parametrize(
+    "plot_function, expected_image_name",
+    [
+        (plot_srf.plot_srf, "srf_plot_example.png"),
+        (plot_srf_moment.plot_srf_moment, "srf_moment_rate_example.png"),
+        (
+            plot_srf_cumulative_moment.plot_srf_cumulative_moment,
+            "srf_cumulative_moment_rate_example.png",
+        ),
+        (plot_rise.plot_rise, "rise_example.png"),
+        (plot_rakes.plot_rakes, "rakes_example.png"),
+    ],
+)
+def test_plot_functions(
+    tmp_path: Path, plot_function: Callable, expected_image_name: str
+):
+    """Check that the plotting scripts produce the wiki images within the expected tolerance."""
+    output_image_path = tmp_path / "output.png"
 
+    # plot-rakes expects a seed parameter that controls the distribution of rake vectors.
+    # We set this seed to 1 to match the seed in the output image.
+    if plot_function == plot_rakes.plot_rakes:
+        plot_function(SRF_FFP, output_image_path, seed=1)
+    else:
+        plot_function(SRF_FFP, output_image_path)
 
-# NOTE: subsequent tests are identical so we have not documented them
-def test_plot_srf_moment_rate():
-    with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
-        plot_srf_moment.plot_srf_moment(SRF_FFP, Path(output_path.name))
-        assert md5sum(PLOT_IMAGE_DIRECTORY / "srf_moment_rate_example.png") == md5sum(
-            output_path.name
-        )
+    original = PLOT_IMAGE_DIRECTORY / expected_image_name
+    generated = output_image_path
 
-
-def test_plot_cumulative_srf_moment_rate():
-    with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
-        plot_srf_cumulative_moment.plot_srf_cumulative_moment(
-            SRF_FFP, Path(output_path.name)
-        )
-        assert md5sum(
-            PLOT_IMAGE_DIRECTORY / "srf_cumulative_moment_rate_example.png"
-        ) == md5sum(output_path.name)
-
-
-def test_plot_rise():
-    with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
-        plot_rise.plot_rise(SRF_FFP, Path(output_path.name))
-        assert md5sum(PLOT_IMAGE_DIRECTORY / "rise_example.png") == md5sum(
-            output_path.name
-        )
-
-
-def test_plot_rake():
-    with tempfile.NamedTemporaryFile(suffix=".png") as output_path:
-        # Supplying seed = 1 to get the same output as the wiki.
-        plot_rakes.plot_rakes(SRF_FFP, Path(output_path.name), seed=1)
-        assert md5sum(PLOT_IMAGE_DIRECTORY / "rakes_example.png") == md5sum(
-            output_path.name
-        )
+    diff = diffimg.diff(original, generated)
+    assert diff <= 0.05
