@@ -1,7 +1,8 @@
+name: Coverage
+on: [pull_request]
+jobs:
   coverage:
-
-    name: Combine and check coverage
-    needs: tests
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
