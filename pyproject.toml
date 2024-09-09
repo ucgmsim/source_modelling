@@ -26,3 +26,9 @@ source_modelling = "source_modelling"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+
+[tool.coverage.run]
+omit = [
+    "source_modelling/scripts/plot_mw_contributions.py"
+]
+
