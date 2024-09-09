@@ -25,7 +25,14 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest --cov=source_modelling --cov-report=json tests
+          pytest --cov=source_modelling tests
+          
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-data
+          path: .coverage.*
+          include-hidden-files: true
+          if-no-files-found: ignore
 
-      - name: Test that module coverage is at least 95% for every module
-        run: "[[ -z $(jq '.files | to_entries[] | .value.summary.percent_covered | select(. < 95)' coverage.json) ]]"
+      

@@ -3,7 +3,7 @@ name: Deptry Dependency Check
 on: [pull_request]
 
 jobs:
-  test:
+  dependencies:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
