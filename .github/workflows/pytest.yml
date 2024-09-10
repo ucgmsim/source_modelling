@@ -59,7 +59,6 @@ jobs:
 
       - name: Combine coverage and fail it it’s under 100 %
         run: |
-          python -m coverage combine
           python -m coverage html --skip-covered --skip-empty
 
           # Report and write to summary.
