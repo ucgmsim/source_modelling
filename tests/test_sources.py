@@ -5,8 +5,8 @@ import scipy as sp
 from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
-
 from qcore import coordinates
+
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
@@ -185,6 +185,7 @@ def fault_plane(
         float, (2,), elements={"min_value": 0, "max_value": 1}
     ),
 )
+@seed(1)
 def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
     assume(not np.isclose(plane.dip_dir, plane.strike))
     assert np.allclose(

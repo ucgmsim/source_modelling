@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from source_modelling import rupture_propagation, sources
 
@@ -81,3 +82,34 @@ def test_simple_line_case():
             )
             < 15000
         )
+
+@pytest.mark.parametrize(
+    'tree', [
+        # Linear case, must have order [a, b, c]
+        {'a': None, 'b': 'a', 'c': 'b'},
+        # Splay cases (here multiple orders are ok)
+        {'a': None, 'b': 'a', 'c': 'a'},
+        {'a': None, 'b': 'a', 'c': 'b', 'd': 'a'},
+    ]
+)
+def test_tree_nodes_in_order(tree: dict[str, str]):
+    """Check that `rupture_propagation.tree_nodes_in_order` produces a list of tree nodes in-order.
+
+    The phrase 'in-order' here means:
+
+    1. Each node is presented after it's parent and,
+    2. All nodes are eventually listed.
+
+    The reason a simple input -> output test is not used is because
+    there are multiple correct orders for a given tree and later
+    implementations of this method might change the order used (and we
+    don't care about which we use).
+    """
+    seen_nodes = set()
+    for node in rupture_propagation.tree_nodes_in_order(tree):
+        # Check that the node's parent was before it in the node list
+        assert tree[node] in seen_nodes or tree[node] is None
+        seen_nodes.add(node)
+
+    # Check that every node is seen eventually
+    assert len(seen_nodes) == len(tree)

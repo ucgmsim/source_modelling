@@ -1,9 +1,13 @@
-numpy
-qcore @ git+https://github.com/ucgmsim/qcore.git
-numpy
+diffimg
+matplotlib
+numpy<2
 pandas
 parse
+pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
+qcore @ git+https://github.com/ucgmsim/qcore.git
 pytest
 hypothesis
 pytest-cov
 scipy
+typer
+hypothesis[pandas, numpy]
