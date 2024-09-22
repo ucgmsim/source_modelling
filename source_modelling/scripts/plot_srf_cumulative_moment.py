@@ -79,7 +79,7 @@ def plot_srf_cumulative_moment(
         overall_moment.index.values, overall_moment["moment"], label="Overall Moment"
     )
 
-    if realisation_ffp:
+    if realisation_ffp: # pragma: no cover
         # NOTE: this import is here because the workflow is, as yet,
         # not ready to be installed along-side source modelling.
         from workflow.realisations import RupturePropagationConfig, SourceConfig

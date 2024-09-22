@@ -26,3 +26,15 @@ source_modelling = "source_modelling"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.isort]
+known-first-party = ["source_modelling", "qcore", "workflow", "pygmt_helper"]
+
+[tool.coverage.run]
+omit = [
+    "source_modelling/scripts/plot_mw_contributions.py"
+]
+

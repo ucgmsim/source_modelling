@@ -1,9 +1,8 @@
 import numpy as np
 import pytest
 import scipy as sp
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
-from hypothesis.extra import numpy as nst
 
 from source_modelling import slip
 
