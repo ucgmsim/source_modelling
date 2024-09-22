@@ -2,6 +2,7 @@ from typing import Optional
 
 import numpy as np
 import scipy as sp
+import shapely
 from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
@@ -46,6 +47,10 @@ def test_point_construction(
     )
     assert np.allclose(point.coordinates, point_coordinates)
     assert point.length == point.width == length_m / 1000
+    assert np.allclose(
+        shapely.get_coordinates(point.geometry, include_z=True),
+        np.atleast_2d(point.bounds),
+    )
     assert np.isclose(point.width_m, point.width * 1000)
     assert np.allclose(point.centroid, point_coordinates)
 
@@ -148,6 +153,9 @@ def test_plane_construction(
     assert np.isclose(
         plane.width, plane.projected_width / np.cos(np.radians(plane.dip)), atol=1e-6
     )
+    assert np.allclose(
+        shapely.get_coordinates(plane.geometry, include_z=True)[:-1], plane.bounds
+    )
     assert np.isclose(plane.projected_width, projected_width, atol=1e-6)
     assert np.isclose(plane.strike, strike, atol=1e-6)
     assert np.isclose(plane.dip_dir, dip_dir, atol=1e-6)
@@ -248,6 +256,9 @@ def test_fault_construction(fault: Fault):
     assert np.isclose(fault.dip_dir, fault.planes[0].strike + 90)
     assert fault.corners.shape == (4 * len(fault.planes), 3)
     assert np.isclose(fault.area(), np.sum([plane.area for plane in fault.planes]))
+    assert fault.geometry.equals(
+        shapely.union_all([plane.geometry for plane in fault.planes])
+    )
     assert np.allclose(
         fault.wgs_depth_coordinates_to_fault_coordinates(fault.centroid),
         np.array([1 / 2, 1 / 2]),
