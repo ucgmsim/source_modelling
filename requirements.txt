@@ -5,9 +5,10 @@ pandas
 parse
 pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
 qcore @ git+https://github.com/ucgmsim/qcore.git
+hypothesis[pandas, numpy]
 pytest
-hypothesis
 pytest-cov
+shapely
 scipy
 typer
-hypothesis[pandas, numpy]
+
