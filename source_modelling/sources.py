@@ -21,7 +21,7 @@ from typing import Optional, Protocol
 
 import numpy as np
 import scipy as sp
-
+import shapely
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -98,6 +98,11 @@ class Point:
     def centroid(self) -> np.ndarray:
         """np.ndarray: The centroid of the point source (which is just the point's coordinates)."""
         return self.coordinates
+
+    @property
+    def geometry(self) -> shapely.Point:
+        """shapely.Point: A shapely geometry for the point (projected onto the surface)."""
+        return shapely.Point(self.bounds)
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
@@ -272,7 +277,11 @@ class Plane:
         """float: The dip angle of the fault."""
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
-    # TODO: change this to take width and dip rather than projected width.
+    @property
+    def geometry(self) -> shapely.Polygon:
+        """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
+        return shapely.Polygon(self.bounds)
+
     @staticmethod
     def from_centroid_strike_dip(
         centroid: np.ndarray,
@@ -500,6 +509,13 @@ class Fault:
     def centroid(self) -> np.ndarray:
         """np.ndarray: The centre of the fault."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
+
+    @property
+    def geometry(self) -> shapely.Polygon:
+        """shapely.Geometry: A shapely geometry for the fault (projected onto the surface)."""
+        return shapely.normalize(
+            shapely.union_all([plane.geometry for plane in self.planes])
+        )
 
     def wgs_depth_coordinates_to_fault_coordinates(
         self, global_coordinates: np.ndarray
