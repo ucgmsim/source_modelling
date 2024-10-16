@@ -38,6 +38,7 @@ extend-exclude = ["source_modelling/ccldpy.py"]
 
 [tool.coverage.run]
 omit = [
-    "source_modelling/scripts/plot_mw_contributions.py"
+    "source_modelling/scripts/plot_mw_contributions.py",
+    "source_modelling/ccldpy.py"
 ]
 
