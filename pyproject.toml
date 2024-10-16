@@ -34,7 +34,7 @@ convention = "numpy"
 known-first-party = ["source_modelling", "qcore", "workflow", "pygmt_helper"]
 
 [tool.ruff.lint]
-exclude = "ccld.py"
+exclude = ["ccld.py"]
 
 [tool.coverage.run]
 omit = [
