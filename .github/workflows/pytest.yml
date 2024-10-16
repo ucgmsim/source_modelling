@@ -14,10 +14,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: gmt, libgmt-dev, ghostscript liblapack-dev
-          version: 1.0
+      - name: Install GMT
+        run: apt-get install -y gmt libgmt-dev ghostscript
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
