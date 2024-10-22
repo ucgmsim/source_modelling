@@ -55,7 +55,9 @@ from typing import Optional, TextIO
 import numpy as np
 import pandas as pd
 import scipy as sp
+import shapely
 
+from qcore import coordinates
 from source_modelling import srf_reader
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
@@ -172,6 +174,31 @@ class SrfFile:
         if self.slipt3_array:
             slip_array += self.slipt3_array.power(2)
         return slip_array.sqrt()
+
+    @property
+    def geometry(self) -> shapely.Geometry:
+        """shapely.Geometry: The shapely geometry of all segments in the SRF."""
+        polygons = []
+        for i, segment in enumerate(self.segments):
+            header = self.header.iloc[i]
+            nstk = header["nstk"]
+            ndip = header["ndip"]
+            corners = (
+                segment[["lat", "lon"]]
+                .iloc[[0, nstk - 1, nstk * (ndip - 1), nstk * ndip - 1]]
+                .values
+            )
+            if header["dip"] == 90:
+                polygons.append(
+                    shapely.LineString(coordinates.wgs_depth_to_nztm(corners[:2]))
+                )
+            else:
+                polygons.append(
+                    shapely.convex_hull(
+                        shapely.MultiPoint(coordinates.wgs_depth_to_nztm(corners))
+                    )
+                )
+        return shapely.union_all(polygons).normalize()
 
     @property
     def nt(self):
