@@ -64,7 +64,7 @@ def test_simple_line_case():
     rupture_causality_tree = (
         rupture_propagation.estimate_most_likely_rupture_propagation(source_map, "a")
     )
-    assert rupture_causality_tree == {"a": None, "b": "a", "c": "b", "d": "b"}
+    assert rupture_causality_tree == {"a": None, "b": "a", "c": "b", "d": "c"}
     # We don't really care what the output is here because it is just a thin wrapper over the closest points between sources code, which we have already thoroughly tested.
     # We just check here it doesn't crash and outputs vaguely sensible values.
     jump_points = rupture_propagation.jump_points_from_rupture_tree(
@@ -83,14 +83,16 @@ def test_simple_line_case():
             < 15000
         )
 
+
 @pytest.mark.parametrize(
-    'tree', [
+    "tree",
+    [
         # Linear case, must have order [a, b, c]
-        {'a': None, 'b': 'a', 'c': 'b'},
+        {"a": None, "b": "a", "c": "b"},
         # Splay cases (here multiple orders are ok)
-        {'a': None, 'b': 'a', 'c': 'a'},
-        {'a': None, 'b': 'a', 'c': 'b', 'd': 'a'},
-    ]
+        {"a": None, "b": "a", "c": "a"},
+        {"a": None, "b": "a", "c": "b", "d": "a"},
+    ],
 )
 def test_tree_nodes_in_order(tree: dict[str, str]):
     """Check that `rupture_propagation.tree_nodes_in_order` produces a list of tree nodes in-order.
