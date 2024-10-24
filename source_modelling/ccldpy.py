@@ -1,3 +1,6 @@
+# Sourced from: https://github.com/tristanbuckreis/ccldpy
+# This package is not included as a dependency but packaged
+# directly because it cannot be installed via pip.
 # ccldpy v2.0.0
 # June 12, 2024
 # Tristan E. Buckreis (tristanbuckreis@ucla.edu)
