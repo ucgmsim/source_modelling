@@ -1,8 +1,8 @@
 diffimg
 matplotlib
 numpy<2
-pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
-qcore @ git+https://github.com/ucgmsim/qcore@pegasus
+pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
+qcore @ git+https://github.com/ucgmsim/qcore
 pandas
 parse
 hypothesis[pandas, numpy]
