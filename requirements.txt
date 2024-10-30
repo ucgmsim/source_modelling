@@ -1,7 +1,7 @@
 diffimg
 matplotlib
 numpy<2
-pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
+pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper@cylc
 qcore @ git+https://github.com/ucgmsim/qcore@pegasus
 pandas
 parse
