@@ -146,6 +146,7 @@ def test_plane_construction(
     centroid: np.ndarray,
 ):
     assume(valid_coordinates(centroid))
+    assume(dip_dir > strike + 1)
     plane = Plane.from_centroid_strike_dip(
         centroid, strike, dip_dir, top, top + depth, length, projected_width
     )
@@ -160,6 +161,8 @@ def test_plane_construction(
     assert np.isclose(plane.strike, strike, atol=1e-6)
     assert np.isclose(plane.dip_dir, dip_dir, atol=1e-6)
     assert np.allclose(plane.centroid[:2], centroid, atol=1e-6)
+    # The constructor should not care about plane bound orientation
+    assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
 
 
 def fault_plane(

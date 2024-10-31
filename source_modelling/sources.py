@@ -17,9 +17,10 @@ Fault:
 """
 
 import dataclasses
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Self
 
 import numpy as np
+import numpy.typing as npt
 import scipy as sp
 import shapely
 from qcore import coordinates, geo, grid
@@ -56,7 +57,7 @@ class Point:
     dip_dir: float
 
     @staticmethod
-    def from_lat_lon_depth(point_coordinates: np.ndarray, **kwargs) -> "Point":
+    def from_lat_lon_depth(point_coordinates: np.ndarray, **kwargs) -> Self:
         """Construct a point source from a lat, lon, depth format.
 
         Parameters
@@ -152,7 +153,6 @@ class Point:
         raise ValueError("Given global coordinates out of bounds for point source.")
 
 
-@dataclasses.dataclass
 class Plane:
     """A representation of a single plane of a Fault.
 
@@ -180,11 +180,30 @@ class Plane:
          3            2
     """
 
-    # Bounds for plane are just the corners
-    bounds: np.ndarray
+    def __init__(self, bounds: npt.NDArray):
+        top_mask = np.isclose(bounds[:, 2], bounds[:, 2].min())
+        top = bounds[top_mask]
+        bottom = bounds[~top_mask]
+        if len(top) != 2 or len(bounds) != 4:
+            raise ValueError("Bounds do not form a plane.")
+        # We want to ensure that the bottom and top and pointing in roughly the
+        # same direction. To do this, we compare the dot product of the top and
+        # bottom vectors. If the dot product is positive then they are pointing
+        # in roughly the same direction, if it is negative then they are
+        # pointing in opposite directions.
+        if np.dot(top[1] - top[0], bottom[1] - bottom[0]) < 0:
+            bottom = bottom[::-1]
+        orientation = np.linalg.det(np.array([top[1] - top[0], bottom[0] - top[0]])[:, :-1])
+        # If the orientation is not close to 0 and is negative, then dip
+        # direction is to the left of the strike direction, so we reverse
+        # the order of the top and bottom corners.
+        if not np.isclose(orientation, 0) and orientation < 0:
+            top = top[::-1]
+            bottom = bottom[::-1]
+        self.bounds = np.array([top[0], top[1], bottom[1], bottom[0]])
 
     @staticmethod
-    def from_corners(corners: np.ndarray) -> "Plane":
+    def from_corners(corners: np.ndarray) -> Self:
         """Construct a plane point source from its corners.
 
         Parameters
@@ -291,7 +310,7 @@ class Plane:
         dbottom: float,
         length: float,
         projected_width: float,
-    ) -> "Plane":
+    ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
         This is used for older descriptions of sources. Internally
@@ -331,7 +350,6 @@ class Plane:
             length,
             projected_width,
         )
-        corners[[2, 3]] = corners[[3, 2]]
         return Plane(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
