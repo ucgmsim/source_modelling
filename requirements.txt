@@ -1,6 +1,7 @@
 diffimg
 matplotlib
 numpy<2
+fiona
 pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
 qcore @ git+https://github.com/ucgmsim/qcore.git
 pandas
