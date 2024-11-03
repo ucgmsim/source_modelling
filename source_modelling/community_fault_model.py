@@ -10,12 +10,12 @@ Examples
 --------
 >>> from pathlib import Path
 >>> model = get_community_fault_model()
->>> centroid = np.array([174.7633, -36.8485, 0])
->>> nodal_plane_1 = NodalPlane(strike=30, dip=45, rake=90)
->>> nodal_plane_2 = NodalPlane(strike=60, dip=45, rake=90)
+>>> centroid = np.array([-45.1929,166.83])
+>>> nodal_plane_1 = NodalPlane(strike=20, dip=35, rake=79)
+>>> nodal_plane_2 = NodalPlane(strike=213, dip=56, rake=98)
 >>> most_likely_plane = most_likely_nodal_plane(model, centroid, nodal_plane_1, nodal_plane_2)
 >>> print(most_likely_plane)
-NodalPlane(strike=30, dip=45, rake=90)
+NodalPlane(strike=20, dip=35, rake=79)
 """
 from importlib import resources
 from importlib.resources.abc import Traversable
