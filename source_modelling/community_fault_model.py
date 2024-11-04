@@ -17,6 +17,7 @@ Examples
 >>> print(most_likely_plane)
 NodalPlane(strike=20, dip=35, rake=79)
 """
+
 from importlib import resources
 from importlib.resources.abc import Traversable
 import re
@@ -24,6 +25,7 @@ from dataclasses import dataclass
 from enum import Enum, Flag, auto
 from pathlib import Path
 from typing import NamedTuple, Optional
+import geopandas as gpd
 
 import fiona
 import numpy as np
@@ -343,6 +345,30 @@ def get_community_fault_model() -> list[CommunityFault]:
     )
 
 
+def community_fault_model_as_geodataframe() -> gpd.GeoDataFrame:
+    """
+    Convert the community fault model to a GeoDataFrame.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        A GeoDataFrame containing the community fault model data, with the
+        coordinate reference system set to EPSG:2193 and the geometry column
+        set to 'trace'. The index is set to the fault names.
+    """
+    model = get_community_fault_model()
+
+    # Transform the trace to WGS84
+    for fault in model:
+        fault.trace = shapely.transform(fault.trace, lambda coord: coord[:, ::-1])
+    return gpd.GeoDataFrame(
+        [vars(fault) for fault in model],
+        geometry='trace',
+        crs='EPSG:2193'
+    ).set_index('name')
+
+
+
 def parse_timeframe_unit(unit: str) -> Optional[int]:
     """Parse the timeframe unit from a string.
 
@@ -423,13 +449,15 @@ def most_likely_nodal_plane(
     """
     point = shapely.Point(coordinates.wgs_depth_to_nztm(centroid))
     line_segments = {
-        shapely.LineString(fault.trace.coords[i:i + 2]): line_segment_strike(*fault.trace.coords[i:i + 2])
+        shapely.LineString(fault.trace.coords[i : i + 2]): line_segment_strike(
+            *fault.trace.coords[i : i + 2]
+        )
         for fault in faults
         for i in range(len(fault.trace.coords) - 1)
     }
-    closest_segments = sorted(line_segments, key=lambda segment: segment.distance(point))[
-        :k_neighbours
-    ]
+    closest_segments = sorted(
+        line_segments, key=lambda segment: segment.distance(point)
+    )[:k_neighbours]
     nodal_plane_1_votes = sum(
         1
         / (
@@ -443,7 +471,8 @@ def most_likely_nodal_plane(
     nodal_plane_2_votes = sum(
         1
         / (
-            segment.distance(point) * abs(line_segments[segment] - nodal_plane_1.strike + 1e-5)
+            segment.distance(point)
+            * abs(line_segments[segment] - nodal_plane_1.strike + 1e-5)
         )
         for segment in closest_segments
         if abs(line_segments[segment] - nodal_plane_1.strike)
