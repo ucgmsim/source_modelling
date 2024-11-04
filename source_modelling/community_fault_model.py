@@ -207,6 +207,16 @@ class NeotectonicDomain(Enum):
     TASMAN_SEA_BASIN = 28
     """Tasman Sea Basin (28)."""
 
+class Range(NamedTuple):
+    """Represents a range with minimum, preferred, and maximum values."""
+
+    min: float
+    """The minimum value of the range."""
+    pref: float
+    """The preferred value of the range."""
+    max: float
+    """The maximum value of the range."""
+
 
 @dataclass
 class CommunityFault:
@@ -220,7 +230,7 @@ class CommunityFault:
     """The name of the fault."""
     domain: NeotectonicDomain
     """The neotectonic domain of the fault."""
-    dip_range: tuple[float, float, float]
+    dip_range: Range
     """The dip range of the fault."""
     dip_dir: Optional[CompassDirection]
     """The dip direction of the fault."""
@@ -228,9 +238,9 @@ class CommunityFault:
     """The primary movement sense of the fault."""
     secondary_sense: Optional[MovementSense]
     """The secondary movement sense of the fault."""
-    rake_range: tuple[float, float, float]
+    rake_range: Range
     """The rake range of the fault."""
-    slip_rate: tuple[float, float, float]
+    slip_rate: Range
     """The slip rate of the fault."""
     slip_rate_timeframe_pref: int
     """The preferred slip rate timeframe."""
@@ -244,7 +254,7 @@ class CommunityFault:
     """Not sure!"""
     down_dip_dfc_method: DipMethod
     """Not sure!"""
-    up_dip_depth: tuple[float, float, float]
+    up_dip_depth: Range
     """The up dip depth range."""
     quality_code: int
     """The quality code of the fault."""
@@ -284,7 +294,7 @@ def load_community_fault_model(
                     fault_status=fault_status_map[feature["properties"]["Fault_stat"]],
                     name=feature["properties"]["Name"],
                     domain=NeotectonicDomain(feature["properties"]["Domain_No"]),
-                    dip_range=(
+                    dip_range=Range(
                         feature["properties"]["Dip_min"],
                         feature["properties"]["Dip_pref"],
                         feature["properties"]["Dip_max"],
@@ -299,12 +309,12 @@ def load_community_fault_model(
                     )
                     if feature["properties"]["Sub_sense"]
                     else None,
-                    rake_range=(
+                    rake_range=Range(
                         feature["properties"]["Rake_minus"],
                         feature["properties"]["Rake_pref"],
                         feature["properties"]["Rake_plus"],
                     ),
-                    slip_rate=(
+                    slip_rate=Range(
                         feature["properties"]["SR_min"],
                         feature["properties"]["SR_pref"],
                         feature["properties"]["SR_max"],
@@ -313,7 +323,7 @@ def load_community_fault_model(
                     slip_rate_timeframe_unit=parse_timeframe_unit(
                         feature["properties"]["SRT_gen"]
                     ),
-                    up_dip_depth=(
+                    up_dip_depth=Range(
                         feature["properties"]["UpdDth_min"],
                         feature["properties"]["UpdDth_prf"],
                         feature["properties"]["UpdDth_max"],
