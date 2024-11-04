@@ -18,16 +18,16 @@ Examples
 NodalPlane(strike=20, dip=35, rake=79)
 """
 
-from importlib import resources
-from importlib.resources.abc import Traversable
 import re
 from dataclasses import dataclass
 from enum import Enum, Flag, auto
+from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import NamedTuple, Optional
-import geopandas as gpd
 
 import fiona
+import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
 import shapely
@@ -207,6 +207,7 @@ class NeotectonicDomain(Enum):
     TASMAN_SEA_BASIN = 28
     """Tasman Sea Basin (28)."""
 
+
 class Range(NamedTuple):
     """Represents a range with minimum, preferred, and maximum values."""
 
@@ -372,11 +373,8 @@ def community_fault_model_as_geodataframe() -> gpd.GeoDataFrame:
     for fault in model:
         fault.trace = shapely.transform(fault.trace, lambda coord: coord[:, ::-1])
     return gpd.GeoDataFrame(
-        [vars(fault) for fault in model],
-        geometry='trace',
-        crs='EPSG:2193'
-    ).set_index('name')
-
+        [vars(fault) for fault in model], geometry="trace", crs="EPSG:2193"
+    ).set_index("name")
 
 
 def parse_timeframe_unit(unit: str) -> Optional[int]:
