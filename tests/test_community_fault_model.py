@@ -8,6 +8,8 @@ import pandas as pd
 def test_can_load_community_fault_model():
     model = community_fault_model.get_community_fault_model()
     assert len(model) == 880
+    gdf = community_fault_model.community_fault_model_as_geodataframe()
+    assert len(gdf) == 880
 
 def test_most_likely_nodal_plane():
     solutions = pd.read_csv('tests/data/GeoNet_Test_Solutions.csv')
