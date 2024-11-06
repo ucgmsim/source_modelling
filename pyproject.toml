@@ -33,8 +33,12 @@ convention = "numpy"
 [tool.ruff.lint.isort]
 known-first-party = ["source_modelling", "qcore", "workflow", "pygmt_helper"]
 
+[tool.ruff]
+extend-exclude = ["source_modelling/ccldpy.py"]
+
 [tool.coverage.run]
 omit = [
-    "source_modelling/scripts/plot_mw_contributions.py"
+    "source_modelling/scripts/plot_mw_contributions.py",
+    "source_modelling/ccldpy.py"
 ]
 

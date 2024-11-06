@@ -1,14 +1,13 @@
 diffimg
 matplotlib
 numpy<2
-pandas
-parse
 pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper
 qcore @ git+https://github.com/ucgmsim/qcore.git
+pandas
+parse
 hypothesis[pandas, numpy]
+shapely
 pytest
 pytest-cov
-shapely
 scipy
 typer
-
