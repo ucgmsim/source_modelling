@@ -283,6 +283,69 @@ class Plane:
         return shapely.Polygon(self.bounds)
 
     @staticmethod
+    def from_trace(
+        trace_points: np.ndarray[float],
+        dtop: float,
+        dbottom: float,
+        dip: float,
+        dip_dir: float,
+    ) -> "Plane":
+        """Create a fault plane from the surface trace, depth parameters and dip.
+
+        Parameters
+        ----------
+        trace_points: np.ndarray
+            The surface trace of the fault in lat, lon format.
+        dtop: float
+            The top depth of the plane (in km).
+        dbottom: float
+            The bottom depth of the plane (in km).
+        dip: float
+            The dip of the fault plane (degrees).
+        dip_dir: float
+            The dip direction of the fault plane (degrees) as great circle bearing.
+
+        Returns
+        -------
+        Plane
+            The fault plane with the given parameters.
+        """
+        ## TODO: Add check that ensures dip_dir > strike
+        ### TODO: Add tests
+        # Get the trace endpoints in NZTM coordinates (y, x)
+        trace_corners_nztm = coordinates.wgs_depth_to_nztm(trace_points)
+        dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
+
+        # Define the trace corners in NZTM coordinates (y, x, depth)
+        c1 = (*trace_corners_nztm[0], dtop)
+        c2 = (*trace_corners_nztm[1], dtop)
+
+        # Get dip and dip direction in radians
+        dip_dir_nztm_rad = np.deg2rad(
+            coordinates.great_circle_bearing_to_nztm_bearing(
+                trace_points[0], 1, dip_dir
+            )
+        )
+        dip_rad = np.deg2rad(dip)
+
+        # Compute remaining corners
+        proj_width = (dbottom - dtop) / np.tan(dip_rad)
+        c3 = (
+            c2[0] + proj_width * np.cos(dip_dir_nztm_rad),
+            c2[1] + proj_width * np.sin(dip_dir_nztm_rad),
+            dbottom,
+        )
+        c4 = (
+            c1[0] + proj_width * np.cos(dip_dir_nztm_rad),
+            c1[1] + proj_width * np.sin(dip_dir_nztm_rad),
+            dbottom,
+        )
+
+        # Convert to lat, lon, depth
+        corners = coordinates.nztm_to_wgs_depth(np.array([c1, c2, c3, c4]))
+        return Plane.from_corners(corners)
+
+    @staticmethod
     def from_centroid_strike_dip(
         centroid: np.ndarray,
         strike: float,
