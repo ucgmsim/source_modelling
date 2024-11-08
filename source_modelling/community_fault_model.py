@@ -1,6 +1,6 @@
 """This module provides classes and functions for the New Zealand Community Fault Model.
 
-The New Zealand Community Fault Model is a collection of fault data for New
+The New Zealand Community Fault Model (CFM) is a collection of fault data for New
 Zealand. The CFM is stored in a GeoPackage file and can be accessed using the
 functions in this module. The function `most_likely_nodal_plane` can be used to
 find the most likely nodal plane for a given centroid and two nodal planes, by
