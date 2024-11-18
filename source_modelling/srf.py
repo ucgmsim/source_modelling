@@ -58,7 +58,7 @@ import scipy as sp
 import shapely
 
 from qcore import coordinates
-from source_modelling import srf_reader
+from source_modelling import moment, srf_reader
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
@@ -174,6 +174,16 @@ class SrfFile:
         if self.slipt3_array:
             slip_array += self.slipt3_array.power(2)
         return slip_array.sqrt()
+
+    @property
+    def moment_rate(self):
+        return moment.moment_rate_over_time_from_slip(
+            self.points["area"], self.slip, self.dt, self.nt
+        )
+
+    @property
+    def moment(self):
+        return moment.moment_over_time_from_moment_rate(self.moment_rate)
 
     @property
     def geometry(self) -> shapely.Geometry:
