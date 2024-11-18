@@ -484,8 +484,8 @@ class Plane:
         point_nztm = coordinates.wgs_depth_to_nztm(point)
 
         def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
-            fault_point = self.fault_coordinates_to_wgs_depth_coordinates(
-                fault_coordinates
+            fault_point = coordinates.wgs_depth_to_nztm(
+                self.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
             )
             return point_nztm - fault_point
 
@@ -503,7 +503,7 @@ class Plane:
                 f"Optimisation failed to converge for provided point: {res.message} with x = {res.x}"
             )
 
-        return res.fun
+        return np.linalg.norm(res.fun)
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.
@@ -734,8 +734,8 @@ class Fault:
         point_nztm = coordinates.wgs_depth_to_nztm(point)
 
         def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
-            fault_point = self.fault_coordinates_to_wgs_depth_coordinates(
-                fault_coordinates
+            fault_point = coordinates.wgs_depth_to_nztm(
+                self.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
             )
             return point_nztm - fault_point
 
@@ -753,7 +753,7 @@ class Fault:
                 f"Optimisation failed to converge for provided point: {res.message} with x = {res.x}"
             )
 
-        return res.fun
+        return np.linalg.norm(res.fun)
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.
