@@ -407,7 +407,7 @@ def test_fault_rjb(fault: Fault, distance: float):
     ),
 )
 def test_fault_rrup(fault: Fault, point: np.ndarray):
-    # The fault rrup should be equal to the small rrup among the planes in the fault.
+    # The fault rrup should be equal to the smallest rrup among the planes in the fault.
     fault_rrup = fault.rrup_distance(point)
     assert np.isclose(
         min(plane.rrup_distance(point) for plane in fault.planes), fault_rrup, atol=1e-3
