@@ -296,6 +296,8 @@ class Plane:
         ----------
         trace_points: np.ndarray
             The surface trace of the fault in lat, lon format.
+            Points need to be ordered, i.e. first points is the start
+            and last point is the end of the fault trace.
         dtop: float
             The top depth of the plane (in km).
         dbottom: float
@@ -310,11 +312,22 @@ class Plane:
         Plane
             The fault plane with the given parameters.
         """
+
         ## TODO: Add check that ensures dip_dir > strike
         ### TODO: Add tests
         # Get the trace endpoints in NZTM coordinates (y, x)
         trace_corners_nztm = coordinates.wgs_depth_to_nztm(trace_points)
         dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
+
+        # Check that dip-direction is consistent with the trace
+        dip_vec = np.array([np.cos(np.radians(dip_dir)), np.sin(np.radians(dip_dir))])
+        strike_vec = trace_points[1] - trace_corners_nztm[0]
+        orientation = np.linalg.det(np.array([strike_vec, dip_vec]))
+        if not np.isclose(orientation, 0) and orientation < 0:
+            raise ValueError(
+                "Dip direction is inconsistent with the "
+                "strike defined by the trace points."
+            )
 
         # Define the trace corners in NZTM coordinates (y, x, depth)
         c1 = (*trace_corners_nztm[0], dtop)
