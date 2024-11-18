@@ -189,7 +189,9 @@ class Point:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(coordinates.wgs_depth_to_nztm(point))
+        return self.geometry.distance(
+            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        )
 
 
 @dataclasses.dataclass
@@ -470,7 +472,6 @@ class Plane:
         point : np.ndarray
             The point to compute distance to (in lat, lon, depth format)
 
-
         Returns
         -------
         float
@@ -519,7 +520,9 @@ class Plane:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(coordinates.wgs_depth_to_nztm(point))
+        return self.geometry.distance(
+            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        )
 
 
 @dataclasses.dataclass
@@ -769,7 +772,9 @@ class Fault:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(coordinates.wgs_depth_to_nztm(point))
+        return self.geometry.distance(
+            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        )
 
 
 class IsSource(Protocol):
