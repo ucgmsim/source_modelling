@@ -7,7 +7,7 @@ from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
-from qcore import coordinates, geo
+from qcore import coordinates
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
