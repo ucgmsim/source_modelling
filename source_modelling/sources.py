@@ -17,7 +17,7 @@ Fault:
 """
 
 import dataclasses
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Self
 
 import numpy as np
 import scipy as sp
@@ -56,8 +56,8 @@ class Point:
     dip: float
     dip_dir: float
 
-    @staticmethod
-    def from_lat_lon_depth(point_coordinates: np.ndarray, **kwargs) -> "Point":
+    @classmethod
+    def from_lat_lon_depth(cls, point_coordinates: np.ndarray, **kwargs) -> Self:
         """Construct a point source from a lat, lon, depth format.
 
         Parameters
@@ -73,7 +73,7 @@ class Point:
             The Point source representing this geometry.
 
         """
-        return Point(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
+        return cls(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
 
     @property
     def coordinates(self) -> np.ndarray:
@@ -220,8 +220,8 @@ class Plane:
     # Bounds for plane are just the corners
     bounds: np.ndarray
 
-    @staticmethod
-    def from_corners(corners: np.ndarray) -> "Plane":
+    @classmethod
+    def from_corners(cls, corners: np.ndarray) -> Self:
         """Construct a plane point source from its corners.
 
         Parameters
@@ -234,7 +234,7 @@ class Plane:
         Plane
             The plane source representing this geometry.
         """
-        return Plane(coordinates.wgs_depth_to_nztm(corners))
+        return cls(coordinates.wgs_depth_to_nztm(corners))
 
     @property
     def corners(self) -> np.ndarray:
@@ -319,8 +319,9 @@ class Plane:
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
 
-    @staticmethod
+    @classmethod
     def from_centroid_strike_dip(
+        cls,
         centroid: np.ndarray,
         strike: float,
         dip_dir: Optional[float],
@@ -328,7 +329,7 @@ class Plane:
         dbottom: float,
         length: float,
         projected_width: float,
-    ) -> "Plane":
+    ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
         This is used for older descriptions of sources. Internally
@@ -369,7 +370,7 @@ class Plane:
             projected_width,
         )
         corners[[2, 3]] = corners[[3, 2]]
-        return Plane(coordinates.wgs_depth_to_nztm(np.array(corners)))
+        return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
     def centroid(self) -> np.ndarray:
@@ -540,8 +541,8 @@ class Fault:
 
     planes: list[Plane]
 
-    @staticmethod
-    def from_corners(fault_corners: np.ndarray) -> "Fault":
+    @classmethod
+    def from_corners(cls, fault_corners: np.ndarray) -> Self:
         """Construct a plane source geometry from the corners of the plane.
 
         Parameters
@@ -554,7 +555,7 @@ class Fault:
         Fault
             The fault object representing this geometry.
         """
-        return Fault([Plane.from_corners(corners) for corners in fault_corners])
+        return cls([Plane.from_corners(corners) for corners in fault_corners])
 
     def area(self) -> float:
         """Compute the area of a fault.
