@@ -165,11 +165,6 @@ class Point:
         -------
         float
             The rrup distance (in metres) between the point and the fault geometry.
-
-        Raises
-        ------
-        ValueError
-            If the optimisation routine fails to converge for the point.
         """
         return coordinates.distance_between_wgs_depth_coordinates(
             self.coordinates, point
@@ -249,12 +244,12 @@ class Plane:
     @property
     def length_m(self) -> float:
         """float: The length of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[1] - self.bounds[0]))
 
     @property
     def width_m(self) -> float:
         """float: The width of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[-1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[-1] - self.bounds[0]))
 
     @property
     def bottom_m(self) -> float:
@@ -472,6 +467,7 @@ class Plane:
         point : np.ndarray
             The point to compute distance to (in lat, lon, depth format)
 
+
         Returns
         -------
         float
@@ -483,28 +479,28 @@ class Plane:
             If the optimisation routine fails to converge for the point.
         """
         point_nztm = coordinates.wgs_depth_to_nztm(point)
+        frame = np.array(
+            [self.bounds[1] - self.bounds[0], self.bounds[-1] - self.bounds[0]]
+        )
+        local_coords, _, _, _ = np.linalg.lstsq(
+            frame.T,
+            point_nztm - self.bounds[0],
+            rcond=None,
+        )
+        projected_point = local_coords @ frame + self.bounds[0]
+        out_of_plane_distance = np.linalg.norm(point_nztm - projected_point)
+        if np.allclose(local_coords, np.clip(local_coords, 0, 1)):
+            # solution lies in fault, ergo just return projected distance
+            return float(out_of_plane_distance)
 
-        def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
-            fault_point = coordinates.wgs_depth_to_nztm(
-                self.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
+        in_plane_distance = min(
+            geo.point_to_segment_distance(
+                projected_point, self.bounds[i], self.bounds[(i + 1) % 4]
             )
-            return point_nztm - fault_point
-
-        res = sp.optimize.least_squares(
-            fault_coordinate_distance,
-            np.array([1 / 2, 1 / 2]),
-            bounds=([0] * 2, [1] * 2),
-            gtol=1e-5,
-            ftol=1e-5,
-            xtol=1e-5,
+            for i in range(4)
         )
 
-        if not res.success and res.status != 0:
-            raise ValueError(
-                f"Optimisation failed to converge for provided point: {res.message} with x = {res.x}"
-            )
-
-        return np.linalg.norm(res.fun)
+        return np.sqrt(in_plane_distance**2 + out_of_plane_distance**2)
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.
@@ -675,6 +671,27 @@ class Fault:
                 continue
         raise ValueError("Given coordinates are not on fault.")
 
+    def rrup_distance(self, point: np.ndarray) -> float:
+        """Compute RRup Distance between a fault and a point.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            The point to compute distance to (in lat, lon, depth format)
+
+        Returns
+        -------
+        float
+            The rrup distance (in metres) between the point and the fault geometry.
+
+        Raises
+        ------
+        ValueError
+            If the optimisation routine fails to converge for the point.
+        """
+
+        return min(plane.rrup_distance(point) for plane in self.planes)
+
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
     ) -> np.ndarray:
@@ -714,49 +731,6 @@ class Fault:
         ].fault_coordinates_to_wgs_depth_coordinates(
             np.array([segment_proportion, fault_coordinates[1]])
         )
-
-    def rrup_distance(self, point: np.ndarray) -> float:
-        """Compute RRup Distance between a fault and a point.
-
-        Parameters
-        ----------
-        point : np.ndarray
-            The point to compute distance to (in lat, lon, depth format)
-
-
-        Returns
-        -------
-        float
-            The rrup distance (in metres) between the point and the fault geometry.
-
-        Raises
-        ------
-        ValueError
-            If the optimisation routine fails to converge for the point.
-        """
-        point_nztm = coordinates.wgs_depth_to_nztm(point)
-
-        def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
-            fault_point = coordinates.wgs_depth_to_nztm(
-                self.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
-            )
-            return point_nztm - fault_point
-
-        res = sp.optimize.least_squares(
-            fault_coordinate_distance,
-            np.array([1 / 2, 1 / 2]),
-            bounds=([0] * 2, [1] * 2),
-            gtol=1e-5,
-            ftol=1e-5,
-            xtol=1e-5,
-        )
-
-        if not res.success and res.status != 0:
-            raise ValueError(
-                f"Optimisation failed to converge for provided point: {res.message} with x = {res.x}"
-            )
-
-        return np.linalg.norm(res.fun)
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.

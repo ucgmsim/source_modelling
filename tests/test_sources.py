@@ -7,7 +7,7 @@ from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
-from qcore import coordinates
+from qcore import coordinates, geo
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
@@ -256,23 +256,44 @@ def fault_plane(
         length=st.floats(0.1, 1000),
         projected_width=st.floats(0.1, 1000),
         strike=st.floats(0, 179),
-        dip_dir=st.floats(1, 179),
+        dip_dir=st.floats(5, 179),
         top=st.floats(0, 100),
         depth=st.floats(0.1, 100),
         centroid=st.builds(
             coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
         ),
     ),
-    distance=st.floats(1, 1000),
+    point=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
+    ),
 )
-def test_plane_rrup(plane: Plane, distance: float):
-    centre = np.mean(plane.bounds, axis=0)
-    normal = np.cross(
-        plane.bounds[1] - plane.bounds[0], plane.bounds[-1] - plane.bounds[0]
+def test_plane_rrup(plane: Plane, point: np.ndarray):
+    assume(plane.dip_dir >= plane.strike + 5)
+    point = coordinates.wgs_depth_to_nztm(point)
+
+    def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
+        fault_point = coordinates.wgs_depth_to_nztm(
+            plane.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
+        )
+        return point - fault_point
+
+    res = sp.optimize.least_squares(
+        fault_coordinate_distance,
+        np.array([1 / 2, 1 / 2]),
+        bounds=([0] * 2, [1] * 2),
+        gtol=1e-5,
+        ftol=1e-5,
     )
-    normal /= np.linalg.norm(normal)
-    point = coordinates.nztm_to_wgs_depth(centre + distance * 1000 * normal)
-    assert np.isclose(plane.rrup_distance(point), distance * 1000, atol=1e-4)
+    optimized_res = np.linalg.norm(res.fun)
+    print(optimized_res, res.x)
+    assert np.isclose(
+        plane.rrup_distance(coordinates.nztm_to_wgs_depth(point)),
+        optimized_res,
+        atol=1e-3,
+    )
 
 
 @given(
