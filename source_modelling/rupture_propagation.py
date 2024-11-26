@@ -23,8 +23,8 @@ from collections import defaultdict, namedtuple
 from typing import Generator, Optional
 
 import numpy as np
-
 from qcore import coordinates
+
 from source_modelling import sources
 
 DistanceGraph = dict[str, dict[str, int]]
@@ -124,9 +124,11 @@ def probability_graph(
         normalising_constant = sum(neighbours_fault_u.values())
         if normalising_constant == 0:
             for fault_v, _ in neighbours_fault_u.items():
-                probabilities_log[fault_u][fault_v] = 1 / len(neighbours_fault_u)
+                probabilities_log[fault_u][fault_v] = -np.log(
+                    1 / len(neighbours_fault_u)
+                )
         for fault_v, prob in neighbours_fault_u.items():
-            probabilities_log[fault_u][fault_v] = prob / normalising_constant
+            probabilities_log[fault_u][fault_v] = -np.log(prob / normalising_constant)
     return probabilities_log
 
 
