@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "source_modelling"
-authors = [
-    {name = "QuakeCoRE" },
-]
+authors = [{ name = "QuakeCoRE" }]
 description = "Source modelling library"
 readme = "README.md"
 requires-python = ">=3.9"
 dynamic = ["version", "dependencies"]
 
+
+[tool.setuptools.package-data]
+source_modelling = ['NZ_CFM/*']
 
 [project.scripts]
 plot-srf-moment = "source_modelling.scripts.plot_srf_moment:app"
@@ -25,7 +26,7 @@ plot-mw-contributions = "source_modelling.scripts.plot_mw_contributions:app"
 source_modelling = "source_modelling"
 
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
+dependencies = { file = ["requirements.txt"] }
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
@@ -39,6 +40,5 @@ extend-exclude = ["source_modelling/ccldpy.py"]
 [tool.coverage.run]
 omit = [
     "source_modelling/scripts/plot_mw_contributions.py",
-    "source_modelling/ccldpy.py"
+    "source_modelling/ccldpy.py",
 ]
-
