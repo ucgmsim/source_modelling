@@ -184,7 +184,12 @@ class Plane:
         top_mask = np.isclose(bounds[:, 2], bounds[:, 2].min())
         top = bounds[top_mask]
         bottom = bounds[~top_mask]
-        if np.linalg.matrix_rank(bounds) != 3 or len(top) != 2 or len(bounds) != 4:
+        if (
+            np.linalg.matrix_rank(bounds) != 3
+            or len(top) != 2
+            or len(bounds) != 4
+            or not np.isclose(bottom[0, 2], bottom[1, 2])
+        ):
             raise ValueError("Bounds do not form a plane.")
         # We want to ensure that the bottom and top and pointing in roughly the
         # same direction. To do this, we compare the dot product of the top and
