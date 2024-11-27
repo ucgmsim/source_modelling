@@ -33,7 +33,7 @@ _KM_TO_M = 1000
 
 @dataclasses.dataclass
 class Point:
-    """A representation of point source.
+    """A representation of a point source.
 
     Attributes
     ----------
@@ -233,7 +233,7 @@ class Plane:
         top_mask = np.isclose(self.bounds[:, 2], self.bounds[:, 2].min())
         top = self.bounds[top_mask]
         bottom = self.bounds[~top_mask]
-        # We want to ensure that the bottom and top and pointing in roughly the
+        # We want to ensure that the bottom and top are pointing in roughly the
         # same direction. To do this, we compare the dot product of the top and
         # bottom vectors. If the dot product is positive then they are pointing
         # in roughly the same direction, if it is negative then they are
@@ -371,14 +371,14 @@ class Plane:
         Parameters
         ----------
         centroid : np.ndarray
-            The centre of the fault plane in lat, lon coordinates.
+            The center of the fault plane in lat, lon coordinates.
         strike : float
             The strike of the fault (in degrees).
         dip_dir : Optional[float]
             The dip direction of the fault (in degrees). If None this is assumed to be strike + 90 degrees.
-        top : float
+        dtop : float
             The top depth of the plane (in km).
-        bottom : float
+        dbottom : float
             The bottom depth of the plane (in km).
         length : float
             The length of the fault plane (in km).
@@ -388,7 +388,7 @@ class Plane:
         Returns
         -------
         Plane
-            The fault plane with centre at `centroid`, and where the
+            The fault plane with center at `centroid`, and where the
             parameters strike, dip_dir, top, bottom, length and width
             match what is passed to this function.
         """
@@ -405,13 +405,13 @@ class Plane:
 
     @property
     def centroid(self) -> np.ndarray:
-        """np.ndarray: The centre of the fault plane."""
+        """np.ndarray: The center of the fault plane."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, plane_coordinates: np.ndarray
     ) -> np.ndarray:
-        """Convert plane coordinates to nztm global coordinates.
+        """Convert plane coordinates to NZTM global coordinates.
 
         Parameters
         ----------
@@ -420,7 +420,7 @@ class Plane:
             2D coordinates (x, y) given for a fault plane (a plane), where x
             represents displacement along the strike, and y
             displacement along the dip (see diagram below). The
-            origin for plane coordinates is the centre of the fault.
+            origin for plane coordinates is the center of the fault.
 
                           +x
              0 0   ─────────────────>
@@ -436,7 +436,7 @@ class Plane:
         Returns
         -------
         np.ndarray
-            An 3d-vector of (lat, lon, depth) transformed coordinates.
+            A 3d-vector of (lat, lon, depth) transformed coordinates.
         """
         origin = self.bounds[0]
         top_right = self.bounds[1]
@@ -500,7 +500,7 @@ class Fault:
     It provides methods for computing the area of the fault, getting the widths and
     lengths of all fault planes, retrieving all corners of the fault, converting
     global coordinates to fault coordinates, converting fault coordinates to global
-    coordinates, generating a random hypocentre location within the fault, and
+    coordinates, generating a random hypocenter location within the fault, and
     computing the expected fault coordinates.
 
     Attributes
@@ -548,7 +548,7 @@ class Fault:
 
            plane (n - 1) -> plane n
 
-        3. Every other node has an in-degree of 1 and out-degree of 1.
+        4. Every other node has an in-degree of 1 and out-degree of 1.
 
            plane (i - 1) -> plane i -> plane (i + 1)
 
@@ -600,16 +600,16 @@ class Fault:
         way that the fault can have a fault coordinate system applied to it.
         This is essential for computing the shortest distances between faults.
         """
-        # The tirivial case where the number of planes is one should be ignored
+        # The trivial case where the number of planes is one should be ignored
         if len(self.planes) == 1:
             return
 
         self._basic_consistency_checks()
         # We need to check that the plane given is a series of connected planes
         # that meet end-to-end. There are then two cases:
-        # 1. The fault splays or is disconnected. We should raise a value error in this case.
+        # 1. The fault splays or is disconnected. We should raise a ValueError in this case.
         # 2. The fault is a line, but just lacks the correct order. Then we should re-order it to be a connected line.
-        # The "correct" order for a fault is one that is oriented mith each plane end-to-end along strike, that is
+        # The "correct" order for a fault is one that is oriented with each plane end-to-end along strike, that is
         #
         # ">" strike order
         # ┌─────>──┬─────>──┬────>──┐
@@ -717,12 +717,12 @@ class Fault:
 
     @property
     def centroid(self) -> np.ndarray:
-        """np.ndarray: The centre of the fault."""
+        """np.ndarray: The center of the fault."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
     def geometry(self) -> shapely.Polygon:
-        """shapely.Geometry: A shapely geometry for the fault (projected onto the surface)."""
+        """shapely.Polygon: A shapely geometry for the fault (projected onto the surface)."""
         return shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
         )
@@ -734,7 +734,7 @@ class Fault:
 
         Fault coordinates are a tuple (s, d) where s is the distance
         from the top left, and d the distance from the top of the
-        fault (refer to the diagram). The coordinates are normalised
+        fault (refer to the diagram). The coordinates are normalized
         such that (0, 0) is the top left and (1, 1) the bottom right.
 
         (0, 0)
@@ -834,10 +834,10 @@ def closest_point_between_sources(
 
     Parameters
     ----------
-    source_a : HasCoordinates
+    source_a : IsSource
         The first source. Must have a two-dimensional fault coordinate system.
-    source_b : HasCoordinates
-        The first source. Must have a two-dimensional fault coordinate system.
+    source_b : IsSource
+        The second source. Must have a two-dimensional fault coordinate system.
 
     Raises
     ------
