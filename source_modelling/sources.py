@@ -18,6 +18,9 @@ Fault:
 
 import dataclasses
 from typing import Optional, Protocol, Self
+from collections import defaultdict
+import itertools
+import networkx as nx
 
 import numpy as np
 import numpy.typing as npt
@@ -153,6 +156,7 @@ class Point:
         raise ValueError("Given global coordinates out of bounds for point source.")
 
 
+@dataclasses.dataclass
 class Plane:
     """A representation of a single plane of a Fault.
 
@@ -180,14 +184,16 @@ class Plane:
          3            2
     """
 
-    def __init__(self, bounds: npt.NDArray):
-        top_mask = np.isclose(bounds[:, 2], bounds[:, 2].min())
-        top = bounds[top_mask]
-        bottom = bounds[~top_mask]
+    bounds: npt.NDArray[np.float32]
+
+    def __post_init__(self):
+        top_mask = np.isclose(self.bounds[:, 2], self.bounds[:, 2].min())
+        top = self.bounds[top_mask]
+        bottom = self.bounds[~top_mask]
         if (
-            np.linalg.matrix_rank(bounds) != 3
+            np.linalg.matrix_rank(self.bounds) != 3
             or len(top) != 2
-            or len(bounds) != 4
+            or len(self.bounds) != 4
             or not np.isclose(bottom[0, 2], bottom[1, 2])
         ):
             raise ValueError("Bounds do not form a plane.")
@@ -467,6 +473,101 @@ class Fault:
     """
 
     planes: list[Plane]
+
+    def __post_init__(self) -> None:
+        """Ensure that planes are ordered along strike end-to-end."""
+        # The tirivial case where the number of planes is one should be ignored
+        if len(self.planes) == 1:
+            return
+
+        # Planes can only have one dip, dip direction, and width.
+        if not all(
+            np.isclose(plane.dip_dir, self.planes[0].dip_dir) for plane in self.planes
+        ):
+            raise ValueError("Fault must have a constant dip direction.")
+
+        if not all(np.isclose(plane.dip, self.planes[0].dip) for plane in self.planes):
+            raise ValueError("Fault must have constant dip.")
+
+        if not all(
+            np.isclose(plane.width, self.planes[0].width) for plane in self.planes
+        ):
+            raise ValueError("Fault must have constant width.")
+        # We need to check that the plane given is a series of connected planes
+        # that meet end-to-end. There are then two cases:
+        # 1. The fault splays or is disconnected. We should raise a value error in this case.
+        # 2. The fault is a line, but just lacks the correct order. Then we should re-order it to be a connected line.
+        # The "correct" order for a fault is one that is oriented mith each plane end-to-end along strike, that is
+        #
+        # ">" strike order
+        # ┌─────>──┬─────>──┬────>──┐
+        # │        │        │       │
+        # │        │        │       │
+        # │        │        │       │
+        # │   0    │   1    │   2   │
+        # │        │        │       │
+        # │        │        │       │
+        # │        │        │       │
+        # └────────┴────────┴───────┘
+        points_into_relation: dict[int, list[int]] = {
+            i: [] for i in range(len(self.planes))
+        }
+
+        for i, j in itertools.product(range(len(self.planes)), repeat=2):
+            if i == j:
+                continue
+            # A plane i points into a plane j if the right-edge (by strike)
+            # of plane i is close to the left-edge (by strike) of plane j.
+            if np.allclose(self.planes[i].bounds[1], self.planes[j].bounds[0]):
+                points_into_relation[j].append(i)  # Plane i points into plane j
+
+        # This relation can now be used to identify if the list of planes given is a line.
+        # Constructing a directed graph on the relation, it is a line if:
+        # 1. It is connected (weakly, i.e. ignoring the direction of the edges).
+        # 2. There is exactly one node with an in-degree of 0 and out-degree of 1.
+        #    - This is the first node by strike, as nothing points into it.
+        #
+        #    plane 0 -> plane 1
+        #
+        # 3. There is exactly one node with an in-degree of 1 and out-degree of 0.
+        #    - This is the last node by strike, as nothing points out of it.
+        #
+        #    plane (n - 1) -> plane n
+        #
+        # 3. Every other node has an in-degree of 1 and out-degree of 1.
+        #
+        #    plane (i - 1) -> plane i -> plane (i + 1)
+        #
+        points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
+            points_into_relation, create_using=nx.DiGraph
+        )
+        if not nx.is_weakly_connected(points_into_graph):
+            raise ValueError("Fault planes must be connected.")
+
+        start_nodes = 0
+        end_nodes = 0
+        for node in points_into_graph.nodes:
+            in_degree = points_into_graph.in_degree(node)
+            out_degree = points_into_graph.out_degree(node)
+
+            if in_degree == 0 and out_degree == 1:
+                start_nodes += 1
+            elif in_degree == 1 and out_degree == 0:
+                end_nodes += 1
+            elif in_degree == 1 and out_degree == 1:
+                continue
+            else:
+                raise ValueError("Fault planes must be connected in a line.")
+        if not (start_nodes == 1 and end_nodes == 1):
+            raise ValueError("Fault planes must be connected in a line.")
+
+        # Now that we have established the planes line up correctly, we can
+        # obtain the line in question with a topological sort, which will
+        # return the correct order of planes
+        self.planes = [
+            self.planes[i]
+            for i in reversed(list(nx.topological_sort(points_into_graph)))
+        ]
 
     @classmethod
     def from_corners(cls, fault_corners: np.ndarray) -> Self:
