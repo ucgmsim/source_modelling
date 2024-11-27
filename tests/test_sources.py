@@ -1,6 +1,7 @@
 from typing import Optional
 
 import numpy as np
+import pytest
 import scipy as sp
 import shapely
 from hypothesis import assume, given, seed, settings
@@ -163,6 +164,47 @@ def test_plane_construction(
     assert np.allclose(plane.centroid[:2], centroid, atol=1e-6)
     # The constructor should not care about plane bound orientation
     assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
+
+
+# Test 1: Less than 4 points
+def test_less_than_four_points():
+    bounds = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])  # Only 3 points
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 2: More than 4 points
+def test_more_than_four_points():
+    bounds = np.array(
+        [[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]]
+    )  # 5 points
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 3: Matrix rank not equal to 3
+def test_matrix_rank_not_three():
+    bounds = np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]])  # Rank < 3
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 4: Top points do not equal 2
+def test_top_points_not_two():
+    bounds = np.array(
+        [[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
+    )  # All points lie on the same top plane
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 5: General invalid input (not forming a valid plane)
+def test_general_invalid_input():
+    bounds = np.array(
+        [[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 2]]
+    )  # Points do not form a plane
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
 
 
 def fault_plane(

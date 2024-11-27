@@ -56,8 +56,8 @@ class Point:
     dip: float
     dip_dir: float
 
-    @staticmethod
-    def from_lat_lon_depth(point_coordinates: np.ndarray, **kwargs) -> Self:
+    @classmethod
+    def from_lat_lon_depth(cls, point_coordinates: np.ndarray, **kwargs) -> Self:
         """Construct a point source from a lat, lon, depth format.
 
         Parameters
@@ -73,7 +73,7 @@ class Point:
             The Point source representing this geometry.
 
         """
-        return Point(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
+        return cls(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
 
     @property
     def coordinates(self) -> np.ndarray:
@@ -184,7 +184,7 @@ class Plane:
         top_mask = np.isclose(bounds[:, 2], bounds[:, 2].min())
         top = bounds[top_mask]
         bottom = bounds[~top_mask]
-        if len(top) != 2 or len(bounds) != 4:
+        if np.linalg.matrix_rank(bounds) != 3 or len(top) != 2 or len(bounds) != 4:
             raise ValueError("Bounds do not form a plane.")
         # We want to ensure that the bottom and top and pointing in roughly the
         # same direction. To do this, we compare the dot product of the top and
@@ -193,7 +193,9 @@ class Plane:
         # pointing in opposite directions.
         if np.dot(top[1] - top[0], bottom[1] - bottom[0]) < 0:
             bottom = bottom[::-1]
-        orientation = np.linalg.det(np.array([top[1] - top[0], bottom[0] - top[0]])[:, :-1])
+        orientation = np.linalg.det(
+            np.array([top[1] - top[0], bottom[0] - top[0]])[:, :-1]
+        )
         # If the orientation is not close to 0 and is negative, then dip
         # direction is to the left of the strike direction, so we reverse
         # the order of the top and bottom corners.
@@ -202,8 +204,8 @@ class Plane:
             bottom = bottom[::-1]
         self.bounds = np.array([top[0], top[1], bottom[1], bottom[0]])
 
-    @staticmethod
-    def from_corners(corners: np.ndarray) -> Self:
+    @classmethod
+    def from_corners(cls, corners: np.ndarray) -> Self:
         """Construct a plane point source from its corners.
 
         Parameters
@@ -216,7 +218,7 @@ class Plane:
         Plane
             The plane source representing this geometry.
         """
-        return Plane(coordinates.wgs_depth_to_nztm(corners))
+        return cls(coordinates.wgs_depth_to_nztm(corners))
 
     @property
     def corners(self) -> np.ndarray:
@@ -226,12 +228,12 @@ class Plane:
     @property
     def length_m(self) -> float:
         """float: The length of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[1] - self.bounds[0]))
 
     @property
     def width_m(self) -> float:
         """float: The width of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[-1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[-1] - self.bounds[0]))
 
     @property
     def bottom_m(self) -> float:
@@ -301,8 +303,9 @@ class Plane:
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
 
-    @staticmethod
+    @classmethod
     def from_centroid_strike_dip(
+        cls,
         centroid: np.ndarray,
         strike: float,
         dip_dir: Optional[float],
@@ -350,7 +353,7 @@ class Plane:
             length,
             projected_width,
         )
-        return Plane(coordinates.wgs_depth_to_nztm(np.array(corners)))
+        return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
     def centroid(self) -> np.ndarray:
@@ -460,8 +463,8 @@ class Fault:
 
     planes: list[Plane]
 
-    @staticmethod
-    def from_corners(fault_corners: np.ndarray) -> "Fault":
+    @classmethod
+    def from_corners(cls, fault_corners: np.ndarray) -> Self:
         """Construct a plane source geometry from the corners of the plane.
 
         Parameters
@@ -474,7 +477,7 @@ class Fault:
         Fault
             The fault object representing this geometry.
         """
-        return Fault([Plane.from_corners(corners) for corners in fault_corners])
+        return cls([Plane.from_corners(corners) for corners in fault_corners])
 
     def area(self) -> float:
         """Compute the area of a fault.
