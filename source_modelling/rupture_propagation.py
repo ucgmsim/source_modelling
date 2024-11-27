@@ -20,11 +20,12 @@ Typing Aliases:
 """
 
 from collections import defaultdict, namedtuple
-from typing import Generator, Optional
+from collections.abc import Generator
+from typing import Optional
 
 import numpy as np
-from qcore import coordinates
 
+from qcore import coordinates
 from source_modelling import sources
 
 DistanceGraph = dict[str, dict[str, int]]
