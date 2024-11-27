@@ -288,11 +288,37 @@ def test_plane_rrup(plane: Plane, point: np.ndarray):
         ftol=1e-5,
     )
     optimized_res = np.linalg.norm(res.fun)
-    print(optimized_res, res.x)
     assert np.isclose(
         plane.rrup_distance(coordinates.nztm_to_wgs_depth(point)),
         optimized_res,
         atol=1e-3,
+    )
+
+
+@given(
+    plane=st.builds(
+        fault_plane,
+        length=st.floats(0.1, 1000),
+        projected_width=st.floats(0.1, 1000),
+        strike=st.floats(0, 179),
+        dip_dir=st.floats(5, 179),
+        top=st.floats(0, 100),
+        depth=st.floats(0.1, 100),
+        centroid=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    local_coordinates=nst.arrays(
+        float, (2,), elements={"min_value": 0, "max_value": 1}
+    ),
+)
+def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
+    assume(plane.dip_dir >= plane.strike + 5)
+    assert np.isclose(
+        plane.rrup_distance(
+            plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
+        ),
+        0,
     )
 
 

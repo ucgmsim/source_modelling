@@ -468,16 +468,10 @@ class Plane:
         point : np.ndarray
             The point to compute distance to (in lat, lon, depth format)
 
-
         Returns
         -------
         float
             The rrup distance (in metres) between the point and the fault geometry.
-
-        Raises
-        ------
-        ValueError
-            If the optimisation routine fails to converge for the point.
         """
         point_nztm = coordinates.wgs_depth_to_nztm(point)
         frame = np.array(
@@ -684,11 +678,6 @@ class Fault:
         -------
         float
             The rrup distance (in metres) between the point and the fault geometry.
-
-        Raises
-        ------
-        ValueError
-            If the optimisation routine fails to converge for the point.
         """
 
         return min(plane.rrup_distance(point) for plane in self.planes)
