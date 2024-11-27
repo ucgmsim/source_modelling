@@ -1,3 +1,4 @@
+import itertools
 from typing import Optional
 
 import numpy as np
@@ -7,8 +8,8 @@ import shapely
 from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
-from qcore import coordinates
 
+from qcore import coordinates
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
@@ -283,6 +284,25 @@ def connected_fault(
         for i in range(len(leading_edges) - 1)
     ]
     return Fault(planes)
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=5),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    )
+)
+def test_fault_reordering(fault: Fault):
+    """Ensure that the plane order in faults is completely determined by the planes."""
+    for order in itertools.permutations(range(len(fault.planes))):
+        planes = [fault.planes[i] for i in order]
+        fault_reorder = Fault(planes)
+        assert np.allclose(fault_reorder.corners, fault.corners)
 
 
 @given(

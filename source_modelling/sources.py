@@ -17,15 +17,15 @@ Fault:
 """
 
 import dataclasses
-from typing import Optional, Protocol, Self
-from collections import defaultdict
 import itertools
-import networkx as nx
+from typing import Optional, Protocol, Self
 
+import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import scipy as sp
 import shapely
+
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -187,6 +187,7 @@ class Plane:
     bounds: npt.NDArray[np.float32]
 
     def __post_init__(self):
+        """Check that the plane bounds are consistent and in the correct order."""
         top_mask = np.isclose(self.bounds[:, 2], self.bounds[:, 2].min())
         top = self.bounds[top_mask]
         bottom = self.bounds[~top_mask]
@@ -569,6 +570,16 @@ class Fault:
             for i in reversed(list(nx.topological_sort(points_into_graph)))
         ]
 
+    @property
+    def dip(self) -> float:
+        """float: The dip angle of the fault."""
+        return self.planes[0].dip
+
+    @property
+    def dip_dir(self) -> float:
+        """float: The dip direction of the fault."""
+        return self.planes[0].dip_dir
+
     @classmethod
     def from_corners(cls, fault_corners: np.ndarray) -> Self:
         """Construct a plane source geometry from the corners of the plane.
@@ -616,11 +627,6 @@ class Fault:
             have planes of constant width).
         """
         return self.planes[0].width
-
-    @property
-    def dip_dir(self) -> float:
-        """float: The dip direction of the first fault plane (A fault is assumed to have planes of constant dip direction)."""
-        return self.planes[0].dip_dir
 
     @property
     def corners(self) -> np.ndarray:
