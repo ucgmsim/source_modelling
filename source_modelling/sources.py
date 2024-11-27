@@ -18,7 +18,7 @@ Fault:
 
 import dataclasses
 import itertools
-from typing import Optional, Protocol, Self
+from typing import Optional, Self
 
 import networkx as nx
 import numpy as np
@@ -824,20 +824,7 @@ class Fault:
         )
 
 
-class IsSource(Protocol):
-    """Type definition for a source with local coordinates."""
-
-    bounds: np.ndarray
-
-    def fault_coordinates_to_wgs_depth_coordinates(
-        self,
-        fault_coordinates: np.ndarray,
-    ) -> np.ndarray: ...
-
-    def wgs_depth_coordinates_to_fault_coordinates(
-        self,
-        fault_coordinates: np.ndarray,
-    ) -> np.ndarray: ...
+IsSource = Plane | Fault | Point
 
 
 def closest_point_between_sources(
