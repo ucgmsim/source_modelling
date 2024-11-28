@@ -15,7 +15,6 @@ Functions:
 
 Typing Aliases:
     - DistanceGraph: A graph representing distances between faults.
-    - ProbabilityGraph: A graph representing jump probabilities between faults.
     - RuptureCausalityTree: A tree representing the causality of ruptures between faults.
 """
 
@@ -30,8 +29,7 @@ import numpy as np
 from qcore import coordinates
 from source_modelling import sources
 
-DistanceGraph = dict[str, dict[str, int]]
-ProbabilityGraph = dict[str, dict[str, float]]
+DistanceGraph = dict[str, dict[str, float]]
 RuptureCausalityTree = dict[str, Optional[str]]
 
 
@@ -278,7 +276,7 @@ def probability_graph(
 
     Returns
     -------
-    ProbabilityGraph
+    nx.DiGraph
         The graph with faults as vertices. Each edge (fault_u, fault_v)
         has a log-probability -p as a weight. The log-probability -p here
         is the negative of the log-probability a rupture propogates from
