@@ -1,25 +1,29 @@
+import itertools
 from typing import Optional
 
 import numpy as np
+import pytest
 import scipy as sp
 import shapely
 from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
-from qcore import coordinates
 
+from qcore import coordinates
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
 
 def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndarray:
+    """Create a coordinate array from latitude, longitude, and optional depth."""
     if depth is not None:
         return np.array([lat, lon, depth])
     return np.array([lat, lon])
 
 
 def valid_coordinates(point_coordinates: np.ndarray) -> bool:
-    return np.all(np.isfinite(coordinates.wgs_depth_to_nztm(point_coordinates)))
+    """Check if the given coordinates are valid."""
+    return bool(np.all(np.isfinite(coordinates.wgs_depth_to_nztm(point_coordinates))))
 
 
 @given(
@@ -41,6 +45,7 @@ def test_point_construction(
     dip: float,
     dip_dir: float,
 ):
+    """Test the construction of a Point object from latitude, longitude, and depth."""
     assume(valid_coordinates(point_coordinates))
     point = sources.Point.from_lat_lon_depth(
         point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
@@ -78,6 +83,7 @@ def test_point_coordinate_system(
     dip_dir: float,
     local_coordinates: np.ndarray,
 ):
+    """Test the coordinate system transformation for a Point object."""
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
@@ -113,6 +119,7 @@ def test_point_coordinate_inversion(
     dip_dir: float,
     local_coordinates: np.ndarray,
 ):
+    """Test the inversion of coordinate transformations for a Point object."""
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
@@ -145,7 +152,9 @@ def test_plane_construction(
     depth: float,
     centroid: np.ndarray,
 ):
+    """Test the construction of a Plane object from centroid, strike, and dip."""
     assume(valid_coordinates(centroid))
+    assume(dip_dir > strike + 1)
     plane = Plane.from_centroid_strike_dip(
         centroid, strike, dip_dir, top, top + depth, length, projected_width
     )
@@ -160,6 +169,54 @@ def test_plane_construction(
     assert np.isclose(plane.strike, strike, atol=1e-6)
     assert np.isclose(plane.dip_dir, dip_dir, atol=1e-6)
     assert np.allclose(plane.centroid[:2], centroid, atol=1e-6)
+    # The constructor should not care about plane bound orientation
+    assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
+
+
+# Test 1: Less than 4 points
+def test_less_than_four_points():
+    """Test that constructing a Plane with less than 4 points raises a ValueError."""
+    bounds = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])  # Only 3 points
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 2: More than 4 points
+def test_more_than_four_points():
+    """Test that constructing a Plane with more than 4 points raises a ValueError."""
+    bounds = np.array(
+        [[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]]
+    )  # 5 points
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 3: Matrix rank not equal to 3
+def test_matrix_rank_not_three():
+    """Test that constructing a Plane with matrix rank not equal to 3 raises a ValueError."""
+    bounds = np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]])  # Rank < 3
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 4: Top points do not equal 2
+def test_top_points_not_two():
+    """Test that constructing a Plane with top points not equal to 2 raises a ValueError."""
+    bounds = np.array(
+        [[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
+    )  # All points lie on the same top plane
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 5: General invalid input (not forming a valid plane)
+def test_general_invalid_input():
+    """Test that constructing a Plane with invalid input raises a ValueError."""
+    bounds = np.array(
+        [[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 2]]
+    )  # Points do not form a plane
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
 
 
 def fault_plane(
@@ -171,6 +228,7 @@ def fault_plane(
     depth: float,
     centroid: np.ndarray,
 ) -> Plane:
+    """Create a Plane object from fault parameters."""
     return Plane.from_centroid_strike_dip(
         centroid, strike, dip_dir, top, top + depth, length, projected_width
     )
@@ -195,6 +253,7 @@ def fault_plane(
 )
 @seed(1)
 def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
+    """Test the inversion of coordinate transformations for a Plane object."""
     assume(not np.isclose(plane.dip_dir, plane.strike))
     assert np.allclose(
         plane.wgs_depth_coordinates_to_fault_coordinates(
@@ -208,6 +267,7 @@ def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray)
 def connected_fault(
     lengths: list[float], width: float, strike: float, start_coordinates: np.ndarray
 ) -> Fault:
+    """Create a Fault object from connected planes."""
     strike_direction = np.array(
         [np.cos(np.radians(strike)), np.sin(np.radians(strike)), 0]
     )
@@ -243,6 +303,25 @@ def connected_fault(
 @given(
     fault=st.builds(
         connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=5),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    )
+)
+def test_fault_reordering(fault: Fault):
+    """Ensure that the plane order in faults is completely determined by the planes."""
+    for order in itertools.permutations(range(len(fault.planes))):
+        planes = [fault.planes[i] for i in order]
+        fault_reorder = Fault(planes)
+        assert np.allclose(fault_reorder.corners, fault.corners)
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
         lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
         width=st.floats(0.1, 100),
         strike=st.floats(0, 179),
@@ -252,6 +331,7 @@ def connected_fault(
     )
 )
 def test_fault_construction(fault: Fault):
+    """Test the construction of a Fault object from connected planes."""
     assert fault.width == fault.planes[0].width
     assert np.isclose(fault.dip_dir, fault.planes[0].strike + 90)
     assert fault.corners.shape == (4 * len(fault.planes), 3)
@@ -280,6 +360,7 @@ def test_fault_construction(fault: Fault):
     ),
 )
 def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray):
+    """Test the inversion of coordinate transformations for a Fault object."""
     assert np.allclose(
         fault.wgs_depth_coordinates_to_fault_coordinates(
             fault.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
@@ -311,12 +392,13 @@ def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray)
 )
 @settings(deadline=1000)
 @seed(1)
-def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
+def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
+    """Test the closest point comparison between two Fault objects."""
     pairwise_distance = sp.spatial.distance.cdist(fault.bounds, other_fault.bounds)
     assume(pairwise_distance.min() > 1)
     point_a, point_b = sources.closest_point_between_sources(fault, other_fault)
-    X, Y = np.meshgrid(np.linspace(0, 1, num=10), np.linspace(0, 1, num=10))
-    local_coords = np.c_[X.ravel(), Y.ravel()]
+    x, y = np.meshgrid(np.linspace(0, 1, num=10), np.linspace(0, 1, num=10))
+    local_coords = np.c_[x.ravel(), y.ravel()]
     points_on_a = np.array(
         [
             fault.fault_coordinates_to_wgs_depth_coordinates(coord)

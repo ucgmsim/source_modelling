@@ -17,11 +17,15 @@ Fault:
 """
 
 import dataclasses
-from typing import Optional, Protocol
+import itertools
+from typing import Optional, Self
 
+import networkx as nx
 import numpy as np
+import numpy.typing as npt
 import scipy as sp
 import shapely
+
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -29,7 +33,7 @@ _KM_TO_M = 1000
 
 @dataclasses.dataclass
 class Point:
-    """A representation of point source.
+    """A representation of a point source.
 
     Attributes
     ----------
@@ -55,8 +59,8 @@ class Point:
     dip: float
     dip_dir: float
 
-    @staticmethod
-    def from_lat_lon_depth(point_coordinates: np.ndarray, **kwargs) -> "Point":
+    @classmethod
+    def from_lat_lon_depth(cls, point_coordinates: np.ndarray, **kwargs) -> Self:
         """Construct a point source from a lat, lon, depth format.
 
         Parameters
@@ -72,7 +76,7 @@ class Point:
             The Point source representing this geometry.
 
         """
-        return Point(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
+        return cls(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
 
     @property
     def coordinates(self) -> np.ndarray:
@@ -180,11 +184,76 @@ class Plane:
          3            2
     """
 
-    # Bounds for plane are just the corners
-    bounds: np.ndarray
+    bounds: npt.NDArray[np.float32]
 
-    @staticmethod
-    def from_corners(corners: np.ndarray) -> "Plane":
+    def _check_bounds_form_plane(self):
+        """Check that the bounds form a plane.
+
+        The checks performed are:
+            1. Two points with a minimum depth.
+            2. Two points with a maximum depth.
+            3. Four points total, spanning exactly a plane. Not a line or a point.
+
+        Raises
+        ------
+        ValueError
+            If the bounds do not form a plane.
+        """
+        top_mask = np.isclose(self.bounds[:, 2], self.bounds[:, 2].min())
+        top = self.bounds[top_mask]
+        bottom = self.bounds[~top_mask]
+        if (
+            np.linalg.matrix_rank(self.bounds) != 3
+            or len(top) != 2
+            or len(self.bounds) != 4
+            or not np.isclose(bottom[0, 2], bottom[1, 2])
+        ):
+            raise ValueError("Bounds do not form a plane.")
+
+    def __post_init__(self):
+        """Check that the plane bounds are consistent and in the correct order.
+
+        These checks are performed to ensure that the corners of the plane
+        actually form a plane, and the order of the points is in the order
+        required for the plane coordinates to make sense. The plane coordinates
+        require the first two points to be the top left and top right corners
+        (with respect to strike), and the last two points to be the bottom right
+        and bottom left corners (with respect to strike).
+
+        These checks are non-trivial which is why we implement them here instead
+        of requiring the caller to verify this themselves.
+
+        Raises
+        ------
+        ValueError
+            If the bounds do not form a plane.
+        """
+        self._check_bounds_form_plane()
+
+        top_mask = np.isclose(self.bounds[:, 2], self.bounds[:, 2].min())
+        top = self.bounds[top_mask]
+        bottom = self.bounds[~top_mask]
+        # We want to ensure that the bottom and top are pointing in roughly the
+        # same direction. To do this, we compare the dot product of the top and
+        # bottom vectors. If the dot product is positive then they are pointing
+        # in roughly the same direction, if it is negative then they are
+        # pointing in opposite directions.
+        if np.dot(top[1] - top[0], bottom[1] - bottom[0]) < 0:
+            bottom = bottom[::-1]
+        orientation = np.linalg.det(
+            np.array([top[1] - top[0], bottom[0] - top[0]])[:, :-1]
+        )
+
+        # If the orientation is not close to 0 and is negative, then dip
+        # direction is to the left of the strike direction, so we reverse
+        # the order of the top and bottom corners.
+        if not np.isclose(orientation, 0) and orientation < 0:
+            top = top[::-1]
+            bottom = bottom[::-1]
+        self.bounds = np.array([top[0], top[1], bottom[1], bottom[0]])
+
+    @classmethod
+    def from_corners(cls, corners: np.ndarray) -> Self:
         """Construct a plane point source from its corners.
 
         Parameters
@@ -197,7 +266,7 @@ class Plane:
         Plane
             The plane source representing this geometry.
         """
-        return Plane(coordinates.wgs_depth_to_nztm(corners))
+        return cls(coordinates.wgs_depth_to_nztm(corners))
 
     @property
     def corners(self) -> np.ndarray:
@@ -207,12 +276,12 @@ class Plane:
     @property
     def length_m(self) -> float:
         """float: The length of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[1] - self.bounds[0]))
 
     @property
     def width_m(self) -> float:
         """float: The width of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[-1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[-1] - self.bounds[0]))
 
     @property
     def bottom_m(self) -> float:
@@ -358,8 +427,9 @@ class Plane:
         corners = coordinates.nztm_to_wgs_depth(np.array([c1, c2, c3, c4]))
         return Plane.from_corners(corners)
 
-    @staticmethod
+    @classmethod
     def from_centroid_strike_dip(
+        cls,
         centroid: np.ndarray,
         strike: float,
         dip_dir: Optional[float],
@@ -367,7 +437,7 @@ class Plane:
         dbottom: float,
         length: float,
         projected_width: float,
-    ) -> "Plane":
+    ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
         This is used for older descriptions of sources. Internally
@@ -377,14 +447,14 @@ class Plane:
         Parameters
         ----------
         centroid : np.ndarray
-            The centre of the fault plane in lat, lon coordinates.
+            The center of the fault plane in lat, lon coordinates.
         strike : float
             The strike of the fault (in degrees).
         dip_dir : Optional[float]
             The dip direction of the fault (in degrees). If None this is assumed to be strike + 90 degrees.
-        top : float
+        dtop : float
             The top depth of the plane (in km).
-        bottom : float
+        dbottom : float
             The bottom depth of the plane (in km).
         length : float
             The length of the fault plane (in km).
@@ -394,7 +464,7 @@ class Plane:
         Returns
         -------
         Plane
-            The fault plane with centre at `centroid`, and where the
+            The fault plane with center at `centroid`, and where the
             parameters strike, dip_dir, top, bottom, length and width
             match what is passed to this function.
         """
@@ -407,18 +477,17 @@ class Plane:
             length,
             projected_width,
         )
-        corners[[2, 3]] = corners[[3, 2]]
-        return Plane(coordinates.wgs_depth_to_nztm(np.array(corners)))
+        return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
     def centroid(self) -> np.ndarray:
-        """np.ndarray: The centre of the fault plane."""
+        """np.ndarray: The center of the fault plane."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, plane_coordinates: np.ndarray
     ) -> np.ndarray:
-        """Convert plane coordinates to nztm global coordinates.
+        """Convert plane coordinates to NZTM global coordinates.
 
         Parameters
         ----------
@@ -427,7 +496,7 @@ class Plane:
             2D coordinates (x, y) given for a fault plane (a plane), where x
             represents displacement along the strike, and y
             displacement along the dip (see diagram below). The
-            origin for plane coordinates is the centre of the fault.
+            origin for plane coordinates is the center of the fault.
 
                           +x
              0 0   ─────────────────>
@@ -443,7 +512,7 @@ class Plane:
         Returns
         -------
         np.ndarray
-            An 3d-vector of (lat, lon, depth) transformed coordinates.
+            A 3d-vector of (lat, lon, depth) transformed coordinates.
         """
         origin = self.bounds[0]
         top_right = self.bounds[1]
@@ -507,7 +576,7 @@ class Fault:
     It provides methods for computing the area of the fault, getting the widths and
     lengths of all fault planes, retrieving all corners of the fault, converting
     global coordinates to fault coordinates, converting fault coordinates to global
-    coordinates, generating a random hypocentre location within the fault, and
+    coordinates, generating a random hypocenter location within the fault, and
     computing the expected fault coordinates.
 
     Attributes
@@ -518,8 +587,154 @@ class Fault:
 
     planes: list[Plane]
 
-    @staticmethod
-    def from_corners(fault_corners: np.ndarray) -> "Fault":
+    def _basic_consistency_checks(self):
+        """Check that the planes are consistent in dip direction and width.
+
+        Raises
+        ------
+        ValueError
+            If the planes are not consistent in dip direction or width."""
+        # Planes can only have one dip, dip direction, and width.
+        if not all(
+            np.isclose(plane.dip_dir, self.planes[0].dip_dir) for plane in self.planes
+        ):
+            raise ValueError("Fault must have a constant dip direction.")
+
+        if not all(
+            np.isclose(plane.width, self.planes[0].width) for plane in self.planes
+        ):
+            raise ValueError("Fault must have constant width.")
+
+    def _validate_fault_plane_connectivity(self, connection_graph: nx.DiGraph):
+        """Validate that the fault planes are connected in a line.
+
+        This function checks that the fault planes form a connected line. It
+        ensures that the planes are connected end-to-end along the strike
+        direction, with exactly one start node and one end node. This is the
+        case if `connection_graph` satisfies the following conditions:
+
+        1. It is connected (weakly, i.e. ignoring the direction of the edges).
+        2. There is exactly one node with an in-degree of 0 and out-degree of 1.
+           - This is the first node by strike, as nothing points into it.
+
+           plane 0 -> plane 1
+
+        3. There is exactly one node with an in-degree of 1 and out-degree of 0.
+           - This is the last node by strike, as nothing points out of it.
+
+           plane (n - 1) -> plane n
+
+        4. Every other node has an in-degree of 1 and out-degree of 1.
+
+           plane (i - 1) -> plane i -> plane (i + 1)
+
+
+        Parameters
+        ----------
+        connection_graph : nx.DiGraph[int]
+            A directed graph representing the connectivity of the fault planes.
+
+        Raises
+        ------
+        ValueError
+            If the fault planes are not connected in a line.
+        """
+        if not nx.is_weakly_connected(connection_graph):
+            raise ValueError("Fault planes must be connected.")
+
+        start_nodes = 0
+        end_nodes = 0
+        for node in connection_graph.nodes:
+            in_degree = connection_graph.in_degree(node)
+            out_degree = connection_graph.out_degree(node)
+
+            if in_degree == 0 and out_degree == 1:
+                start_nodes += 1
+            elif in_degree == 1 and out_degree == 0:
+                end_nodes += 1
+            elif in_degree == 1 and out_degree == 1:
+                continue
+            else:
+                raise ValueError("Fault planes must be connected in a line.")
+        if not (start_nodes == 1 and end_nodes == 1):
+            raise ValueError("Fault planes must be connected in a line.")
+
+    def __post_init__(self) -> None:
+        """Ensure that planes are ordered along strike end-to-end.
+
+        The intention of this method is to ensure that the planes given are:
+
+        1. Consistent in dip direction and width. You cannot have a fault with
+        differing dip directions or widths because this would imply that the
+        fault is not a single fault.
+
+        2. Connected end-to-end along strike. This is to ensure that the fault
+        is a single fault and not a series of disconnected faults, or multiple
+        faults that splay off from one another.
+
+        The above two checks ensure that the corners of planes line up in such a
+        way that the fault can have a fault coordinate system applied to it.
+        This is essential for computing the shortest distances between faults.
+        """
+        # The trivial case where the number of planes is one should be ignored
+        if len(self.planes) == 1:
+            return
+
+        self._basic_consistency_checks()
+        # We need to check that the plane given is a series of connected planes
+        # that meet end-to-end. There are then two cases:
+        # 1. The fault splays or is disconnected. We should raise a ValueError in this case.
+        # 2. The fault is a line, but just lacks the correct order. Then we should re-order it to be a connected line.
+        # The "correct" order for a fault is one that is oriented with each plane end-to-end along strike, that is
+        #
+        # ">" strike order
+        # ┌─────>──┬─────>──┬────>──┐
+        # │        │        │       │
+        # │        │        │       │
+        # │        │        │       │
+        # │   0    │   1    │   2   │
+        # │        │        │       │
+        # │        │        │       │
+        # │        │        │       │
+        # └────────┴────────┴───────┘
+        points_into_relation: dict[int, list[int]] = {
+            i: [] for i in range(len(self.planes))
+        }
+
+        for i, j in itertools.product(range(len(self.planes)), repeat=2):
+            if i == j:
+                continue
+            # A plane i points into a plane j if the right-edge (by strike)
+            # of plane i is close to the left-edge (by strike) of plane j.
+            if np.allclose(self.planes[i].bounds[1], self.planes[j].bounds[0]):
+                points_into_relation[j].append(i)  # Plane i points into plane j
+
+        # This relation can now be used to identify if the list of planes given is a line.
+        points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
+            points_into_relation, create_using=nx.DiGraph
+        )
+        self._validate_fault_plane_connectivity(points_into_graph)
+
+        # Now that we have established the planes line up correctly, we can
+        # obtain the line in question with a topological sort, which will
+        # return the correct order of planes
+        self.planes = [
+            self.planes[i]
+            for i in reversed(list(nx.topological_sort(points_into_graph)))
+        ]
+
+    @property
+    def dip(self) -> float:
+        """float: The dip angle of the fault."""
+        return self.planes[0].dip
+
+    @property
+    def dip_dir(self) -> float:
+        """float: The dip direction of the fault."""
+        return self.planes[0].dip_dir
+
+    @classmethod
+    def from_corners(cls, fault_corners: np.ndarray) -> Self:
         """Construct a plane source geometry from the corners of the plane.
 
         Parameters
@@ -532,7 +747,7 @@ class Fault:
         Fault
             The fault object representing this geometry.
         """
-        return Fault([Plane.from_corners(corners) for corners in fault_corners])
+        return cls([Plane.from_corners(corners) for corners in fault_corners])
 
     def area(self) -> float:
         """Compute the area of a fault.
@@ -567,11 +782,6 @@ class Fault:
         return self.planes[0].width
 
     @property
-    def dip_dir(self) -> float:
-        """float: The dip direction of the first fault plane (A fault is assumed to have planes of constant dip direction)."""
-        return self.planes[0].dip_dir
-
-    @property
     def corners(self) -> np.ndarray:
         """np.ndarray of shape (4n x 3): The corners in (lat, lon, depth) format of each fault plane in the fault, stacked vertically."""
         return np.vstack([plane.corners for plane in self.planes])
@@ -583,12 +793,12 @@ class Fault:
 
     @property
     def centroid(self) -> np.ndarray:
-        """np.ndarray: The centre of the fault."""
+        """np.ndarray: The center of the fault."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
     def geometry(self) -> shapely.Polygon:
-        """shapely.Geometry: A shapely geometry for the fault (projected onto the surface)."""
+        """shapely.Polygon: A shapely geometry for the fault (projected onto the surface)."""
         return shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
         )
@@ -600,7 +810,7 @@ class Fault:
 
         Fault coordinates are a tuple (s, d) where s is the distance
         from the top left, and d the distance from the top of the
-        fault (refer to the diagram). The coordinates are normalised
+        fault (refer to the diagram). The coordinates are normalized
         such that (0, 0) is the top left and (1, 1) the bottom right.
 
         (0, 0)
@@ -690,20 +900,7 @@ class Fault:
         )
 
 
-class IsSource(Protocol):
-    """Type definition for a source with local coordinates."""
-
-    bounds: np.ndarray
-
-    def fault_coordinates_to_wgs_depth_coordinates(
-        self,
-        fault_coordinates: np.ndarray,
-    ) -> np.ndarray: ...
-
-    def wgs_depth_coordinates_to_fault_coordinates(
-        self,
-        fault_coordinates: np.ndarray,
-    ) -> np.ndarray: ...
+IsSource = Plane | Fault | Point
 
 
 def closest_point_between_sources(
@@ -713,10 +910,10 @@ def closest_point_between_sources(
 
     Parameters
     ----------
-    source_a : HasCoordinates
+    source_a : IsSource
         The first source. Must have a two-dimensional fault coordinate system.
-    source_b : HasCoordinates
-        The first source. Must have a two-dimensional fault coordinate system.
+    source_b : IsSource
+        The second source. Must have a two-dimensional fault coordinate system.
 
     Raises
     ------

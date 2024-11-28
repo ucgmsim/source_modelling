@@ -67,7 +67,16 @@ POINT_COUNT_RE = r"POINTS (\d+)"
 class Segments(Sequence):
     """A read-only view for SRF segments."""
 
-    def __init__(self, header: pd.DataFrame, points: pd.DataFrame):
+    def __init__(self, header: pd.DataFrame, points: pd.DataFrame) -> None:
+        """Initialise the Segments object.
+
+        Parameters
+        ----------
+        header : pd.DataFrame
+            The header of the SRF file.
+        points : pd.DataFrame
+            The points of the SRF file.
+        """
         self._header = header
         self._points = points
 
