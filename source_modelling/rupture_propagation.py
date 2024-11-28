@@ -93,9 +93,9 @@ def loop_erased_random_walk(
     walk = [root]
     while walk[-1] not in hitting_set:
         neighbours = list(graph[walk[-1]])
-        probabilities = [
-            graph[walk[-1]][neighbour]["weight"] for neighbour in neighbours
-        ]
+        probabilities = np.array(
+            [graph[walk[-1]][neighbour]["weight"] for neighbour in neighbours]
+        )
         neighbour = np.random.choice(neighbours, p=probabilities)
         walk.append(neighbour)
 
@@ -105,6 +105,8 @@ def loop_erased_random_walk(
     while loop_erased_walk[-1] != walk[-1]:
         loop_erased_walk.append(
             walk[
+                # Find the last index of the current node in the walk and add 1
+                # this skips the loop beginning at the current node, if any exists.
                 max(i for i in range(len(walk)) if walk[i] == loop_erased_walk[-1]) + 1
             ]
         )
