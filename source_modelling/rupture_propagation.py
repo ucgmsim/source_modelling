@@ -38,7 +38,7 @@ def loop_erased_random_walk(
 ) -> list[str]:
     """Perform a loop-erased random walk on the graph.
 
-    A loop-erased random walk is a random walk that does not repeat itelf.
+    A loop-erased random walk is a random walk that does not repeat itself.
 
     If a graph looks like
 
@@ -59,7 +59,7 @@ def loop_erased_random_walk(
 
     Obviously a walk could continue forever, but usually we have a set of nodes
     we're interested in reaching, a so-called *hitting set*. For example if the
-    hitting set in the above walk was C we would stopped at:
+    hitting set in the above walk was C we would have stopped at:
 
     A -> B -> C
 
@@ -77,7 +77,7 @@ def loop_erased_random_walk(
     root : str
         The starting node of the walk.
     hitting_set : set[str]
-        The set of nodes that the loop erased walk must end at.
+        The set of nodes that the loop-erased walk must end at.
 
     Returns
     -------
@@ -87,7 +87,7 @@ def loop_erased_random_walk(
     References
     ----------
     [0]: https://en.wikipedia.org/wiki/Loop-erased_random_walk for the
-    definition of the algorithm. Many other text books may have this.
+    definition of the algorithm. Many other textbooks may have this.
     """
     # First we generate a random walk
     walk = [root]
@@ -125,8 +125,8 @@ def random_spanning_tree_with_root(
     w(T) = \prod_{(u, v) \in T} w(u, v),
 
     where w(u, v) is the weight of the edge between u and v. If w(u, v) is the
-    probability of transitition from a vertex u to a vertex v (i.e. the graph is
-    a markov chain), then w(T) is proportional to the probability of sampling
+    probability of transition from a vertex u to a vertex v (i.e. the graph is
+    a Markov chain), then w(T) is proportional to the probability of sampling
     this tree from the distribution of all weighted spanning trees.
 
     Parameters
@@ -164,8 +164,8 @@ def random_spanning_tree(graph: nx.DiGraph) -> dict[str, Optional[str]]:
     w(T) = \prod_{(u, v) \in T} w(u, v),
 
     where w(u, v) is the weight of the edge between u and v. If w(u, v) is the
-    probability of transitition from a vertex u to a vertex v (i.e. the graph is
-    a markov chain), then w(T) is proportional to the probability of sampling
+    probability of transition from a vertex u to a vertex v (i.e. the graph is
+    a Markov chain), then w(T) is proportional to the probability of sampling
     this tree from the distribution of all weighted spanning trees.
 
     Parameters
@@ -262,28 +262,27 @@ def probability_graph(
 ) -> nx.DiGraph:
     """
     Convert a graph of distances between faults into a graph of jump
-    probablities using the Shaw-Dieterich model.
+    probabilities using the Shaw-Dieterich model.
 
     This model assumes that the probability of a rupture jumping from fault_u to
-    fault_v is independent of it's jumping to any other adjacent fault.
+    fault_v is independent of its jumping to any other adjacent fault.
 
     Parameters
     ----------
     distances : DistanceGraph
         The distance graph between faults.
     d0 : float, optional
-        The d0 parameter for the Shaw_Dieterich model. See `shaw_dieterich_distance_model`.
+        The d0 parameter for the Shaw-Dieterich model. See `shaw_dieterich_distance_model`.
     delta : float, optional
-        The delta parameter for the Shaw_Dieterich model. See `shaw_dieterich_distance_model`.
+        The delta parameter for the Shaw-Dieterich model. See `shaw_dieterich_distance_model`.
 
     Returns
     -------
     nx.DiGraph
         The graph with faults as vertices. Each edge (fault_u, fault_v)
-        has a log-probability -p as a weight. The log-probability -p here
-        is the negative of the log-probability a rupture propogates from
-        fault_u to fault_v, relative to the probability it propogates to
-        any of the other neighbours of fault_u.
+        has a probability as a weight. The probability here
+        is the likelihood a rupture propagates from fault_u to fault_v,
+        relative to the probability it propagates to any of the other neighbours of fault_u.
     """
     probabilities_raw = {
         fault_u: {
@@ -342,7 +341,7 @@ def sample_rupture_propagation(
         on the number of possible valid rupture trees starting from it).
     jump_impossibility_limit_distance : int, optional
         The maximum distance between faults for which a jump is considered
-        impossible. Faults further than this distance apart will not be
+        possible. Faults further than this distance apart will not be
         connected in the tree.
 
     Returns
@@ -401,12 +400,12 @@ def tree_nodes_in_order(
 
     Parameters
     ----------
-    faults : list[RealisationFault]
-        List of RealisationFault objects.
+    tree : dict[str, str]
+        The rupture causality tree.
 
     Yields
     ------
-    RealisationFault
+    str
         The next fault in the topologically sorted order.
     """
     tree_child_map = defaultdict(list)
