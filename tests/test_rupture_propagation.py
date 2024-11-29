@@ -27,58 +27,48 @@ random_strongly_connected_graph = hnx.graph_builder(
     ),
     edge_data=st.fixed_dictionaries(
         {
-            "weight_uv": st.floats(min_value=0.01, max_value=0.99),
-            "weight_vu": st.floats(min_value=0.01, max_value=0.99),
+            "weight": st.floats(min_value=0.01, max_value=0.99),
         }
     ),
     connected=True,
-    min_nodes=2,
+    min_nodes=5,
     max_nodes=10,
     self_loops=False,
-).map(to_weighted_directed)
+)
+
+
+def graph_repr(graph: nx.Graph) -> str:
+    return repr(sorted([sorted(edge) for edge in graph.edges]))
 
 
 @given(graph=random_strongly_connected_graph)
 @settings(deadline=None, max_examples=50)
-def test_random_sampling_root(graph: nx.DiGraph):
+def test_random_sampling_root(graph: nx.Graph):
     """Test that the random sampling of spanning trees has a distribution of
     root nodes that matches the expectation from the Matrix-Tree theorem."""
     n = 10000
     probability_of_spanning_trees = 0.0
-    for undirected_tree in mst.SpanningTreeIterator(graph.to_undirected()):
-        for root in graph.nodes:
-            tree = nx.dfs_tree(undirected_tree, root)
-            p_tree = 1.0
-            for u, v in graph.edges:
-                if tree.has_edge(u, v):
-                    p_tree *= graph[u][v]["weight"]
-                else:
-                    p_tree *= 1 - graph[u][v]["weight"]
-            probability_of_spanning_trees += p_tree
+    tree_probabilities: dict[str, float] = {}
+    for tree in mst.SpanningTreeIterator(graph):
+        p_tree = 1.0
+        for u, v in graph.edges:
+            if tree.has_edge(u, v):
+                p_tree *= graph[u][v]["weight"]
+            else:
+                p_tree *= 1 - graph[u][v]["weight"]
+
+        tree_probabilities[graph_repr(tree)] = p_tree
+        probability_of_spanning_trees += p_tree
 
     trees = collections.Counter(
         [
-            repr(sorted(list(tree.items())))
-            for tree in rupture_propagation.sampled_spanning_tree(graph, n_samples=n)
+            graph_repr(tree)
+            for tree in rupture_propagation.sampled_spanning_tree(graph, n)
         ]
     )
-
     kl_divergence = 0.0
-    total_p = 0.0
     for tree_repr, count in trees.items():
-        tree = dict(eval(tree_repr))
-        p_tree = (
-            np.array(
-                [
-                    graph[u][v]["weight"]
-                    if tree.get(v) == u
-                    else 1 - graph[u][v]["weight"]
-                    for u, v in graph.edges
-                ]
-            ).prod()
-            / probability_of_spanning_trees
-        )
-        total_p += p_tree
+        p_tree = tree_probabilities[tree_repr] / probability_of_spanning_trees
         q_tree = count / n
         kl_divergence += p_tree * np.log(p_tree / q_tree)
 
