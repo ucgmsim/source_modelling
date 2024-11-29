@@ -18,187 +18,166 @@ Typing Aliases:
     - RuptureCausalityTree: A tree representing the causality of ruptures between faults.
 """
 
-import itertools
+import collections
 import random
 from collections import defaultdict, namedtuple
 from typing import Generator, Optional
 
 import networkx as nx
+from networkx.algorithms.tree import mst
 import numpy as np
 
 from qcore import coordinates
 from source_modelling import sources
 
 DistanceGraph = dict[str, dict[str, float]]
-RuptureCausalityTree = dict[str, Optional[str]]
+Tree = dict[str, Optional[str]]
 
 
-def loop_erased_random_walk(
-    graph: nx.DiGraph, root: str, hitting_set: set[str]
-) -> list[str]:
-    """Perform a loop-erased random walk on the graph.
-
-    A loop-erased random walk is a random walk that does not repeat itself.
-
-    If a graph looks like
-
-    A -- B
-    | \/ |
-    | /\ |
-    D -- C
-
-    Then a *walk* in this graph would be a sequence of nodes connected by edges that may repeat, for example:
-
-    A -> B -> C -> A -> D
-
-    The *loop-erased random walk* is the same walk, but with the loops erased:
-
-    A -> D
-
-    Notice that the loop A -> B -> C -> A has been erased.
-
-    Obviously a walk could continue forever, but usually we have a set of nodes
-    we're interested in reaching, a so-called *hitting set*. For example if the
-    hitting set in the above walk was C we would have stopped at:
-
-    A -> B -> C
-
-    Of course, this walk has no loops, so this is what would be returned.
-
-    A *loop-erased random walk* is a random walk that is then loop-erased. The
-    walk randomly traverses the graph according to the weights of the edges, and
-    then the loops are erased. The walk continues until it reaches a node in the
-    `hitting_set`.
-
-    Parameters
-    ----------
-    graph : nx.DiGraph
-        The graph to perform the walk on.
-    root : str
-        The starting node of the walk.
-    hitting_set : set[str]
-        The set of nodes that the loop-erased walk must end at.
-
-    Returns
-    -------
-    list[str]
-        A loop-erased random walk beginning at `root` that hits the `hitting_set`.
-
-    References
-    ----------
-    [0]: https://en.wikipedia.org/wiki/Loop-erased_random_walk for the
-    definition of the algorithm. Many other textbooks may have this.
-    """
-    # First we generate a random walk
-    walk = [root]
-    while walk[-1] not in hitting_set:
-        neighbours = list(graph[walk[-1]])
-        probabilities = np.array(
-            [graph[walk[-1]][neighbour]["weight"] for neighbour in neighbours]
-        )
-        neighbour = np.random.choice(neighbours, p=probabilities)
-        walk.append(neighbour)
-
-    # Now we erase loops
-
-    loop_erased_walk = [root]
-    while loop_erased_walk[-1] != walk[-1]:
-        loop_erased_walk.append(
-            walk[
-                # Find the last index of the current node in the walk and add 1
-                # this skips the loop beginning at the current node, if any exists.
-                max(i for i in range(len(walk)) if walk[i] == loop_erased_walk[-1]) + 1
-            ]
-        )
-
-    return loop_erased_walk
+def spanning_tree_with_probabilities(
+    graph: nx.DiGraph, roots: set[str]
+) -> tuple[list[nx.DiGraph], np.ndarray]:
+    trees = []
+    probabilities = []
+    for undirected_tree in mst.SpanningTreeIterator(graph.to_undirected()):
+        for trial_root in roots:
+            tree = nx.dfs_tree(undirected_tree, trial_root)
+            p_tree = 1.0
+            for u, v in graph.edges:
+                if tree.has_edge(u, v):
+                    p_tree *= graph[u][v]["weight"]
+                else:
+                    p_tree *= 1 - graph[u][v]["weight"]
+            trees.append(tree)
+            probabilities.append(p_tree)
+    return trees, np.array(probabilities)
 
 
-def random_spanning_tree_with_root(
-    graph: nx.DiGraph, root: str
-) -> dict[str, Optional[str]]:
-    r"""Fairly sample a random spanning tree with a given root from a graph.
-
-    Trees from this function are sampled proportionally to the weight of the
-    tree, defined as:
-
-    w(T) = \prod_{(u, v) \in T} w(u, v),
-
-    where w(u, v) is the weight of the edge between u and v. If w(u, v) is the
-    probability of transition from a vertex u to a vertex v (i.e. the graph is
-    a Markov chain), then w(T) is proportional to the probability of sampling
-    this tree from the distribution of all weighted spanning trees.
-
-    Parameters
-    ----------
-    graph : nx.DiGraph
-        The graph to sample the tree from. Higher weighted edges are included in
-        the graph more often.
-    root : str
-        The root of the tree.
-
-    Returns
-    -------
-    dict[str, Optional[str]]
-        The sampled spanning tree.
-    """
-    random_spanning_tree: dict[str, Optional[str]] = {root: None}
-    while set(random_spanning_tree) != set(graph.nodes):
-        to_include_vertex = random.choice(
-            list(set(graph.nodes) - set(random_spanning_tree))
-        )
-        walk = loop_erased_random_walk(
-            graph, to_include_vertex, set(random_spanning_tree)
-        )
-        for now, next in itertools.pairwise(walk):
-            random_spanning_tree[now] = next
-    return random_spanning_tree
-
-
-def random_spanning_tree(graph: nx.DiGraph) -> dict[str, Optional[str]]:
+def sampled_spanning_tree(
+    graph: nx.DiGraph, root: Optional[str] = None, n_samples: int = 1
+) -> dict[str, Optional[str]] | list[dict[str, Optional[str]]]:
     r"""Fairly sample a random spanning tree from a graph.
 
     Trees from this function are sampled proportionally to the weight of the
     tree, defined as:
 
-    w(T) = \prod_{(u, v) \in T} w(u, v),
+    P(T) = \prod_{(u, v) \in T} w(u, v) * \prod_{(u, v) \notin T}(1 - w(u, v)),
 
-    where w(u, v) is the weight of the edge between u and v. If w(u, v) is the
-    probability of transition from a vertex u to a vertex v (i.e. the graph is
-    a Markov chain), then w(T) is proportional to the probability of sampling
-    this tree from the distribution of all weighted spanning trees.
+    where w(u, v) is the weight of the edge between u and v.
 
     Parameters
     ----------
     graph : nx.DiGraph
         The graph to sample the tree from. Higher weighted edges are included in
         the graph more often.
+    root: str, optional
+        If provided, then the randomly sampled tree is drawn from the
+        population of random trees having `root` as their root.  Otherwise,
+        the random tree will have a random root (though, not uniformly random).
+    n_samples: int, optional
+        If provided, then return
 
     Returns
     -------
     dict[str, Optional[str]]
-        The sampled spanning tree.
+        The sampled spanning tree if `n_samples == 1`.
+    list[dict[str, Optional[str]]]
+        The sampled spanning tree if `n_samples > 1`.
     """
-    epsilon = 1
-    death_state = "__DEATH_STATE__"
-    while True:
-        epsilon /= 2
-        graph_epsilon = graph.copy()
-        # divide all the weights by 1 - epsilon
-        for u, v in graph_epsilon.edges:
-            graph_epsilon[u][v]["weight"] *= 1 - epsilon
-        graph_epsilon.add_node(death_state)
-        # add a transition from all nodes to the death state with weight epsilon
-        for node in graph_epsilon.nodes:
-            graph_epsilon.add_edge(node, death_state, weight=epsilon)
-        tree = random_spanning_tree_with_root(graph_epsilon, death_state)
-        if sum(1 for node in tree if tree[node] == death_state) == 1:
-            break
-    tree.pop(death_state)
-    tree = {
-        node: parent if parent != death_state else None for node, parent in tree.items()
+    roots = set(graph.nodes)
+    if root:
+        roots = {root}
+    trees, probabilities = spanning_tree_with_probabilities(graph, roots)
+    tree_samples = random.choices(trees, k=n_samples, weights=probabilities)
+    tree_roots = [
+        next(node for node in tree.nodes if tree.in_degree(node) == 0)
+        for tree in tree_samples
+    ]
+    samples_as_tree_functions: list[dict[str, Optional[str]]] = [
+        {v: u for u, v in tree.edges} | {root: None}
+        for root, tree in zip(tree_roots, tree_samples)
+    ]
+    if n_samples == 1:
+        return samples_as_tree_functions[0]
+
+    return samples_as_tree_functions
+
+
+def graph_to_tree(tree: nx.DiGraph) -> Tree:
+    root = tree_root(tree)
+    return {v: u for u, v in tree.edges} | {root: None}
+
+
+def tree_root(tree: nx.DiGraph) -> str:
+    return next(n for n in tree.nodes if n.in_degree() == 0)
+
+
+def sample_tree_with_prior(
+    graph: nx.DiGraph, prior: dict[str, float], n_samples: int = 1
+) -> Tree | list[Tree]:
+    """Sample spanning trees with a prior probability for roots.
+
+    Trees are sampled according to the tree sampling algorithm in
+    `sampled_spanning_tree`, but are conditioned on `prior`: where P(R)
+    is some prior probability of selecting a node R. Note that the prior
+    dictionary probabilities do not have to sum to 1, these probabilities
+    are used to condition the selection of roots via bayes theorem:
+
+    P(tree has root R | we sample a spanning tree) =
+        P(sample a spanning tree | tree has root R) * P(tree has root R)
+        / P(we sample a spanning tree)
+
+    P(tree has root R) is the prior.
+
+    Parameters
+    ----------
+    graph : nx.DiGraph
+        Directed graph with weighted edges.
+    prior : dict[str, float]
+        Prior probabilities for each node being the root.
+    n_samples : int, optional
+        Number of trees to sample. Default is 1.
+
+    Returns
+    -------
+    Tree or list[Tree]
+        A sampled spanning tree if `n_samples` is 1, otherwise a list of sampled trees.
+    """
+    trees, probabilities = spanning_tree_with_probabilities(graph, set(graph.nodes))
+    tree_roots = [tree_root(tree) for tree in trees]
+
+    p_rupture_propagates: dict[str, float] = {}
+
+    rooted_trees: defaultdict[str, list[nx.DiGraph]] = defaultdict(list)
+    rooted_probabilities: defaultdict[str, list[float]] = defaultdict(list)
+    for root, tree, probability in zip(tree_roots, trees, probabilities):
+        p_rupture_propagates[root] += probability
+        rooted_trees[root].append(tree)
+        rooted_probabilities[root].append(probability)
+
+    p_rupture = probabilities.sum()
+    posterior_initial = {
+        root: p_rupture_propagates[root] * prior[root] / p_rupture for root in prior
     }
-    return tree
+    roots = collections.Counter(
+        random.choices(
+            list(posterior_initial),
+            k=n_samples,
+            weights=list(posterior_initial.values()),
+        )
+    )
+
+    sampled_trees: list[nx.DiGraph] = []
+    for root, n_root_samples in roots.items():
+        sampled_trees.extend(
+            random.choices(
+                rooted_trees[root], weights=rooted_probabilities[root], k=n_root_samples
+            )
+        )
+
+    if n_samples == 1:
+        return graph_to_tree(sampled_trees[0])
+    return [graph_to_tree(graph) for graph in sampled_trees]
 
 
 JumpPair = namedtuple("JumpPair", ["from_point", "to_point"])
@@ -324,7 +303,7 @@ def sample_rupture_propagation(
     sources_map: dict[str, sources.IsSource],
     initial_source: Optional[str] = None,
     jump_impossibility_limit_distance: int = 15000,
-) -> RuptureCausalityTree:
+) -> Tree:
     """Sample a rupture propagation tree from a set of sources.
 
     This function samples a rupture propagation tree from a set of sources. The
@@ -380,7 +359,7 @@ def sample_rupture_propagation(
 
 def jump_points_from_rupture_tree(
     source_map: dict[str, sources.IsSource],
-    rupture_causality_tree: RuptureCausalityTree,
+    rupture_causality_tree: Tree,
 ) -> dict[str, JumpPair]:
     jump_points = {}
     for source, parent in rupture_causality_tree.items():

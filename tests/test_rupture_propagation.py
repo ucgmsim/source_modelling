@@ -1,87 +1,88 @@
+import collections
+
+import networkx as nx
 import numpy as np
 import pytest
+import hypothesis_networkx as hnx
+from hypothesis import strategies as st
 
-from source_modelling import rupture_propagation, sources
+from hypothesis import given, settings
+from source_modelling import rupture_propagation
+from networkx.algorithms.tree import mst
 
 
-def test_simple_line_case():
-    """Tests a simple rupture propagation scenario.
+def to_weighted_directed(graph: nx.Graph) -> nx.DiGraph:
+    digraph = graph.to_directed()
+    for u, v in digraph.edges:
+        digraph[u][v]["weight"] = digraph[u][v]["weight_uv"]
+        digraph[v][u]["weight"] = digraph[v][u]["weight_vu"]
+    return digraph
 
-    Scenario roughly looks like:
 
-            +-+ c
-            | |
-            +-+
-        b +-+  +--------+ d
-          +-+  +--------+
-      +---+
-      |   | a
-      |   |
-      |   |
-      +---+
-    """
-    plane_a = sources.Plane.from_corners(
-        np.array(
-            [
-                [-45.0304811338428, 169.98462937445362, 0],
-                [-45.390362978215435, 169.98462937445362, 0],
-                [-45.390362978215435, 170.27941127890773, 0],
-                [-45.0304811338428, 170.27941127890773, 0],
-            ]
+random_strongly_connected_graph = hnx.graph_builder(
+    graph_type=nx.Graph,
+    node_keys=st.text(),
+    node_data=st.fixed_dictionaries(
+        {"node_prior": st.floats(min_value=0.01, max_value=0.99)}
+    ),
+    edge_data=st.fixed_dictionaries(
+        {
+            "weight_uv": st.floats(min_value=0.01, max_value=0.99),
+            "weight_vu": st.floats(min_value=0.01, max_value=0.99),
+        }
+    ),
+    connected=True,
+    min_nodes=2,
+    max_nodes=10,
+    self_loops=False,
+).map(to_weighted_directed)
+
+
+@given(graph=random_strongly_connected_graph)
+@settings(deadline=None, max_examples=50)
+def test_random_sampling_root(graph: nx.DiGraph):
+    """Test that the random sampling of spanning trees has a distribution of
+    root nodes that matches the expectation from the Matrix-Tree theorem."""
+    n = 10000
+    probability_of_spanning_trees = 0.0
+    for undirected_tree in mst.SpanningTreeIterator(graph.to_undirected()):
+        for root in graph.nodes:
+            tree = nx.dfs_tree(undirected_tree, root)
+            p_tree = 1.0
+            for u, v in graph.edges:
+                if tree.has_edge(u, v):
+                    p_tree *= graph[u][v]["weight"]
+                else:
+                    p_tree *= 1 - graph[u][v]["weight"]
+            probability_of_spanning_trees += p_tree
+
+    trees = collections.Counter(
+        [
+            repr(sorted(list(tree.items())))
+            for tree in rupture_propagation.sampled_spanning_tree(graph, n_samples=n)
+        ]
+    )
+
+    kl_divergence = 0.0
+    total_p = 0.0
+    for tree_repr, count in trees.items():
+        tree = dict(eval(tree_repr))
+        p_tree = (
+            np.array(
+                [
+                    graph[u][v]["weight"]
+                    if tree.get(v) == u
+                    else 1 - graph[u][v]["weight"]
+                    for u, v in graph.edges
+                ]
+            ).prod()
+            / probability_of_spanning_trees
         )
-    )
-    plane_b = sources.Plane.from_corners(
-        np.array(
-            [
-                [-44.86621465166093, 170.2402902532466, 0],
-                [-44.997796634347004, 170.2402902532466, 0],
-                [-44.997796634347004, 170.42184906066956, 0],
-                [-44.86621465166093, 170.42184906066956, 0],
-            ]
-        )
-    )
-    plane_c = sources.Plane.from_corners(
-        np.array(
-            [
-                [-44.81884296158487, 170.39890952912066, 0],
-                [-44.81884296158487, 170.52620234810502, 0],
-                [-44.552027768554936, 170.52620234810502, 0],
-                [-44.552027768554936, 170.39890952912066, 0],
-            ]
-        )
-    )
-    plane_d = sources.Plane.from_corners(
-        np.array(
-            [
-                [-44.77558750315725, 170.59964520496885, 0],
-                [-44.87057622488399, 170.59964520496885, 0],
-                [-44.87057622488399, 170.9225453010559, 0],
-                [-44.77558750315725, 170.9225453010559, 0],
-            ]
-        )
-    )
-    source_map = {"a": plane_a, "b": plane_b, "c": plane_c, "d": plane_d}
-    rupture_causality_tree = (
-        rupture_propagation.estimate_most_likely_rupture_propagation(source_map, "a")
-    )
-    assert rupture_causality_tree == {"a": None, "b": "a", "c": "b", "d": "c"}
-    # We don't really care what the output is here because it is just a thin wrapper over the closest points between sources code, which we have already thoroughly tested.
-    # We just check here it doesn't crash and outputs vaguely sensible values.
-    jump_points = rupture_propagation.jump_points_from_rupture_tree(
-        source_map, rupture_causality_tree
-    )
-    assert len(jump_points) == 3
-    for fault_name, jump_pair in jump_points.items():
-        # check that the rupture tree does not make impossible jumps (i.e. distance pruning works).
-        assert (
-            rupture_propagation.distance_between(
-                source_map[rupture_causality_tree[fault_name]],
-                source_map[fault_name],
-                jump_pair.from_point,
-                jump_pair.to_point,
-            )
-            < 15000
-        )
+        total_p += p_tree
+        q_tree = count / n
+        kl_divergence += p_tree * np.log(p_tree / q_tree)
+
+    assert kl_divergence < 0.01
 
 
 @pytest.mark.parametrize(
