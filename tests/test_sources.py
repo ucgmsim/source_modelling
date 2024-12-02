@@ -135,6 +135,80 @@ def test_point_coordinate_inversion(
 
 
 @given(
+    point_coordinates=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
+    ),
+    length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    strike=st.floats(0, 360),
+    dip=st.floats(0, 180),
+    dip_dir=st.floats(0, 360),
+    other_point=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
+    ),
+)
+def test_point_rrup(
+    point_coordinates: np.ndarray,
+    length_m: float,
+    strike: float,
+    dip: float,
+    dip_dir: float,
+    other_point: np.ndarray,
+):
+    assume(valid_coordinates(point_coordinates))
+
+    point = sources.Point.from_lat_lon_depth(
+        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+    )
+    assert np.isclose(
+        point.rrup_distance(other_point),
+        coordinates.distance_between_wgs_depth_coordinates(
+            point_coordinates, other_point
+        ),
+    )
+
+
+@given(
+    point_coordinates=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
+    ),
+    length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    strike=st.floats(0, 360),
+    dip=st.floats(0, 180),
+    dip_dir=st.floats(0, 360),
+    distance=st.floats(1, 1000),
+)
+def test_point_rjb(
+    point_coordinates: np.ndarray,
+    length_m: float,
+    strike: float,
+    dip: float,
+    dip_dir: float,
+    distance: float,
+):
+    assume(valid_coordinates(point_coordinates))
+
+    point = sources.Point.from_lat_lon_depth(
+        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+    )
+    buffer = shapely.buffer(point.geometry, distance * 1000)
+    for other_point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
+        assert np.isclose(
+            point.rjb_distance(other_point),
+            distance * 1000,
+            atol=1e-4,
+        )
+
+
+@given(
     length=st.floats(0.1, 1000),
     projected_width=st.floats(0.1, 1000),
     strike=st.floats(0, 179),
@@ -240,6 +314,105 @@ def fault_plane(
         length=st.floats(0.1, 1000),
         projected_width=st.floats(0.1, 1000),
         strike=st.floats(0, 179),
+        dip_dir=st.floats(5, 179),
+        top=st.floats(0, 100),
+        depth=st.floats(0.1, 100),
+        centroid=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    point=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
+    ),
+)
+def test_plane_rrup(plane: Plane, point: np.ndarray):
+    assume(plane.dip_dir >= plane.strike + 5)
+    point = coordinates.wgs_depth_to_nztm(point)
+
+    def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
+        fault_point = coordinates.wgs_depth_to_nztm(
+            plane.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
+        )
+        return point - fault_point
+
+    res = sp.optimize.least_squares(
+        fault_coordinate_distance,
+        np.array([1 / 2, 1 / 2]),
+        bounds=([0] * 2, [1] * 2),
+        gtol=1e-5,
+        ftol=1e-5,
+    )
+    optimized_res = np.linalg.norm(res.fun)
+    assert np.isclose(
+        plane.rrup_distance(coordinates.nztm_to_wgs_depth(point)),
+        optimized_res,
+        atol=1e-3,
+    )
+
+
+@given(
+    plane=st.builds(
+        fault_plane,
+        length=st.floats(0.1, 1000),
+        projected_width=st.floats(0.1, 1000),
+        strike=st.floats(0, 179),
+        dip_dir=st.floats(5, 179),
+        top=st.floats(0, 100),
+        depth=st.floats(0.1, 100),
+        centroid=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    local_coordinates=nst.arrays(
+        float, (2,), elements={"min_value": 0, "max_value": 1}
+    ),
+)
+def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
+    assume(plane.dip_dir >= plane.strike + 5)
+    assert np.isclose(
+        plane.rrup_distance(
+            plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
+        ),
+        0,
+    )
+
+
+@given(
+    plane=st.builds(
+        fault_plane,
+        length=st.floats(0.1, 1000),
+        projected_width=st.floats(0.1, 1000),
+        strike=st.floats(0, 179),
+        dip_dir=st.floats(1, 179),
+        top=st.floats(0, 100),
+        depth=st.floats(0.1, 100),
+        centroid=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    distance=st.floats(1, 1000),
+)
+def test_plane_rjb(plane: Plane, distance: float):
+    # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
+    assume(plane.dip_dir >= plane.strike + 1)
+    buffer = shapely.buffer(plane.geometry, distance * 1000)
+    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
+        assert np.isclose(
+            plane.rjb_distance(point),
+            distance * 1000,
+            atol=1e-4,
+        )
+
+
+@given(
+    plane=st.builds(
+        fault_plane,
+        length=st.floats(0.1, 1000),
+        projected_width=st.floats(0.1, 1000),
+        strike=st.floats(0, 179),
         dip_dir=st.floats(1, 179),
         top=st.floats(0, 100),
         depth=st.floats(0.1, 100),
@@ -317,6 +490,54 @@ def test_fault_reordering(fault: Fault):
         planes = [fault.planes[i] for i in order]
         fault_reorder = Fault(planes)
         assert np.allclose(fault_reorder.corners, fault.corners)
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    distance=st.floats(1, 1000),
+)
+def test_fault_rjb(fault: Fault, distance: float):
+    # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
+    buffer = shapely.buffer(fault.geometry, distance * 1000)
+    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
+        assert np.isclose(
+            fault.rjb_distance(point),
+            distance * 1000,
+            atol=1e-4,
+        )
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    ),
+    point=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(0, 100),
+    ),
+)
+def test_fault_rrup(fault: Fault, point: np.ndarray):
+    # The fault rrup should be equal to the smallest rrup among the planes in the fault.
+    fault_rrup = fault.rrup_distance(point)
+    assert np.isclose(
+        min(plane.rrup_distance(point) for plane in fault.planes), fault_rrup, atol=1e-3
+    )
 
 
 @given(
