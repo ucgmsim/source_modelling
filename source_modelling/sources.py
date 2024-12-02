@@ -17,11 +17,12 @@ Fault:
 """
 
 import dataclasses
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Self
 
 import numpy as np
 import scipy as sp
 import shapely
+
 from qcore import coordinates, geo, grid
 
 _KM_TO_M = 1000
@@ -55,8 +56,8 @@ class Point:
     dip: float
     dip_dir: float
 
-    @staticmethod
-    def from_lat_lon_depth(point_coordinates: np.ndarray, **kwargs) -> "Point":
+    @classmethod
+    def from_lat_lon_depth(cls, point_coordinates: np.ndarray, **kwargs) -> Self:
         """Construct a point source from a lat, lon, depth format.
 
         Parameters
@@ -72,7 +73,7 @@ class Point:
             The Point source representing this geometry.
 
         """
-        return Point(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
+        return cls(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
 
     @property
     def coordinates(self) -> np.ndarray:
@@ -151,6 +152,42 @@ class Point:
             return np.array([1 / 2, 1 / 2])  # Point is in the centre of the small patch
         raise ValueError("Given global coordinates out of bounds for point source.")
 
+    def rrup_distance(self, point: np.ndarray) -> float:
+        """Compute RRup Distance between a fault and a point.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            The point to compute distance to (in lat, lon, depth format)
+
+
+        Returns
+        -------
+        float
+            The rrup distance (in metres) between the point and the fault geometry.
+        """
+        return coordinates.distance_between_wgs_depth_coordinates(
+            self.coordinates, point
+        )
+
+    def rjb_distance(self, point: np.ndarray) -> float:
+        """Return the closest projected distance between the fault and the point.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            The point to compute distance to.
+
+
+        Returns
+        -------
+        float
+            The Rjb distance (in metres) to the point.
+        """
+        return self.geometry.distance(
+            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        )
+
 
 @dataclasses.dataclass
 class Plane:
@@ -183,8 +220,8 @@ class Plane:
     # Bounds for plane are just the corners
     bounds: np.ndarray
 
-    @staticmethod
-    def from_corners(corners: np.ndarray) -> "Plane":
+    @classmethod
+    def from_corners(cls, corners: np.ndarray) -> Self:
         """Construct a plane point source from its corners.
 
         Parameters
@@ -197,7 +234,7 @@ class Plane:
         Plane
             The plane source representing this geometry.
         """
-        return Plane(coordinates.wgs_depth_to_nztm(corners))
+        return cls(coordinates.wgs_depth_to_nztm(corners))
 
     @property
     def corners(self) -> np.ndarray:
@@ -207,12 +244,12 @@ class Plane:
     @property
     def length_m(self) -> float:
         """float: The length of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[1] - self.bounds[0]))
 
     @property
     def width_m(self) -> float:
         """float: The width of the fault plane (in metres)."""
-        return np.linalg.norm(self.bounds[-1] - self.bounds[0])
+        return float(np.linalg.norm(self.bounds[-1] - self.bounds[0]))
 
     @property
     def bottom_m(self) -> float:
@@ -282,8 +319,9 @@ class Plane:
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
 
-    @staticmethod
+    @classmethod
     def from_centroid_strike_dip(
+        cls,
         centroid: np.ndarray,
         strike: float,
         dip_dir: Optional[float],
@@ -291,7 +329,7 @@ class Plane:
         dbottom: float,
         length: float,
         projected_width: float,
-    ) -> "Plane":
+    ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
         This is used for older descriptions of sources. Internally
@@ -332,7 +370,7 @@ class Plane:
             projected_width,
         )
         corners[[2, 3]] = corners[[3, 2]]
-        return Plane(coordinates.wgs_depth_to_nztm(np.array(corners)))
+        return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
     def centroid(self) -> np.ndarray:
@@ -422,6 +460,61 @@ class Plane:
             raise ValueError("Specified coordinates do not lie in plane")
         return np.clip(fault_local_coordinates, 0, 1)
 
+    def rrup_distance(self, point: np.ndarray) -> float:
+        """Compute RRup Distance between a fault and a point.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            The point to compute distance to (in lat, lon, depth format)
+
+        Returns
+        -------
+        float
+            The rrup distance (in metres) between the point and the fault geometry.
+        """
+        point_nztm = coordinates.wgs_depth_to_nztm(point)
+        frame = np.array(
+            [self.bounds[1] - self.bounds[0], self.bounds[-1] - self.bounds[0]]
+        )
+        local_coords, _, _, _ = np.linalg.lstsq(
+            frame.T,
+            point_nztm - self.bounds[0],
+            rcond=None,
+        )
+        projected_point = local_coords @ frame + self.bounds[0]
+        out_of_plane_distance = np.linalg.norm(point_nztm - projected_point)
+        if np.allclose(local_coords, np.clip(local_coords, 0, 1)):
+            # solution lies in fault, ergo just return projected distance
+            return float(out_of_plane_distance)
+
+        in_plane_distance = min(
+            geo.point_to_segment_distance(
+                projected_point, self.bounds[i], self.bounds[(i + 1) % 4]
+            )
+            for i in range(4)
+        )
+
+        return np.sqrt(in_plane_distance**2 + out_of_plane_distance**2)
+
+    def rjb_distance(self, point: np.ndarray) -> float:
+        """Return the closest projected distance between the fault and the point.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            The point to compute distance to.
+
+
+        Returns
+        -------
+        float
+            The Rjb distance (in metres) to the point.
+        """
+        return self.geometry.distance(
+            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        )
+
 
 @dataclasses.dataclass
 class Fault:
@@ -442,8 +535,8 @@ class Fault:
 
     planes: list[Plane]
 
-    @staticmethod
-    def from_corners(fault_corners: np.ndarray) -> "Fault":
+    @classmethod
+    def from_corners(cls, fault_corners: np.ndarray) -> Self:
         """Construct a plane source geometry from the corners of the plane.
 
         Parameters
@@ -456,7 +549,7 @@ class Fault:
         Fault
             The fault object representing this geometry.
         """
-        return Fault([Plane.from_corners(corners) for corners in fault_corners])
+        return cls([Plane.from_corners(corners) for corners in fault_corners])
 
     def area(self) -> float:
         """Compute the area of a fault.
@@ -573,6 +666,22 @@ class Fault:
                 continue
         raise ValueError("Given coordinates are not on fault.")
 
+    def rrup_distance(self, point: np.ndarray) -> float:
+        """Compute RRup Distance between a fault and a point.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            The point to compute distance to (in lat, lon, depth format)
+
+        Returns
+        -------
+        float
+            The rrup distance (in metres) between the point and the fault geometry.
+        """
+
+        return min(plane.rrup_distance(point) for plane in self.planes)
+
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
     ) -> np.ndarray:
@@ -611,6 +720,24 @@ class Fault:
             fault_segment_index
         ].fault_coordinates_to_wgs_depth_coordinates(
             np.array([segment_proportion, fault_coordinates[1]])
+        )
+
+    def rjb_distance(self, point: np.ndarray) -> float:
+        """Return the closest projected distance between the fault and the point.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            The point to compute distance to.
+
+
+        Returns
+        -------
+        float
+            The Rjb distance (in metres) to the point.
+        """
+        return self.geometry.distance(
+            shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
 
 
