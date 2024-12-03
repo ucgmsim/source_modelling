@@ -288,6 +288,13 @@ class Plane:
 
     @property
     def strike(self) -> float:
+        """float: The WGS84 bearing of the strike direction of the fault (from north; in degrees)."""
+        return coordinates.nztm_bearing_to_great_circle_bearing(
+            self.corners[0, :2], self.length, self.strike_nztm
+        )
+
+    @property
+    def strike_nztm(self) -> float:
         """float: The bearing of the strike direction of the fault (from north; in degrees)."""
         north_direction = np.array([1, 0, 0])
         up_direction = np.array([0, 0, 1])
@@ -298,6 +305,13 @@ class Plane:
 
     @property
     def dip_dir(self) -> float:
+        """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
+        return coordinates.nztm_bearing_to_great_circle_bearing(
+            self.corners[0, :2], self.width, self.dip_dir_nztm
+        )
+
+    @property
+    def dip_dir_nztm(self) -> float:
         """float: The bearing of the dip direction (from north; in degrees)."""
         if np.isclose(self.dip, 90):
             return 0  # TODO: Is this right for this case?
@@ -324,11 +338,12 @@ class Plane:
         cls,
         centroid: np.ndarray,
         strike: float,
+        dip: float,
         dip_dir: Optional[float],
-        dtop: float,
-        dbottom: float,
         length: float,
-        projected_width: float,
+        width: float,
+        dtop: Optional[float] = None,
+        dbottom: Optional[float] = None,
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -339,7 +354,7 @@ class Plane:
         Parameters
         ----------
         centroid : np.ndarray
-            The centre of the fault plane in lat, lon coordinates.
+            The centre of the fault plane in lat, lon, and optionally depth (km) coordinates.
         strike : float
             The strike of the fault (in degrees).
         dip_dir : Optional[float]
@@ -359,9 +374,62 @@ class Plane:
             The fault plane with centre at `centroid`, and where the
             parameters strike, dip_dir, top, bottom, length and width
             match what is passed to this function.
+
+        Note
+        ----
+        The angles `strike` and `dip_dir` are NZTM bearings from
+        north. If you are using WGS84 bearings you need to convert
+        them to NZTM bearings before you call this function.
         """
+        # Check that dtop, dbottom and centroid depth are consistent
+        if (
+            dtop is not None
+            and dbottom is not None
+            and not np.isclose(dbottom - dtop, np.sin(dip) * width)
+        ):
+            raise ValueError(
+                "Top and bottom depths are not consistent with dip and width parameters."
+            )
+        elif (
+            dtop is not None
+            and dbottom is not None
+            and not np.isclose(centroid[2], (dtop + dbottom) / 2)
+        ):
+            raise ValueError(
+                "Top and bottom depths are not consistent with centroid depth."
+            )
+        elif dtop is None and dbottom is None and len(centroid) == 2:
+            raise ValueError(
+                "At least one of top, bottom, or centroid depth must be given."
+            )
+        elif (
+            dtop is not None
+            and len(centroid) == 3
+            and not np.isclose(centroid[2] - dtop, np.sin(np.radians(dip)) * width / 2)
+        ):
+            raise ValueError("Centroid depth and dtop are inconsistent.")
+        elif (
+            dbottom is not None
+            and len(centroid) == 3
+            and not np.isclose(
+                dbottom - centroid[2], np.sin(np.radians(dip)) * width / 2
+            )
+        ):
+            raise ValueError("Centroid depth and dbottom are inconsistent.")
+
+        # Values are definitely consistent, now infer dtop and dbottom
+        # based on what we have.
+        if dtop is None and dbottom is None:
+            dtop = centroid[2] - width / 2 * np.sin(np.radians(dip))
+            dbottom = centroid[2] + width / 2 * np.sin(np.radians(dip))
+        elif dtop is not None:
+            dbottom = dtop + width * np.sin(np.radians(dip))
+        elif dbottom is not None:
+            dtop = dbottom - width * np.sin(np.radians(dip))
+
+        projected_width = width * np.cos(np.radians(dip))
         corners = grid.grid_corners(
-            centroid,
+            centroid[:2],
             strike,
             dip_dir if dip_dir is not None else (strike + 90),
             dtop,
