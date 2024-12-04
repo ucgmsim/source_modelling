@@ -20,11 +20,12 @@ Typing Aliases:
 """
 
 from collections import defaultdict, namedtuple
-from typing import Generator, Optional
+from collections.abc import Generator
+from typing import Optional
 
 import numpy as np
-from qcore import coordinates
 
+from qcore import coordinates
 from source_modelling import sources
 
 DistanceGraph = dict[str, dict[str, int]]
@@ -183,6 +184,25 @@ def distance_between(
     source_a_point: np.ndarray,
     source_b_point: np.ndarray,
 ) -> float:
+    """
+    Calculate the distance between two points on different sources.
+
+    Parameters
+    ----------
+    source_a : sources.IsSource
+        The first source.
+    source_b : sources.IsSource
+        The second source.
+    source_a_point : np.ndarray
+        The point on the first source.
+    source_b_point : np.ndarray
+        The point on the second source.
+
+    Returns
+    -------
+    float
+        The distance between the two points.
+    """
     global_point_a = source_a.fault_coordinates_to_wgs_depth_coordinates(source_a_point)
     global_point_b = source_b.fault_coordinates_to_wgs_depth_coordinates(source_b_point)
     return coordinates.distance_between_wgs_depth_coordinates(
@@ -195,6 +215,23 @@ def estimate_most_likely_rupture_propagation(
     initial_source: str,
     jump_impossibility_limit_distance: int = 15000,
 ) -> RuptureCausalityTree:
+    """
+    Estimate the most likely rupture propagation path.
+
+    Parameters
+    ----------
+    sources_map : dict[str, sources.IsSource]
+        A map of source names to source objects.
+    initial_source : str
+        The initial source from which the rupture starts.
+    jump_impossibility_limit_distance : int, optional
+        The maximum distance for a jump to be considered possible, by default 15000.
+
+    Returns
+    -------
+    RuptureCausalityTree
+        The estimated rupture causality tree.
+    """
     distance_graph = {
         source_a_name: {
             source_b_name: distance_between(
@@ -220,6 +257,21 @@ def jump_points_from_rupture_tree(
     source_map: dict[str, sources.IsSource],
     rupture_causality_tree: RuptureCausalityTree,
 ) -> dict[str, JumpPair]:
+    """
+    Get the jump points from the rupture causality tree.
+
+    Parameters
+    ----------
+    source_map : dict[str, sources.IsSource]
+        A map of source names to source objects.
+    rupture_causality_tree : RuptureCausalityTree
+        The rupture causality tree.
+
+    Returns
+    -------
+    dict[str, JumpPair]
+        A dictionary mapping source names to jump points.
+    """
     jump_points = {}
     for source, parent in rupture_causality_tree.items():
         if parent is None:
@@ -238,12 +290,12 @@ def tree_nodes_in_order(
 
     Parameters
     ----------
-    faults : list[RealisationFault]
-        List of RealisationFault objects.
+    tree : dict[str, str]
+        The tree representing the causality of ruptures between faults.
 
     Yields
     ------
-    RealisationFault
+    str
         The next fault in the topologically sorted order.
     """
     tree_child_map = defaultdict(list)
