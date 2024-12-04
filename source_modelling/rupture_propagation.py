@@ -4,18 +4,12 @@ Rupture Propagation Module
 This module provides functions for computing likely rupture paths from
 information about the distances between faults.
 
-Functions:
-    - shaw_dieterich_distance_model:
-      Compute fault jump probabilities using the Shaw-Dieterich distance model.
-    - prune_distance_graph: Prune the distance graph based on a cutoff value.
-    - probability_graph:
-      Convert a graph of distances between faults into a graph of jump
-      probabilities using the Shaw-Dieterich model.
-    - sample_rupture_propagation: Sample a rupture propagation tree from a set of sources.
+Reference
+---------
+To understand the purpose and implementation of the algorithms in the
+'Rupture Propagation' page[0] on the source modelling wiki.
 
-Typing Aliases:
-    - DistanceGraph: A graph representing distances between faults.
-    - RuptureCausalityTree: A tree representing the causality of ruptures between faults.
+[0]: https://github.com/ucgmsim/source_modelling/wiki/Rupture-Propagation
 """
 
 import random
