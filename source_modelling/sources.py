@@ -357,18 +357,24 @@ class Plane:
         ----------
         centroid : np.ndarray
             The centre of the fault plane in lat, lon, and optionally depth (km) coordinates.
-        strike : float
-            The strike of the fault (in degrees).
-        dip_dir : Optional[float]
-            The dip direction of the fault (in degrees). If None this is assumed to be strike + 90 degrees.
-        top : float
-            The top depth of the plane (in km).
-        bottom : float
-            The bottom depth of the plane (in km).
+        dip : float
+            The dip of the fault (in degrees).
         length : float
             The length of the fault plane (in km).
-        projected_width : float
-            The projected width of the fault plane (in km).
+        width : float
+            The width of the fault plane (in km).
+        dtop : Optional[float]
+            The top depth of the plane (in km).
+        dbottom : Optional[float]
+            The bottom depth of the plane (in km).
+        strike : Optional[float]
+            The strike of the fault (in degrees).
+        dip_dir : Optional[float]
+            The dip direction of the fault (in degrees). If None, this is assumed to be strike + 90 degrees.
+        strike_nztm : Optional[float]
+            The NZTM strike of the fault (in degrees).
+        dip_dir_nztm : Optional[float]
+            The NZTM dip direction of the fault (in degrees).
 
         Returns
         -------
@@ -379,9 +385,18 @@ class Plane:
 
         Note
         ----
-        The angles `strike` and `dip_dir` are NZTM bearings from
-        north. If you are using WGS84 bearings you need to convert
-        them to NZTM bearings before you call this function.
+        You must supply at least one of `dtop`, `dbottom` or centroid
+        depth (i.e. adding a third component to `centroid` for the
+        depth). If you provide more than one, they must be consistent
+        with each other with respect to dip. These conditions are
+        checked by the method.
+
+        Valid combinations of `strike` and `strike_nztm`:
+        - Must supply exactly one of `strike` or `strike_nztm`.
+
+        Valid combinations of `dip_dir` and `dip_dir_nztm`:
+        - Must supply at most one of `dip_dir` or `dip_dir_nztm`.
+        - If neither is supplied, `dip_dir` is assumed to be `strike + 90`.
         """
         # Check that dtop, dbottom and centroid depth are consistent
         if (
