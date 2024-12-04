@@ -316,7 +316,7 @@ def trace(
 
 
 @st.composite
-def valid_trace_definition(draw):
+def valid_trace_definition(draw: st.DrawFn):
     strike = draw(st.floats(1, 179))
 
     start_trace_nztm = draw(
@@ -360,7 +360,7 @@ def valid_trace_definition(draw):
 
 
 @given(valid_trace_definition())
-def test_plane_from_trace(data):
+def test_plane_from_trace(data: tuple):
     (
         trace_points,
         dtop,
@@ -775,18 +775,3 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
         computed_distance, min_distance, atol=1e-1
     )
 
-
-if __name__ == "__main__":
-    data = (
-        np.array([[-47.49983978, 166.00106361], [-47.49894825, 166.00120587]]),
-        0.0,
-        1.0,
-        1.0,
-        7.149842834075444,
-        2.0,
-        1.0,
-        100.0,
-        nztm_coordinate(y=4715500.0, x=1073000.0),
-    )
-    test_plane_from_trace(data)
-    print(f"wtf")
