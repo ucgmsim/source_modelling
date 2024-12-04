@@ -368,9 +368,9 @@ class Plane:
         dbottom : Optional[float]
             The bottom depth of the plane (in km).
         strike : Optional[float]
-            The strike of the fault (in degrees).
+            The WGS84 strike bearing of the fault (in degrees).
         dip_dir : Optional[float]
-            The dip direction of the fault (in degrees). If None, this is assumed to be strike + 90 degrees.
+            The WGS84 dip direction bearing of the fault (in degrees). If None, this is assumed to be strike + 90 degrees.
         strike_nztm : Optional[float]
             The NZTM strike of the fault (in degrees).
         dip_dir_nztm : Optional[float]
