@@ -274,10 +274,10 @@ class Plane:
         # bottom vectors. If the dot product is positive then they are pointing
         # in roughly the same direction, if it is negative then they are
         # pointing in opposite directions.
-        if np.dot(top[1] - top[0], bottom[1] - bottom[0]) < 0:
+        if np.dot(top[1] - top[0], bottom[0] - bottom[1]) < 0:
             bottom = bottom[::-1]
         orientation = np.linalg.det(
-            np.array([top[1] - top[0], bottom[0] - top[0]])[:, :-1]
+            np.array([top[1] - top[0], bottom[1] - top[0]])[:, :-1]
         )
 
         # If the orientation is not close to 0 and is negative, then dip
@@ -286,7 +286,7 @@ class Plane:
         if not np.isclose(orientation, 0) and orientation < 0:
             top = top[::-1]
             bottom = bottom[::-1]
-        self.bounds = np.array([top[0], top[1], bottom[1], bottom[0]])
+        self.bounds = np.array([top[0], top[1], bottom[0], bottom[1]])
 
     @classmethod
     def from_corners(cls, corners: np.ndarray) -> Self:

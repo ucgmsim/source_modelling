@@ -245,6 +245,10 @@ def test_plane_construction(
     assert np.allclose(plane.centroid[:2], centroid, atol=1e-6)
     # The constructor should not care about plane bound orientation
     assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
+    # Check that the plane bounds orientation makes sense.
+    assert (
+        np.dot(plane.bounds[1] - plane.bounds[0], plane.bounds[2] - plane.bounds[3]) > 0
+    )
 
 
 # Test 1: Less than 4 points
