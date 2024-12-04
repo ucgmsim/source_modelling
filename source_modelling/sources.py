@@ -337,13 +337,15 @@ class Plane:
     def from_centroid_strike_dip(
         cls,
         centroid: np.ndarray,
-        strike: float,
         dip: float,
-        dip_dir: Optional[float],
         length: float,
         width: float,
         dtop: Optional[float] = None,
         dbottom: Optional[float] = None,
+        strike: Optional[float] = None,
+        dip_dir: Optional[float] = None,
+        strike_nztm: Optional[float] = None,
+        dip_dir_nztm: Optional[float] = None,
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -416,6 +418,32 @@ class Plane:
             )
         ):
             raise ValueError("Centroid depth and dbottom are inconsistent.")
+        elif not ((strike is None) ^ (strike_nztm is None)):
+            raise ValueError("Must supply exactly one of strike or NZTM strike.")
+        elif dip_dir is not None and dip_dir_nztm is not None:
+            raise ValueError(
+                "Must supply at most one of dip direction or NZTM dip direction."
+            )
+
+        if strike_nztm is None:
+            strike = coordinates.great_circle_bearing_to_nztm_bearing(
+                centroid[:2],
+                length / 2,
+                strike,
+            )
+        else:
+            strike = strike_nztm
+
+        if dip_dir_nztm is None and dip_dir is not None:
+            dip_dir = coordinates.great_circle_bearing_to_nztm_bearing(
+                centroid[:2],
+                width / 2,
+                dip_dir,
+            )
+        elif dip_dir is None and dip_dir_nztm is not None:
+            dip_dir = dip_dir_nztm
+        else:
+            dip_dir = strike + 90
 
         # Values are definitely consistent, now infer dtop and dbottom
         # based on what we have.
@@ -431,7 +459,7 @@ class Plane:
         corners = grid.grid_corners(
             centroid[:2],
             strike,
-            dip_dir if dip_dir is not None else (strike + 90),
+            dip_dir,
             dtop,
             dbottom,
             length,

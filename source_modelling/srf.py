@@ -239,19 +239,17 @@ class SrfFile:
                     np.array([0.0, 0.0, 1.0]),
                 )
 
-            strike = coordinates.great_circle_bearing_to_nztm_bearing(
-                centroid, length / 2, segment_header["stk"]
-            )
+            strike = segment_header["stk"]
 
             planes.append(
                 Plane.from_centroid_strike_dip(
                     centroid,
-                    strike,
                     dip,
-                    dip_direction_bearing,
                     length,
                     width,
                     dtop=dtop,
+                    strike=strike,
+                    dip_dir_nztm=dip_direction_bearing,
                 )
             )
         return planes

@@ -226,11 +226,11 @@ def test_plane_construction(
     assume(valid_coordinates(centroid))
     plane = Plane.from_centroid_strike_dip(
         centroid,
-        strike,
         dip,
-        dip_dir,
         length,
         width,
+        strike_nztm=strike,
+        dip_dir_nztm=dip_dir,
     )
     assert np.isclose(plane.length, length, atol=1e-6)
     assert np.isclose(plane.width, width, atol=1e-6)
@@ -324,7 +324,14 @@ def test_from_centroid_strike_dip_failure_cases(
 ):
     with pytest.raises(ValueError):
         Plane.from_centroid_strike_dip(
-            centroid, strike, dip, dip_dir, length, width, dtop, dbottom
+            centroid,
+            dip,
+            length,
+            width,
+            dtop=dtop,
+            dbottom=dbottom,
+            strike_nztm=strike,
+            dip_dir_nztm=dip_dir,
         )
 
 
@@ -352,7 +359,14 @@ def test_from_centroid_strike_dip_dtop_dbottom_derivation(
     expected_dbottom,
 ):
     plane = Plane.from_centroid_strike_dip(
-        centroid, strike, dip, dip_dir, length, width, dtop, dbottom
+        centroid,
+        dip,
+        length,
+        width,
+        dtop=dtop,
+        dbottom=dbottom,
+        strike_nztm=strike,
+        dip_dir_nztm=dip_dir,
     )
     assert np.isclose(plane.corners[0, -1], expected_dtop * 1000)
     assert np.isclose(plane.corners[-1, -1], expected_dbottom * 1000)
@@ -368,8 +382,8 @@ fault_plane = st.builds(
     ),
     length=st.floats(0.1, 1000),
     width=st.floats(0.1, 1000),
-    strike=st.floats(0, 179),
-    dip_dir=st.floats(5, 179),
+    strike_nztm=st.floats(0, 179),
+    dip_dir_nztm=st.floats(5, 179),
     dip=st.floats(0.1, 90),
 )
 
