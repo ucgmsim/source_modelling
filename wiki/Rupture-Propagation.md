@@ -154,22 +154,22 @@ This type of distribution is typical: only the first 10 or so rupture scenarios 
 1. **Top Scenario**
    Probability: **28%**
    Visualisation:
-   ![Untitled-2024-06-24-1457(13)](images/rup_prop/example_1.png)
+   ![Untitled-2024-06-24-1457(13)](images/rup_prop/darfield_1.png)
 
 2. **Second Most Likely Scenario**
    Probability: **27%**
    Visualisation:
-   ![Untitled-2024-06-24-1457(14)](images/rup_prop/example_2.png)
+   ![Untitled-2024-06-24-1457(14)](images/rup_prop/darfield_2.png)
 
 3. **Third Most Likely Scenario**
    Probability: **25%**
    Visualisation:
-   ![Untitled-2024-06-24-1457(16)](images/rup_prop/example_3.png)
+   ![Untitled-2024-06-24-1457(16)](images/rup_prop/darfield_3.png)
 
 4. **Fourth Most Likely Scenario**
    Probability: **2%**
    Visualisation:
-   ![Untitled-2024-06-24-1457(17)](images/rup_prop/example_4.png)
+   ![Untitled-2024-06-24-1457(17)](images/rup_prop/darfield_4.png)
 
 ### Summary
 
