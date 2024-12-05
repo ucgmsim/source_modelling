@@ -70,7 +70,9 @@ $$
 P_w(T) = \frac{\prod_{e \in T} w(e)}{\sum_{T^\prime} \prod_{e \in T^\prime} w(e)}
 $$
 
-At first glance, $P_w(T)$ looks identical to $P(T)$, but alas, it isn’t. Instead, it over-represents unlikely rupture scenarios! In the toy example above, the probabilities for $T_1$, $T_2$, and $T_3$ become roughly $0.22$, $0.59$, and $0.20$, respectively. You can see that $T_3$ would be oversampled in 100 realisations relative to its true probability. To make this work, we construct a different graph $G^\prime$, where the edge weights are adjusted as:
+At first glance, $P_w(T)$ looks identical to $P(T)$, but alas, it isn’t. Instead, it over-represents unlikely rupture scenarios! The intuition here is that $P_w(T)$ doesn't account edge weights not included in $T$, and so doesn't penalise $T$ for skipping extremely likely jumps[^1]. In the toy example above, the probabilities for $T_1$, $T_2$, and $T_3$ become roughly $0.22$, $0.59$, and $0.20$, respectively. You can see that $T_3$ would be oversampled in 100 realisations relative to its true probability. To make this work, we construct a different graph $G^\prime$, where the edge weights are adjusted as:
+
+[^1]: More formally, $P_w(T)$ is the probability that a subgraph contains the edges of $T$, which is different to saying that a subgraph is exactly $T$. This measure might be useful in some other contexts.
 
 $$
 w_{G^\prime}(e) = \frac{w_G(e)}{1 - w_G(e)}.
