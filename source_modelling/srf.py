@@ -57,8 +57,9 @@ import pandas as pd
 import scipy as sp
 import shapely
 
-from qcore import coordinates
+from qcore import coordinates, geo
 from source_modelling import srf_reader
+from source_modelling.sources import Plane
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
@@ -214,6 +215,44 @@ class SrfFile:
     def segments(self) -> Segments:
         """Segments: A sequence of segments in the SRF."""
         return Segments(self.header, self.points)
+
+    @property
+    def planes(self) -> list[Plane]:
+        """list[Plane]: The list of planes in the SRF."""
+        planes = []
+        for (_, segment_header), segment in zip(self.header.iterrows(), self.segments):
+            length = segment_header["len"]
+            width = segment_header["wid"]
+            nstk = int(segment_header["nstk"])
+            centroid = np.array([segment_header["elat"], segment_header["elon"]])
+            dip = segment_header["dip"]
+            dtop = segment_header["dtop"]
+
+            dip_direction = coordinates.wgs_depth_to_nztm(
+                segment[["lat", "lon"]].iloc[nstk]
+            ) - coordinates.wgs_depth_to_nztm(segment[["lat", "lon"]].iloc[0])
+            dip_direction_bearing = None
+            if not np.allclose(dip_direction, 0):
+                dip_direction_bearing = geo.oriented_bearing_wrt_normal(
+                    np.array([1.0, 0.0, 0.0]),
+                    np.append(dip_direction, 0),
+                    np.array([0.0, 0.0, 1.0]),
+                )
+
+            strike = segment_header["stk"]
+
+            planes.append(
+                Plane.from_centroid_strike_dip(
+                    centroid,
+                    dip,
+                    length,
+                    width,
+                    dtop=dtop,
+                    strike=strike,
+                    dip_dir_nztm=dip_direction_bearing,
+                )
+            )
+        return planes
 
 
 class SrfParseError(Exception):
