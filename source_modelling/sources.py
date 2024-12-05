@@ -288,6 +288,13 @@ class Plane:
 
     @property
     def strike(self) -> float:
+        """float: The WGS84 bearing of the strike direction of the fault (from north; in degrees)."""
+        return coordinates.nztm_bearing_to_great_circle_bearing(
+            self.corners[0, :2], self.length, self.strike_nztm
+        )
+
+    @property
+    def strike_nztm(self) -> float:
         """float: The bearing of the strike direction of the fault (from north; in degrees)."""
         north_direction = np.array([1, 0, 0])
         up_direction = np.array([0, 0, 1])
@@ -298,6 +305,13 @@ class Plane:
 
     @property
     def dip_dir(self) -> float:
+        """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
+        return coordinates.nztm_bearing_to_great_circle_bearing(
+            self.corners[0, :2], self.width, self.dip_dir_nztm
+        )
+
+    @property
+    def dip_dir_nztm(self) -> float:
         """float: The bearing of the dip direction (from north; in degrees)."""
         if np.isclose(self.dip, 90):
             return 0  # TODO: Is this right for this case?
@@ -323,12 +337,15 @@ class Plane:
     def from_centroid_strike_dip(
         cls,
         centroid: np.ndarray,
-        strike: float,
-        dip_dir: Optional[float],
-        dtop: float,
-        dbottom: float,
+        dip: float,
         length: float,
-        projected_width: float,
+        width: float,
+        dtop: Optional[float] = None,
+        dbottom: Optional[float] = None,
+        strike: Optional[float] = None,
+        dip_dir: Optional[float] = None,
+        strike_nztm: Optional[float] = None,
+        dip_dir_nztm: Optional[float] = None,
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -339,19 +356,25 @@ class Plane:
         Parameters
         ----------
         centroid : np.ndarray
-            The centre of the fault plane in lat, lon coordinates.
-        strike : float
-            The strike of the fault (in degrees).
-        dip_dir : Optional[float]
-            The dip direction of the fault (in degrees). If None this is assumed to be strike + 90 degrees.
-        top : float
-            The top depth of the plane (in km).
-        bottom : float
-            The bottom depth of the plane (in km).
+            The centre of the fault plane in lat, lon, and optionally depth (km) coordinates.
+        dip : float
+            The dip of the fault (in degrees).
         length : float
             The length of the fault plane (in km).
-        projected_width : float
-            The projected width of the fault plane (in km).
+        width : float
+            The width of the fault plane (in km).
+        dtop : Optional[float]
+            The top depth of the plane (in km).
+        dbottom : Optional[float]
+            The bottom depth of the plane (in km).
+        strike : Optional[float]
+            The WGS84 strike bearing of the fault (in degrees).
+        dip_dir : Optional[float]
+            The WGS84 dip direction bearing of the fault (in degrees). If None, this is assumed to be strike + 90 degrees.
+        strike_nztm : Optional[float]
+            The NZTM strike of the fault (in degrees).
+        dip_dir_nztm : Optional[float]
+            The NZTM dip direction of the fault (in degrees).
 
         Returns
         -------
@@ -359,11 +382,99 @@ class Plane:
             The fault plane with centre at `centroid`, and where the
             parameters strike, dip_dir, top, bottom, length and width
             match what is passed to this function.
+
+        Note
+        ----
+        You must supply at least one of `dtop`, `dbottom` or centroid
+        depth (i.e. adding a third component to `centroid` for the
+        depth). If you provide more than one, they must be consistent
+        with each other with respect to dip. These conditions are
+        checked by the method.
+
+        Valid combinations of `strike` and `strike_nztm`:
+        - Must supply exactly one of `strike` or `strike_nztm`.
+
+        Valid combinations of `dip_dir` and `dip_dir_nztm`:
+        - Must supply at most one of `dip_dir` or `dip_dir_nztm`.
+        - If neither is supplied, `dip_dir` is assumed to be `strike + 90`.
         """
+        # Check that dtop, dbottom and centroid depth are consistent
+        if (
+            dtop is not None
+            and dbottom is not None
+            and not np.isclose(dbottom - dtop, np.sin(dip) * width)
+        ):
+            raise ValueError(
+                "Top and bottom depths are not consistent with dip and width parameters."
+            )
+        elif (
+            dtop is not None
+            and dbottom is not None
+            and not np.isclose(centroid[2], (dtop + dbottom) / 2)
+        ):
+            raise ValueError(
+                "Top and bottom depths are not consistent with centroid depth."
+            )
+        elif dtop is None and dbottom is None and len(centroid) == 2:
+            raise ValueError(
+                "At least one of top, bottom, or centroid depth must be given."
+            )
+        elif (
+            dtop is not None
+            and len(centroid) == 3
+            and not np.isclose(centroid[2] - dtop, np.sin(np.radians(dip)) * width / 2)
+        ):
+            raise ValueError("Centroid depth and dtop are inconsistent.")
+        elif (
+            dbottom is not None
+            and len(centroid) == 3
+            and not np.isclose(
+                dbottom - centroid[2], np.sin(np.radians(dip)) * width / 2
+            )
+        ):
+            raise ValueError("Centroid depth and dbottom are inconsistent.")
+        elif not ((strike is None) ^ (strike_nztm is None)):
+            raise ValueError("Must supply exactly one of strike or NZTM strike.")
+        elif dip_dir is not None and dip_dir_nztm is not None:
+            raise ValueError(
+                "Must supply at most one of dip direction or NZTM dip direction."
+            )
+
+        if strike_nztm is None:
+            strike = coordinates.great_circle_bearing_to_nztm_bearing(
+                centroid[:2],
+                length / 2,
+                strike,
+            )
+        else:
+            strike = strike_nztm
+
+        if dip_dir_nztm is None and dip_dir is not None:
+            dip_dir = coordinates.great_circle_bearing_to_nztm_bearing(
+                centroid[:2],
+                width / 2,
+                dip_dir,
+            )
+        elif dip_dir is None and dip_dir_nztm is not None:
+            dip_dir = dip_dir_nztm
+        else:
+            dip_dir = strike + 90
+
+        # Values are definitely consistent, now infer dtop and dbottom
+        # based on what we have.
+        if dtop is None and dbottom is None:
+            dtop = centroid[2] - width / 2 * np.sin(np.radians(dip))
+            dbottom = centroid[2] + width / 2 * np.sin(np.radians(dip))
+        elif dtop is not None:
+            dbottom = dtop + width * np.sin(np.radians(dip))
+        elif dbottom is not None:
+            dtop = dbottom - width * np.sin(np.radians(dip))
+
+        projected_width = width * np.cos(np.radians(dip))
         corners = grid.grid_corners(
-            centroid,
+            centroid[:2],
             strike,
-            dip_dir if dip_dir is not None else (strike + 90),
+            dip_dir,
             dtop,
             dbottom,
             length,
