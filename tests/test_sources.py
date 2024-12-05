@@ -210,45 +210,55 @@ def test_point_rjb(
 
 @given(
     length=st.floats(0.1, 1000),
-    projected_width=st.floats(0.1, 1000),
+    width=st.floats(0.1, 1000),
     strike=st.floats(0, 179),
     dip_dir=st.floats(0, 179),
-    top=st.floats(0, 100),
-    depth=st.floats(0.1, 100),
-    centroid=st.builds(coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)),
+    dip=st.floats(0.1, 90),
+    centroid=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(1, 10),
+    ),
 )
 def test_plane_construction(
     length: float,
-    projected_width: float,
+    width: float,
     strike: float,
+    dip: float,
     dip_dir: float,
-    top: float,
-    depth: float,
     centroid: np.ndarray,
 ):
     """Test the construction of a Plane object from centroid, strike, and dip."""
     assume(valid_coordinates(centroid))
     assume(dip_dir > strike + 1)
     plane = Plane.from_centroid_strike_dip(
-        centroid, strike, dip_dir, top, top + depth, length, projected_width
+        centroid,
+        dip,
+        length,
+        width,
+        strike_nztm=strike,
+        dip_dir_nztm=dip_dir,
     )
     assert np.isclose(plane.length, length, atol=1e-6)
+    assert np.isclose(plane.width, width, atol=1e-6)
     assert np.isclose(
-        plane.width, plane.projected_width / np.cos(np.radians(plane.dip)), atol=1e-6
+        plane.projected_width, plane.width * np.cos(np.radians(plane.dip)), atol=1e-6
     )
     assert np.allclose(
         shapely.get_coordinates(plane.geometry, include_z=True)[:-1], plane.bounds
     )
-    assert np.isclose(plane.projected_width, projected_width, atol=1e-6)
-    assert np.isclose(plane.strike, strike, atol=1e-6)
-    assert np.isclose(plane.dip_dir, dip_dir, atol=1e-6)
-    assert np.allclose(plane.centroid[:2], centroid, atol=1e-6)
+    assert np.isclose(plane.strike_nztm, strike, atol=1e-6)
     # The constructor should not care about plane bound orientation
     assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
     # Check that the plane bounds orientation makes sense.
     assert (
         np.dot(plane.bounds[1] - plane.bounds[0], plane.bounds[2] - plane.bounds[3]) > 0
     )
+    assert np.isclose(plane.strike_nztm, strike, atol=1e-6)
+    if plane.dip != 90:
+        assert np.isclose(plane.dip_dir_nztm, dip_dir, atol=1e-6)
+    assert np.allclose(plane.centroid, centroid * np.array([1, 1, 1000]), atol=1e-6)
 
 
 # Test 1: Less than 4 points
@@ -297,34 +307,150 @@ def test_general_invalid_input():
         Plane(bounds)
 
 
-def fault_plane(
-    length: float,
-    projected_width: float,
-    strike: float,
-    dip_dir: float,
-    top: float,
-    depth: float,
-    centroid: np.ndarray,
-) -> Plane:
-    """Create a Plane object from fault parameters."""
-    return Plane.from_centroid_strike_dip(
-        centroid, strike, dip_dir, top, top + depth, length, projected_width
+@pytest.mark.parametrize(
+    "centroid, strike, dip, dip_dir, length, width, dtop, dbottom, exception_message",
+    [
+        # Case where top and bottom depths are not consistent with dip and width
+        (
+            np.array([0, 0, 0]),
+            45,
+            30,
+            None,
+            10,
+            5,
+            1,
+            2,
+            r"Top and bottom depths are not consistent with dip and width parameters\.",
+        ),
+        # Case where top and bottom depths are not consistent with centroid depth
+        (
+            np.array([0, 0, 5]),
+            45,
+            30,
+            None,
+            10,
+            5,
+            1,
+            10,
+            r"Top and bottom depths are not consistent with centroid depth\.",
+        ),
+        # Case where neither top, bottom, nor centroid depth is given
+        (
+            np.array([0, 0]),
+            45,
+            30,
+            None,
+            10,
+            5,
+            None,
+            None,
+            r"At least one of top, bottom, or centroid depth must be given\.",
+        ),
+        # Case where centroid depth and dtop are inconsistent
+        (
+            np.array([0, 0, 5]),
+            45,
+            30,
+            None,
+            10,
+            5,
+            1,
+            None,
+            r"Centroid depth and dtop are inconsistent\.",
+        ),
+        # Case where centroid depth and dbottom are inconsistent
+        (
+            np.array([0, 0, 5]),
+            45,
+            30,
+            None,
+            10,
+            5,
+            None,
+            9,
+            r"Centroid depth and dbottom are inconsistent\.",
+        ),
+    ],
+)
+def test_from_centroid_strike_dip_failure_cases(
+    centroid,
+    strike,
+    dip,
+    dip_dir,
+    length,
+    width,
+    dtop,
+    dbottom,
+    exception_message,
+):
+    with pytest.raises(ValueError):
+        Plane.from_centroid_strike_dip(
+            centroid,
+            dip,
+            length,
+            width,
+            dtop=dtop,
+            dbottom=dbottom,
+            strike_nztm=strike,
+            dip_dir_nztm=dip_dir,
+        )
+
+
+@pytest.mark.parametrize(
+    "centroid, strike, dip, dip_dir, length, width, dtop, dbottom, expected_dtop, expected_dbottom",
+    [
+        # Case where both dtop and dbottom are None
+        (np.array([0, 0, 5]), 45, 30, None, 10, 5, None, None, 5 - 5 / 4, 5 + 5 / 4),
+        # Case where dtop is None and dbottom is provided
+        (np.array([0, 0]), 45, 30, None, 10, 5, None, 10, 10 - 5 / 2, 10),
+        # Case where dbottom is None and dtop is provided
+        (np.array([0, 0]), 45, 30, None, 10, 5, 0, None, 0, 5 / 2),
+    ],
+)
+def test_from_centroid_strike_dip_dtop_dbottom_derivation(
+    centroid,
+    strike,
+    dip,
+    dip_dir,
+    length,
+    width,
+    dtop,
+    dbottom,
+    expected_dtop,
+    expected_dbottom,
+):
+    plane = Plane.from_centroid_strike_dip(
+        centroid,
+        dip,
+        length,
+        width,
+        dtop=dtop,
+        dbottom=dbottom,
+        strike_nztm=strike,
+        dip_dir_nztm=dip_dir,
     )
+    assert np.isclose(plane.corners[0, -1], expected_dtop * 1000)
+    assert np.isclose(plane.corners[-1, -1], expected_dbottom * 1000)
+
+
+fault_plane = st.builds(
+    Plane.from_centroid_strike_dip,
+    centroid=st.builds(
+        coordinate,
+        lat=st.floats(-50, -31),
+        lon=st.floats(160, 180),
+        depth=st.floats(1, 10),
+    ),
+    length=st.floats(0.1, 1000),
+    width=st.floats(0.1, 1000),
+    strike_nztm=st.floats(0, 179),
+    dip_dir_nztm=st.floats(5, 179),
+    dip=st.floats(0.1, 90),
+)
 
 
 @given(
-    plane=st.builds(
-        fault_plane,
-        length=st.floats(0.1, 1000),
-        projected_width=st.floats(0.1, 1000),
-        strike=st.floats(0, 179),
-        dip_dir=st.floats(5, 179),
-        top=st.floats(0, 100),
-        depth=st.floats(0.1, 100),
-        centroid=st.builds(
-            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
-        ),
-    ),
+    plane=fault_plane,
     point=st.builds(
         coordinate,
         lat=st.floats(-50, -31),
@@ -358,18 +484,7 @@ def test_plane_rrup(plane: Plane, point: np.ndarray):
 
 
 @given(
-    plane=st.builds(
-        fault_plane,
-        length=st.floats(0.1, 1000),
-        projected_width=st.floats(0.1, 1000),
-        strike=st.floats(0, 179),
-        dip_dir=st.floats(5, 179),
-        top=st.floats(0, 100),
-        depth=st.floats(0.1, 100),
-        centroid=st.builds(
-            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
-        ),
-    ),
+    plane=fault_plane,
     local_coordinates=nst.arrays(
         float, (2,), elements={"min_value": 0, "max_value": 1}
     ),
@@ -385,23 +500,13 @@ def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
 
 
 @given(
-    plane=st.builds(
-        fault_plane,
-        length=st.floats(0.1, 1000),
-        projected_width=st.floats(0.1, 1000),
-        strike=st.floats(0, 179),
-        dip_dir=st.floats(1, 179),
-        top=st.floats(0, 100),
-        depth=st.floats(0.1, 100),
-        centroid=st.builds(
-            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
-        ),
-    ),
+    plane=fault_plane,
     distance=st.floats(1, 1000),
 )
 def test_plane_rjb(plane: Plane, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
     assume(plane.dip_dir >= plane.strike + 1)
+    assume(plane.dip != 90)
     buffer = shapely.buffer(plane.geometry, distance * 1000)
     for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
         assert np.isclose(
@@ -412,18 +517,7 @@ def test_plane_rjb(plane: Plane, distance: float):
 
 
 @given(
-    plane=st.builds(
-        fault_plane,
-        length=st.floats(0.1, 1000),
-        projected_width=st.floats(0.1, 1000),
-        strike=st.floats(0, 179),
-        dip_dir=st.floats(1, 179),
-        top=st.floats(0, 100),
-        depth=st.floats(0.1, 100),
-        centroid=st.builds(
-            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
-        ),
-    ),
+    plane=fault_plane,
     local_coordinates=nst.arrays(
         float, (2,), elements={"min_value": 0, "max_value": 1}
     ),
@@ -558,7 +652,6 @@ def test_fault_rrup(fault: Fault, point: np.ndarray):
 def test_fault_construction(fault: Fault):
     """Test the construction of a Fault object from connected planes."""
     assert fault.width == fault.planes[0].width
-    assert np.isclose(fault.dip_dir, fault.planes[0].strike + 90)
     assert fault.corners.shape == (4 * len(fault.planes), 3)
     assert np.isclose(fault.area(), np.sum([plane.area for plane in fault.planes]))
     assert fault.geometry.equals(
