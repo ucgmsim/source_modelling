@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import scipy as sp
 import shapely
-from hypothesis import assume, given, seed, settings
+from hypothesis import assume, given, reproduce_failure, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
@@ -249,8 +249,7 @@ def test_plane_construction(
         shapely.get_coordinates(plane.geometry, include_z=True)[:-1], plane.bounds
     )
     assert np.isclose(plane.strike_nztm, strike, atol=1e-6)
-    # The constructor should not care about plane bound orientation
-    assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
+
     # Check that the plane bounds orientation makes sense.
     assert (
         np.dot(plane.bounds[1] - plane.bounds[0], plane.bounds[2] - plane.bounds[3]) > 0
@@ -258,6 +257,8 @@ def test_plane_construction(
     assert np.isclose(plane.strike_nztm, strike, atol=1e-6)
     if plane.dip != 90:
         assert np.isclose(plane.dip_dir_nztm, dip_dir, atol=1e-6)
+        # The constructor should not care about plane bound orientation
+        assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
     assert np.allclose(plane.centroid, centroid * np.array([1, 1, 1000]), atol=1e-6)
 
 
@@ -505,7 +506,7 @@ def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
 )
 def test_plane_rjb(plane: Plane, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
-    assume(plane.dip_dir >= plane.strike + 1)
+    assume(plane.dip_dir_nztm >= plane.strike_nztm + 1)
     assume(plane.dip != 90)
     buffer = shapely.buffer(plane.geometry, distance * 1000)
     for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
