@@ -374,15 +374,15 @@ def test_general_invalid_input():
     ],
 )
 def test_from_centroid_strike_dip_failure_cases(
-    centroid,
-    strike,
-    dip,
-    dip_dir,
-    length,
-    width,
-    dtop,
-    dbottom,
-    exception_message,
+    centroid: np.ndarray,
+    strike: float,
+    dip: float,
+    dip_dir: Optional[float],
+    length: float,
+    width: float,
+    dtop: Optional[float],
+    dbottom: Optional[float],
+    exception_message: str,
 ):
     with pytest.raises(ValueError):
         Plane.from_centroid_strike_dip(
@@ -409,16 +409,17 @@ def test_from_centroid_strike_dip_failure_cases(
     ],
 )
 def test_from_centroid_strike_dip_dtop_dbottom_derivation(
-    centroid,
-    strike,
-    dip,
-    dip_dir,
-    length,
-    width,
-    dtop,
-    dbottom,
-    expected_dtop,
-    expected_dbottom,
+    centroid: np.ndarray,
+    strike: float,
+    dip: float,
+    dip_dir: Optional[float],
+    length: float,
+    width: float,
+    dtop: Optional[float],
+    dbottom: Optional[float],
+    exception_message: str,
+    expected_dtop: float,
+    expected_dbottom: float,
 ):
     plane = Plane.from_centroid_strike_dip(
         centroid,
