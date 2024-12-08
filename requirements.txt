@@ -9,8 +9,10 @@ networkx
 pandas
 parse
 hypothesis[pandas, numpy]
+hypothesis-networkx
 shapely
 pytest
 pytest-cov
 scipy
 typer
+networkx
