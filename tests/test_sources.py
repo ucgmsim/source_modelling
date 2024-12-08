@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import scipy as sp
 import shapely
-from hypothesis import assume, given, reproduce_failure, seed, settings
+from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
