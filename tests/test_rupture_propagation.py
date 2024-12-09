@@ -1,5 +1,6 @@
 import collections
 import random
+from typing import Optional
 
 import hypothesis_networkx as hnx
 import networkx as nx
@@ -312,7 +313,9 @@ def test_select_top_spanning_trees(graph: nx.Graph, probability_threshold: float
         ),
     ],
 )
-def test_sample_tree_with_root_probabilities(graph, root_probabilities, n_samples):
+def test_sample_tree_with_root_probabilities(
+    graph: nx.Graph, root_probabilities: dict[int, float], n_samples: int
+):
     sampled_trees = rupture_propagation.sample_tree_with_root_probabilities(
         graph, root_probabilities, n_samples
     )
@@ -428,11 +431,11 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
     ],
 )
 def test_sample_rupture_propagation(
-    sources_map,
-    initial_source,
-    initial_source_distribution,
-    jump_impossibility_limit_distance,
-    expected_root_distribution,
+    sources_map: dict[str, sources.Point],
+    initial_source: Optional[str],
+    initial_source_distribution: Optional[dict[str, float]],
+    jump_impossibility_limit_distance: int,
+    expected_root_distribution: dict[str, float],
 ):
     n_samples = 100
     sampled_trees = [
@@ -536,7 +539,9 @@ def test_sample_rupture_propagation(
     ],
 )
 def test_jump_points_from_rupture_tree(
-    source_map, rupture_causality_tree, expected_jump_points
+    source_map: dict[str, sources.Point],
+    rupture_causality_tree: dict[str, Optional[str]],
+    expected_jump_points: dict[str, rupture_propagation.JumpPair],
 ):
     result_jump_points = rupture_propagation.jump_points_from_rupture_tree(
         source_map, rupture_causality_tree

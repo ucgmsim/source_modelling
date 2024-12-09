@@ -1120,12 +1120,14 @@ def get_rupture_surface_simulations(
         widths_WellsCoppersmith1994 = relationships_WellsCoppersmith1994[3]
         models = np.repeat("WellsCoppersmith1994", nsim_WellsCoppersmith1994)
     else:
-        areas_WellsCoppersmith1994, aspect_ratios_WellsCoppersmith1994 = np.array(
-            []
-        ), np.array([])
-        lengths_WellsCoppersmith1994, widths_WellsCoppersmith1994 = np.array(
-            []
-        ), np.array([])
+        areas_WellsCoppersmith1994, aspect_ratios_WellsCoppersmith1994 = (
+            np.array([]),
+            np.array([]),
+        )
+        lengths_WellsCoppersmith1994, widths_WellsCoppersmith1994 = (
+            np.array([]),
+            np.array([]),
+        )
         models = np.array([])
 
     if nsims[1] > 0:
@@ -1163,12 +1165,14 @@ def get_rupture_surface_simulations(
             (models, np.repeat("ThingbaijamEtAl2017", nsim_ThingbaijamEtAl2017))
         )
     else:
-        areas_ThingbaijamEtAl2017, aspect_ratios_ThingbaijamEtAl2017 = np.array(
-            []
-        ), np.array([])
-        lengths_ThingbaijamEtAl2017, widths_ThingbaijamEtAl2017 = np.array(
-            []
-        ), np.array([])
+        areas_ThingbaijamEtAl2017, aspect_ratios_ThingbaijamEtAl2017 = (
+            np.array([]),
+            np.array([]),
+        )
+        lengths_ThingbaijamEtAl2017, widths_ThingbaijamEtAl2017 = (
+            np.array([]),
+            np.array([]),
+        )
 
     if nsims[3] > 0:
         nsim_ChiouYoungs2008_WellsCoppersmith1994 = nsims[3]
@@ -1308,9 +1312,10 @@ def get_rupture_surface_simulations(
             (models, np.repeat("ContrerasEtAl2022", nsim_ContrerasEtAl2022))
         )
     else:
-        areas_ContrerasEtAl2022, aspect_ratios_ContrerasEtAl2022 = np.array(
-            []
-        ), np.array([])
+        areas_ContrerasEtAl2022, aspect_ratios_ContrerasEtAl2022 = (
+            np.array([]),
+            np.array([]),
+        )
         lengths_ContrerasEtAl2022, widths_ContrerasEtAl2022 = np.array([]), np.array([])
 
     areas = np.concatenate(

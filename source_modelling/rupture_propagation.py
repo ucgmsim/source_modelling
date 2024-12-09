@@ -14,7 +14,8 @@ To understand the purpose and implementation of the algorithms in the
 
 import random
 from collections import defaultdict, namedtuple
-from typing import Generator, Optional
+from collections.abc import Generator
+from typing import Optional
 
 import networkx as nx
 import numpy as np

@@ -1,3 +1,4 @@
+import itertools
 from typing import Optional
 
 import numpy as np
@@ -14,13 +15,15 @@ from source_modelling.sources import Fault, Plane
 
 
 def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndarray:
+    """Create a coordinate array from latitude, longitude, and optional depth."""
     if depth is not None:
         return np.array([lat, lon, depth])
     return np.array([lat, lon])
 
 
 def valid_coordinates(point_coordinates: np.ndarray) -> bool:
-    return np.all(np.isfinite(coordinates.wgs_depth_to_nztm(point_coordinates)))
+    """Check if the given coordinates are valid."""
+    return bool(np.all(np.isfinite(coordinates.wgs_depth_to_nztm(point_coordinates))))
 
 
 @given(
@@ -42,6 +45,7 @@ def test_point_construction(
     dip: float,
     dip_dir: float,
 ):
+    """Test the construction of a Point object from latitude, longitude, and depth."""
     assume(valid_coordinates(point_coordinates))
     point = sources.Point.from_lat_lon_depth(
         point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
@@ -79,6 +83,7 @@ def test_point_coordinate_system(
     dip_dir: float,
     local_coordinates: np.ndarray,
 ):
+    """Test the coordinate system transformation for a Point object."""
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
@@ -114,6 +119,7 @@ def test_point_coordinate_inversion(
     dip_dir: float,
     local_coordinates: np.ndarray,
 ):
+    """Test the inversion of coordinate transformations for a Point object."""
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
@@ -223,7 +229,9 @@ def test_plane_construction(
     dip_dir: float,
     centroid: np.ndarray,
 ):
+    """Test the construction of a Plane object from centroid, strike, and dip."""
     assume(valid_coordinates(centroid))
+    assume(dip_dir > strike + 1)
     plane = Plane.from_centroid_strike_dip(
         centroid,
         dip,
@@ -241,13 +249,67 @@ def test_plane_construction(
         shapely.get_coordinates(plane.geometry, include_z=True)[:-1], plane.bounds
     )
     assert np.isclose(plane.strike_nztm, strike, atol=1e-6)
+
+    # Check that the plane bounds orientation makes sense.
+    assert (
+        np.dot(plane.bounds[1] - plane.bounds[0], plane.bounds[2] - plane.bounds[3]) > 0
+    )
+    assert np.isclose(plane.strike_nztm, strike, atol=1e-6)
     if plane.dip != 90:
         assert np.isclose(plane.dip_dir_nztm, dip_dir, atol=1e-6)
+        # The constructor should not care about plane bound orientation
+        assert np.allclose(Plane(plane.bounds[::-1]).bounds, plane.bounds)
     assert np.allclose(plane.centroid, centroid * np.array([1, 1, 1000]), atol=1e-6)
 
 
+# Test 1: Less than 4 points
+def test_less_than_four_points():
+    """Test that constructing a Plane with less than 4 points raises a ValueError."""
+    bounds = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])  # Only 3 points
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 2: More than 4 points
+def test_more_than_four_points():
+    """Test that constructing a Plane with more than 4 points raises a ValueError."""
+    bounds = np.array(
+        [[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]]
+    )  # 5 points
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 3: Matrix rank not equal to 3
+def test_matrix_rank_not_three():
+    """Test that constructing a Plane with matrix rank not equal to 3 raises a ValueError."""
+    bounds = np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]])  # Rank < 3
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 4: Top points do not equal 2
+def test_top_points_not_two():
+    """Test that constructing a Plane with top points not equal to 2 raises a ValueError."""
+    bounds = np.array(
+        [[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
+    )  # All points lie on the same top plane
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
+# Test 5: General invalid input (not forming a valid plane)
+def test_general_invalid_input():
+    """Test that constructing a Plane with invalid input raises a ValueError."""
+    bounds = np.array(
+        [[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 2]]
+    )  # Points do not form a plane
+    with pytest.raises(ValueError, match="Bounds do not form a plane."):
+        Plane(bounds)
+
+
 @pytest.mark.parametrize(
-    "centroid, strike, dip, dip_dir, length, width, dtop, dbottom, exception_message",
+    "centroid, strike, dip, dip_dir, length, width, dtop, dbottom",
     [
         # Case where top and bottom depths are not consistent with dip and width
         (
@@ -259,7 +321,6 @@ def test_plane_construction(
             5,
             1,
             2,
-            r"Top and bottom depths are not consistent with dip and width parameters\.",
         ),
         # Case where top and bottom depths are not consistent with centroid depth
         (
@@ -271,7 +332,6 @@ def test_plane_construction(
             5,
             1,
             10,
-            r"Top and bottom depths are not consistent with centroid depth\.",
         ),
         # Case where neither top, bottom, nor centroid depth is given
         (
@@ -283,7 +343,6 @@ def test_plane_construction(
             5,
             None,
             None,
-            r"At least one of top, bottom, or centroid depth must be given\.",
         ),
         # Case where centroid depth and dtop are inconsistent
         (
@@ -295,7 +354,6 @@ def test_plane_construction(
             5,
             1,
             None,
-            r"Centroid depth and dtop are inconsistent\.",
         ),
         # Case where centroid depth and dbottom are inconsistent
         (
@@ -307,20 +365,18 @@ def test_plane_construction(
             5,
             None,
             9,
-            r"Centroid depth and dbottom are inconsistent\.",
         ),
     ],
 )
 def test_from_centroid_strike_dip_failure_cases(
-    centroid,
-    strike,
-    dip,
-    dip_dir,
-    length,
-    width,
-    dtop,
-    dbottom,
-    exception_message,
+    centroid: np.ndarray,
+    strike: float,
+    dip: float,
+    dip_dir: Optional[float],
+    length: float,
+    width: float,
+    dtop: Optional[float],
+    dbottom: Optional[float],
 ):
     with pytest.raises(ValueError):
         Plane.from_centroid_strike_dip(
@@ -347,16 +403,16 @@ def test_from_centroid_strike_dip_failure_cases(
     ],
 )
 def test_from_centroid_strike_dip_dtop_dbottom_derivation(
-    centroid,
-    strike,
-    dip,
-    dip_dir,
-    length,
-    width,
-    dtop,
-    dbottom,
-    expected_dtop,
-    expected_dbottom,
+    centroid: np.ndarray,
+    strike: float,
+    dip: float,
+    dip_dir: Optional[float],
+    length: float,
+    width: float,
+    dtop: Optional[float],
+    dbottom: Optional[float],
+    expected_dtop: float,
+    expected_dbottom: float,
 ):
     plane = Plane.from_centroid_strike_dip(
         centroid,
@@ -444,7 +500,7 @@ def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
 )
 def test_plane_rjb(plane: Plane, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
-    assume(plane.dip_dir >= plane.strike + 1)
+    assume(plane.dip_dir_nztm >= plane.strike_nztm + 1)
     assume(plane.dip != 90)
     buffer = shapely.buffer(plane.geometry, distance * 1000)
     for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
@@ -463,6 +519,7 @@ def test_plane_rjb(plane: Plane, distance: float):
 )
 @seed(1)
 def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
+    """Test the inversion of coordinate transformations for a Plane object."""
     assume(not np.isclose(plane.dip_dir, plane.strike))
     assert np.allclose(
         plane.wgs_depth_coordinates_to_fault_coordinates(
@@ -476,6 +533,7 @@ def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray)
 def connected_fault(
     lengths: list[float], width: float, strike: float, start_coordinates: np.ndarray
 ) -> Fault:
+    """Create a Fault object from connected planes."""
     strike_direction = np.array(
         [np.cos(np.radians(strike)), np.sin(np.radians(strike)), 0]
     )
@@ -506,6 +564,25 @@ def connected_fault(
         for i in range(len(leading_edges) - 1)
     ]
     return Fault(planes)
+
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=5),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    )
+)
+def test_fault_reordering(fault: Fault):
+    """Ensure that the plane order in faults is completely determined by the planes."""
+    for order in itertools.permutations(range(len(fault.planes))):
+        planes = [fault.planes[i] for i in order]
+        fault_reorder = Fault(planes)
+        assert np.allclose(fault_reorder.corners, fault.corners)
 
 
 @given(
@@ -568,7 +645,11 @@ def test_fault_rrup(fault: Fault, point: np.ndarray):
     )
 )
 def test_fault_construction(fault: Fault):
+    """Test the construction of a Fault object from connected planes."""
     assert fault.width == fault.planes[0].width
+    assert fault.dip_dir == fault.planes[0].dip_dir
+    assert fault.dip_dir_nztm == fault.planes[0].dip_dir_nztm
+    assert fault.dip == fault.planes[0].dip
     assert fault.corners.shape == (4 * len(fault.planes), 3)
     assert np.isclose(fault.area(), np.sum([plane.area for plane in fault.planes]))
     assert fault.geometry.equals(
@@ -595,6 +676,7 @@ def test_fault_construction(fault: Fault):
     ),
 )
 def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray):
+    """Test the inversion of coordinate transformations for a Fault object."""
     assert np.allclose(
         fault.wgs_depth_coordinates_to_fault_coordinates(
             fault.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
@@ -626,12 +708,13 @@ def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray)
 )
 @settings(deadline=1000)
 @seed(1)
-def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
+def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
+    """Test the closest point comparison between two Fault objects."""
     pairwise_distance = sp.spatial.distance.cdist(fault.bounds, other_fault.bounds)
     assume(pairwise_distance.min() > 1)
     point_a, point_b = sources.closest_point_between_sources(fault, other_fault)
-    X, Y = np.meshgrid(np.linspace(0, 1, num=10), np.linspace(0, 1, num=10))
-    local_coords = np.c_[X.ravel(), Y.ravel()]
+    x, y = np.meshgrid(np.linspace(0, 1, num=10), np.linspace(0, 1, num=10))
+    local_coords = np.c_[x.ravel(), y.ravel()]
     points_on_a = np.array(
         [
             fault.fault_coordinates_to_wgs_depth_coordinates(coord)
@@ -655,3 +738,118 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: float):
     assert computed_distance < min_distance or np.isclose(
         computed_distance, min_distance, atol=1e-1
     )
+
+
+@pytest.mark.parametrize(
+    "planes, expected_message",
+    [
+        # Inconsistent dip directions
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7962, 10000],
+                            [-41.2965, 174.7862, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7862, 0],
+                            [-41.2865, 174.7962, 0],
+                            [-41.2965, 174.7962, 10000],
+                            [-41.2965, 174.7862, 10000],
+                        ]
+                    )
+                ),
+            ],
+            "Fault must have a constant dip direction",
+        ),
+        # Inconsistent dip angles
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7862, 10000],
+                            [-41.2965, 174.7762, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7862, 0.0],
+                            [-41.2865, 174.7762, 0.0],
+                            [-41.25013347, 174.77620387, 9215.48081363],
+                            [-41.25013361, 174.78619679, 9215.48252053],
+                        ]
+                    )
+                ),
+            ],
+            "Fault must have a constant dip",
+        ),
+        # Inconsistent widths
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7862, 10000],
+                            [-41.2965, 174.7762, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0.0],
+                            [-41.2865, 174.7862, 0.0],
+                            [-41.30149995, 174.78620231, 15000.0],
+                            [-41.30149999, 174.77620002, 15000.0],
+                        ]
+                    )
+                ),
+            ],
+            "Fault must have constant width",
+        ),
+        # Not connected end-to-end
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7862, 10000],
+                            [-41.2965, 174.7762, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2965, 174.7962, 0],
+                            [-41.2965, 174.8062, 0],
+                            [-41.3065, 174.8062, 10000],
+                            [-41.3065, 174.7962, 10000],
+                        ]
+                    )
+                ),
+            ],
+            "Fault planes must be connected",
+        ),
+    ],
+)
+def test_fault_construction_failures(planes: list[Plane], expected_message: str):
+    with pytest.raises(ValueError) as excinfo:
+        Fault(planes=planes)
+    assert expected_message in str(excinfo.value)

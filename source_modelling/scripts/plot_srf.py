@@ -186,7 +186,7 @@ def plot_srf(
     )
 
     # If we are supplied a JSON realisation, we can add labels for jump points.
-    if realisation_ffp: # pragma: no cover
+    if realisation_ffp:  # pragma: no cover
         # NOTE: this import is here because the workflow is, as yet,
         # not ready to be installed along-side source modelling.
         from workflow.realisations import RupturePropagationConfig, SourceConfig
