@@ -804,7 +804,7 @@ class Fault:
         This is essential for computing the shortest distances between faults.
         """
         # The trivial case where the number of planes is one should be ignored
-        if len(self.planes) == 1:
+        if len(self.planes) <= 1:
             return
 
         self._basic_consistency_checks()
