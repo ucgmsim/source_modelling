@@ -309,7 +309,7 @@ def test_general_invalid_input():
 
 
 @pytest.mark.parametrize(
-    "centroid, strike, dip, dip_dir, length, width, dtop, dbottom, exception_message",
+    "centroid, strike, dip, dip_dir, length, width, dtop, dbottom",
     [
         # Case where top and bottom depths are not consistent with dip and width
         (
@@ -321,7 +321,6 @@ def test_general_invalid_input():
             5,
             1,
             2,
-            r"Top and bottom depths are not consistent with dip and width parameters\.",
         ),
         # Case where top and bottom depths are not consistent with centroid depth
         (
@@ -333,7 +332,6 @@ def test_general_invalid_input():
             5,
             1,
             10,
-            r"Top and bottom depths are not consistent with centroid depth\.",
         ),
         # Case where neither top, bottom, nor centroid depth is given
         (
@@ -345,7 +343,6 @@ def test_general_invalid_input():
             5,
             None,
             None,
-            r"At least one of top, bottom, or centroid depth must be given\.",
         ),
         # Case where centroid depth and dtop are inconsistent
         (
@@ -357,7 +354,6 @@ def test_general_invalid_input():
             5,
             1,
             None,
-            r"Centroid depth and dtop are inconsistent\.",
         ),
         # Case where centroid depth and dbottom are inconsistent
         (
@@ -369,7 +365,6 @@ def test_general_invalid_input():
             5,
             None,
             9,
-            r"Centroid depth and dbottom are inconsistent\.",
         ),
     ],
 )
@@ -382,7 +377,6 @@ def test_from_centroid_strike_dip_failure_cases(
     width: float,
     dtop: Optional[float],
     dbottom: Optional[float],
-    exception_message: str,
 ):
     with pytest.raises(ValueError):
         Plane.from_centroid_strike_dip(
@@ -417,7 +411,6 @@ def test_from_centroid_strike_dip_dtop_dbottom_derivation(
     width: float,
     dtop: Optional[float],
     dbottom: Optional[float],
-    exception_message: str,
     expected_dtop: float,
     expected_dbottom: float,
 ):
