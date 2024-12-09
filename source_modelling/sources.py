@@ -722,9 +722,15 @@ class Fault:
             If the planes are not consistent in dip direction or width."""
         # Planes can only have one dip, dip direction, and width.
         for plane in self.planes:
-            if not (np.isclose(plane.dip_dir_nztm, self.planes[0].dip_dir_nztm)):
+            if not (
+                np.isclose(plane.dip_dir_nztm, self.planes[0].dip_dir_nztm, atol=0.1)
+            ):
                 raise ValueError(
                     f"Fault must have a constant dip direction (plane dip dir = {plane.dip_dir}, fault dip dir is {self.planes[0].dip_dir})."
+                )
+            if not (np.isclose(plane.dip, self.planes[0].dip, atol=0.1)):
+                raise ValueError(
+                    f"Fault must have a constant dip (plane dip = {plane.dip}, fault dip is {self.planes[0].dip})."
                 )
 
         if not all(
@@ -859,6 +865,11 @@ class Fault:
     def dip_dir(self) -> float:
         """float: The dip direction of the fault."""
         return self.planes[0].dip_dir
+
+    @property
+    def dip_dir_nztm(self) -> float:
+        """float: The dip direction of the fault."""
+        return self.planes[0].dip_dir_nztm
 
     @classmethod
     def from_corners(cls, fault_corners: np.ndarray) -> Self:
