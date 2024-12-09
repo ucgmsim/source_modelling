@@ -647,6 +647,9 @@ def test_fault_rrup(fault: Fault, point: np.ndarray):
 def test_fault_construction(fault: Fault):
     """Test the construction of a Fault object from connected planes."""
     assert fault.width == fault.planes[0].width
+    assert fault.dip_dir == fault.planes[0].dip_dir
+    assert fault.dip_dir_nztm == fault.planes[0].dip_dir_nztm
+    assert fault.dip == fault.planes[0].dip
     assert fault.corners.shape == (4 * len(fault.planes), 3)
     assert np.isclose(fault.area(), np.sum([plane.area for plane in fault.planes]))
     assert fault.geometry.equals(
@@ -735,3 +738,118 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
     assert computed_distance < min_distance or np.isclose(
         computed_distance, min_distance, atol=1e-1
     )
+
+
+@pytest.mark.parametrize(
+    "planes, expected_message",
+    [
+        # Inconsistent dip directions
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7962, 10000],
+                            [-41.2965, 174.7862, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7862, 0],
+                            [-41.2865, 174.7962, 0],
+                            [-41.2965, 174.7962, 10000],
+                            [-41.2965, 174.7862, 10000],
+                        ]
+                    )
+                ),
+            ],
+            "Fault must have a constant dip direction",
+        ),
+        # Inconsistent dip angles
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7862, 10000],
+                            [-41.2965, 174.7762, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7862, 0.0],
+                            [-41.2865, 174.7762, 0.0],
+                            [-41.25013347, 174.77620387, 9215.48081363],
+                            [-41.25013361, 174.78619679, 9215.48252053],
+                        ]
+                    )
+                ),
+            ],
+            "Fault must have a constant dip",
+        ),
+        # Inconsistent widths
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7862, 10000],
+                            [-41.2965, 174.7762, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0.0],
+                            [-41.2865, 174.7862, 0.0],
+                            [-41.30149995, 174.78620231, 15000.0],
+                            [-41.30149999, 174.77620002, 15000.0],
+                        ]
+                    )
+                ),
+            ],
+            "Fault must have constant width",
+        ),
+        # Not connected end-to-end
+        (
+            [
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2865, 174.7762, 0],
+                            [-41.2865, 174.7862, 0],
+                            [-41.2965, 174.7862, 10000],
+                            [-41.2965, 174.7762, 10000],
+                        ]
+                    )
+                ),
+                Plane.from_corners(
+                    np.array(
+                        [
+                            [-41.2965, 174.7962, 0],
+                            [-41.2965, 174.8062, 0],
+                            [-41.3065, 174.8062, 10000],
+                            [-41.3065, 174.7962, 10000],
+                        ]
+                    )
+                ),
+            ],
+            "Fault planes must be connected",
+        ),
+    ],
+)
+def test_fault_construction_failures(planes: list[Plane], expected_message: str):
+    with pytest.raises(ValueError) as excinfo:
+        Fault(planes=planes)
+    assert expected_message in str(excinfo.value)
