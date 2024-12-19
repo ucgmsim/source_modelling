@@ -283,7 +283,7 @@ class Plane:
         # If the orientation is not close to 0 and is negative, then dip
         # direction is to the left of the strike direction, so we reverse
         # the order of the top and bottom corners.
-        if not np.isclose(orientation, 0) and orientation < 0:
+        if not np.isclose(orientation, 0, atol=1e-3) and orientation < 0:
             top = top[::-1]
             bottom = bottom[::-1]
         self.bounds = np.array([top[0], top[1], bottom[0], bottom[1]])
@@ -400,6 +400,87 @@ class Plane:
     def geometry(self) -> shapely.Polygon:
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
+
+    @staticmethod
+    def from_trace(
+        trace_points: np.ndarray[float],
+        dtop: float,
+        dbottom: float,
+        dip: float,
+        dip_dir: float,
+    ) -> "Plane":
+        """Create a fault plane from the surface trace, depth parameters and dip.
+
+        Parameters
+        ----------
+        trace_points: np.ndarray
+            The surface trace of the fault in lat, lon format.
+            Points need to be ordered, i.e. first points is the start
+            and last point is the end of the fault trace.
+            [[start_lat, start_lon],
+             [end_lat  , end_lon  ]]
+        dtop: float
+            The top depth of the plane (in km).
+        dbottom: float
+            The bottom depth of the plane (in km).
+        dip: float
+            The dip of the fault plane (degrees).
+        dip_dir: float
+            The dip direction of the fault plane (degrees)
+             as great circle bearing.
+
+        Returns
+        -------
+        Plane
+            The fault plane with the given parameters.
+        """
+        if trace_points.shape != (2, 2):
+            raise ValueError("Trace points must be a 2x2 array.")
+
+        if np.isclose(dip, 90) and dip_dir != 0:
+            raise ValueError("Dip direction must be 0 for vertical faults.")
+
+        # Get the trace endpoints in NZTM coordinates (y, x)
+        trace_points_nztm = coordinates.wgs_depth_to_nztm(trace_points)
+        dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
+
+        dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(trace_points[0], 1, dip_dir)
+
+        # Check that dip-direction is consistent with the trace
+        dip_vec = np.array([np.cos(np.radians(dip_dir_nztm)), np.sin(np.radians(dip_dir_nztm))])
+        strike_vec = trace_points_nztm[1] - trace_points_nztm[0]
+        orientation = np.linalg.det(np.array([strike_vec, dip_vec]))
+        if not np.isclose(dip, 90) and not np.isclose(orientation, 0) and orientation < 0:
+            raise ValueError(
+                "Dip direction is inconsistent with the "
+                "strike defined by the trace points."
+            )
+
+        # Define the trace corners in NZTM coordinates (y, x, depth)
+        c1 = (*trace_points_nztm[0], dtop)
+        c2 = (*trace_points_nztm[1], dtop)
+
+        # Compute remaining corners
+        if np.isclose(dip, 90):
+            c3 = (c2[0], c2[1], dbottom)
+            c4 = (c1[0], c1[1], dbottom)
+        else:
+            dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
+            proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
+            c3 = (
+                c2[0] + proj_width * np.cos(dip_dir_nztm_rad),
+                c2[1] + proj_width * np.sin(dip_dir_nztm_rad),
+                dbottom,
+            )
+            c4 = (
+                c1[0] + proj_width * np.cos(dip_dir_nztm_rad),
+                c1[1] + proj_width * np.sin(dip_dir_nztm_rad),
+                dbottom,
+            )
+
+        # Convert to lat, lon, depth
+        corners = coordinates.nztm_to_wgs_depth(np.array([c1, c2, c3, c4]))
+        return Plane.from_corners(corners)
 
     @classmethod
     def from_centroid_strike_dip(
