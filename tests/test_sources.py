@@ -530,25 +530,6 @@ def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray)
     )
 
 
-@given(
-    plane=fault_plane,
-    local_coordinates=nst.arrays(
-        float, (2,), elements={"min_value": 0, "max_value": 1}
-    ),
-)
-@seed(1)
-def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
-    """Test the inversion of coordinate transformations for a Plane object."""
-    assume(not np.isclose(plane.dip_dir, plane.strike))
-    assert np.allclose(
-        plane.wgs_depth_coordinates_to_fault_coordinates(
-            plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
-        ),
-        local_coordinates,
-        atol=1e-6,
-    )
-
-
 def connected_fault(
     lengths: list[float], width: float, strike: float, start_coordinates: np.ndarray
 ) -> Fault:
