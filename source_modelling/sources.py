@@ -617,10 +617,18 @@ class Plane:
         ValueError
             If the given coordinates do not lie in the fault plane.
         """
-        strike_direction = self.bounds[1, :2] - self.bounds[0, :2]
-        dip_direction = self.bounds[-1, :2] - self.bounds[0, :2]
+        coordinate_length = (
+            3 if global_coordinates.shape[-1] == 3 or self.dip == 90 else 2
+        )
+        strike_direction = (
+            self.bounds[1, :coordinate_length] - self.bounds[0, :coordinate_length]
+        )
+        dip_direction = (
+            self.bounds[-1, :coordinate_length] - self.bounds[0, :coordinate_length]
+        )
         offset = (
-            coordinates.wgs_depth_to_nztm(global_coordinates[:2]) - self.bounds[0, :2]
+            coordinates.wgs_depth_to_nztm(global_coordinates[:coordinate_length])
+            - self.bounds[0, :coordinate_length]
         )
         fault_local_coordinates, _, _, _ = np.linalg.lstsq(
             np.array([strike_direction, dip_direction]).T, offset, rcond=None
