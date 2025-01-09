@@ -530,6 +530,25 @@ def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray)
     )
 
 
+@given(
+    plane=fault_plane,
+    local_coordinates=nst.arrays(
+        float, (2,), elements={"min_value": 0, "max_value": 1}
+    ),
+)
+@seed(1)
+def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
+    """Test the inversion of coordinate transformations for a Plane object."""
+    assume(not np.isclose(plane.dip_dir, plane.strike))
+    assert np.allclose(
+        plane.wgs_depth_coordinates_to_fault_coordinates(
+            plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
+        ),
+        local_coordinates,
+        atol=1e-6,
+    )
+
+
 def connected_fault(
     lengths: list[float], width: float, strike: float, start_coordinates: np.ndarray
 ) -> Fault:
@@ -662,27 +681,27 @@ def test_fault_construction(fault: Fault):
 
 
 @given(
-    fault=st.builds(
-        connected_fault,
-        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=10),
-        width=st.floats(0.1, 100),
-        strike=st.floats(0, 179),
-        start_coordinates=st.builds(
-            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
-        ),
-    ),
+    fault=fault_plane,
     local_coordinates=nst.arrays(
         float, (2,), elements={"min_value": 0, "max_value": 1}
     ),
 )
-def test_fault_coordinate_inversion(fault: Fault, local_coordinates: np.ndarray):
-    """Test the inversion of coordinate transformations for a Fault object."""
+def test_fault_coordinate_depth_irrelevance(
+    fault: Fault, local_coordinates: np.ndarray
+):
+    """Test that the depth information is irrelevant if dip != 90."""
+    assume(fault.dip < 89)
+    global_coordinates = fault.fault_coordinates_to_wgs_depth_coordinates(
+        local_coordinates
+    )
+
     assert np.allclose(
-        fault.wgs_depth_coordinates_to_fault_coordinates(
-            fault.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
-        ),
+        fault.wgs_depth_coordinates_to_fault_coordinates(global_coordinates[:2]),
         local_coordinates,
-        atol=1e-6,
+    )
+    assert np.allclose(
+        fault.wgs_depth_coordinates_to_fault_coordinates(global_coordinates),
+        local_coordinates,
     )
 
 
