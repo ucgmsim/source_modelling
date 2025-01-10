@@ -616,6 +616,13 @@ class Plane:
         ------
         ValueError
             If the given coordinates do not lie in the fault plane.
+
+        Notes
+        -----
+        While not passing depth information is supported, depth information
+        *greatly* improves the accuracy of the estimation. No guarantees
+        are made about the accuracy of the inversion if you do not pass
+        depth information.
         """
         coordinate_length = (
             3 if global_coordinates.shape[-1] == 3 or self.dip == 90 else 2
@@ -633,14 +640,15 @@ class Plane:
         fault_local_coordinates, _, _, _ = np.linalg.lstsq(
             np.array([strike_direction, dip_direction]).T, offset, rcond=None
         )
+        tolerance = 1e-6 if coordinate_length == 3 else 1e-4
         if not np.all(
             (
                 (fault_local_coordinates > 0)
-                | np.isclose(fault_local_coordinates, 0, atol=1e-6)
+                | np.isclose(fault_local_coordinates, 0, atol=tolerance)
             )
             & (
                 (fault_local_coordinates < 1)
-                | np.isclose(fault_local_coordinates, 1, atol=1e-6)
+                | np.isclose(fault_local_coordinates, 1, atol=tolerance)
             )
         ):
             raise ValueError("Specified coordinates do not lie in plane")

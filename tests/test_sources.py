@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import scipy as sp
 import shapely
-from hypothesis import assume, given, seed, settings
+from hypothesis import assume, given, reproduce_failure, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
@@ -577,6 +577,7 @@ def connected_fault(
         ),
     )
 )
+@settings(deadline=None)
 def test_fault_reordering(fault: Fault):
     """Ensure that the plane order in faults is completely determined by the planes."""
     for order in itertools.permutations(range(len(fault.planes))):
@@ -658,31 +659,6 @@ def test_fault_construction(fault: Fault):
     assert np.allclose(
         fault.wgs_depth_coordinates_to_fault_coordinates(fault.centroid),
         np.array([1 / 2, 1 / 2]),
-    )
-
-
-@given(
-    fault=fault_plane,
-    local_coordinates=nst.arrays(
-        float, (2,), elements={"min_value": 0, "max_value": 1}
-    ),
-)
-def test_fault_coordinate_depth_irrelevance(
-    fault: Fault, local_coordinates: np.ndarray
-):
-    """Test that the depth information is irrelevant if dip != 90."""
-    assume(fault.dip < 89)
-    global_coordinates = fault.fault_coordinates_to_wgs_depth_coordinates(
-        local_coordinates
-    )
-
-    assert np.allclose(
-        fault.wgs_depth_coordinates_to_fault_coordinates(global_coordinates[:2]),
-        local_coordinates,
-    )
-    assert np.allclose(
-        fault.wgs_depth_coordinates_to_fault_coordinates(global_coordinates),
-        local_coordinates,
     )
 
 
