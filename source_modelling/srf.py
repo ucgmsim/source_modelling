@@ -230,37 +230,24 @@ class SrfFile:
         """list[Plane]: The list of planes in the SRF."""
         planes = []
         for (_, segment_header), segment in zip(self.header.iterrows(), self.segments):
+            nstk = segment_header["nstk"]
+            ndip = segment_header["ndip"]
             length = segment_header["len"]
             width = segment_header["wid"]
-            nstk = int(segment_header["nstk"])
-            centroid = np.array([segment_header["elat"], segment_header["elon"]])
-            dip = segment_header["dip"]
-            dtop = segment_header["dtop"]
-
-            dip_direction = coordinates.wgs_depth_to_nztm(
-                segment[["lat", "lon"]].iloc[nstk]
-            ) - coordinates.wgs_depth_to_nztm(segment[["lat", "lon"]].iloc[0])
-            dip_direction_bearing = None
-            if not np.allclose(dip_direction, 0):
-                dip_direction_bearing = geo.oriented_bearing_wrt_normal(
-                    np.array([1.0, 0.0, 0.0]),
-                    np.append(dip_direction, 0),
-                    np.array([0.0, 0.0, 1.0]),
-                )
-
-            strike = segment_header["stk"]
-
-            planes.append(
-                Plane.from_centroid_strike_dip(
-                    centroid,
-                    dip,
-                    length,
-                    width,
-                    dtop=dtop,
-                    strike=strike,
-                    dip_dir_nztm=dip_direction_bearing,
-                )
+            corners = coordinates.wgs_depth_to_nztm(
+                segment[["lat", "lon", "dep"]]
+                .iloc[[0, nstk - 1, nstk * (ndip - 1), nstk * ndip - 1]]
+                .values
+            ) * np.array([1, 1, 1000])
+            origin = np.mean(corners, axis=0)
+            strike_direction = corners[1] - origin
+            scale_factor = (
+                1000
+                * np.sqrt(np.square(width / 2) + np.square(length / 2))
+                / np.linalg.norm(strike_direction)
             )
+            plane_corners = origin + (corners - origin) * scale_factor
+            planes.append(Plane(plane_corners))
         return planes
 
 
