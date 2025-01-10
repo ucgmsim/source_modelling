@@ -228,15 +228,22 @@ class SrfFile:
     @property
     def planes(self) -> list[Plane]:
         """list[Plane]: The list of planes in the SRF."""
+        # The following method relies as little as possible on the SRF header
+        # values. This is because they frequently lie! See the darfield SRF
+        # in the test cases for examples of this
         planes = []
         for (_, segment_header), segment in zip(self.header.iterrows(), self.segments):
             nstk = segment_header["nstk"]
             ndip = segment_header["ndip"]
+            # These points are the outer-most points and centres of the
+            # corner patches in the SRF (* in the diagram below).
             corners = coordinates.wgs_depth_to_nztm(
                 segment[["lat", "lon", "dep"]]
                 .iloc[[0, nstk - 1, nstk * (ndip - 1), nstk * ndip - 1]]
                 .values
             ) * np.array([1, 1, 1000])
+            # These points are the next step inside the SRF from the corners
+            # (marked . in the diagram below).
             interior = coordinates.wgs_depth_to_nztm(
                 segment[["lat", "lon", "dep"]]
                 .iloc[
@@ -249,7 +256,22 @@ class SrfFile:
                 ]
                 .values
             ) * np.array([1, 1, 1000])
-            planes.append(Plane(2 * corners - interior))
+            #
+            # ┌─────────────────┐
+            # │*               *│             * - corner patch centres
+            # │                 │             . - interior patch centres
+            # │  .           .  │             | - actual geometry
+            # │                 │
+            # │                 │
+            # │                 │
+            # │                 │
+            # │  .           .  │
+            # │                 │
+            # │*               *│
+            # └─────────────────┘
+            # the difference (corners - interior) / 2 is half the distance
+            # between patch centres, distance between patch centre and patch corners.
+            planes.append(Plane(corners + (corners - interior) / 2))
         return planes
 
 
