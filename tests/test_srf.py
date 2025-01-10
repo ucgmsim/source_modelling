@@ -88,9 +88,9 @@ def test_christchurch_srf():
         assert header[["elat", "elon"]].values == pytest.approx(
             plane.centroid[:2], abs=0.1
         )
-        assert header["wid"] == pytest.approx(plane.width, abs=0.1)
-        assert header["len"] == pytest.approx(plane.length, abs=0.1)
-        assert header["dip"] == pytest.approx(plane.dip, abs=0.1)
+        assert header["wid"] == pytest.approx(plane.width, abs=0.2)
+        assert header["len"] == pytest.approx(plane.length, abs=0.2)
+        assert header["dip"] == pytest.approx(plane.dip, abs=0.2)
         assert header["stk"] == pytest.approx(plane.strike, abs=0.1)
         assert header["dtop"] == pytest.approx(plane.corners[0, -1] / 1000, abs=0.1)
 
@@ -205,8 +205,8 @@ def test_darfield_srf():
         assert header[["elat", "elon"]].values == pytest.approx(
             plane.centroid[:2], abs=0.1
         )
-        assert header["wid"] == pytest.approx(plane.width, abs=0.1)
-        assert header["len"] == pytest.approx(plane.length, abs=0.2)
+        assert header["wid"] == pytest.approx(plane.width, abs=0.25)
+        assert header["len"] == pytest.approx(plane.length, abs=0.25)
         # assert header["dip"] == pytest.approx(plane.dip, abs=0.1)
         # assert header["stk"] == pytest.approx(plane.strike, abs=0.1)
         assert header["dtop"] == pytest.approx(plane.corners[0, -1] / 1000, abs=0.1)

@@ -232,22 +232,24 @@ class SrfFile:
         for (_, segment_header), segment in zip(self.header.iterrows(), self.segments):
             nstk = segment_header["nstk"]
             ndip = segment_header["ndip"]
-            length = segment_header["len"]
-            width = segment_header["wid"]
             corners = coordinates.wgs_depth_to_nztm(
                 segment[["lat", "lon", "dep"]]
                 .iloc[[0, nstk - 1, nstk * (ndip - 1), nstk * ndip - 1]]
                 .values
             ) * np.array([1, 1, 1000])
-            origin = np.mean(corners, axis=0)
-            strike_direction = corners[1] - origin
-            scale_factor = (
-                1000
-                * np.sqrt(np.square(width / 2) + np.square(length / 2))
-                / np.linalg.norm(strike_direction)
-            )
-            plane_corners = origin + (corners - origin) * scale_factor
-            planes.append(Plane(plane_corners))
+            interior = coordinates.wgs_depth_to_nztm(
+                segment[["lat", "lon", "dep"]]
+                .iloc[
+                    [
+                        nstk + 1,
+                        2 * (nstk - 1),
+                        (ndip - 2) * nstk + 1,
+                        nstk * (ndip - 1) - 2,
+                    ]
+                ]
+                .values
+            ) * np.array([1, 1, 1000])
+            planes.append(Plane(2 * corners - interior))
         return planes
 
 
