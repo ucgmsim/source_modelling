@@ -57,7 +57,7 @@ import pandas as pd
 import scipy as sp
 import shapely
 
-from qcore import coordinates, geo
+from qcore import coordinates
 from source_modelling import srf_reader
 from source_modelling.sources import Plane
 
@@ -228,39 +228,50 @@ class SrfFile:
     @property
     def planes(self) -> list[Plane]:
         """list[Plane]: The list of planes in the SRF."""
+        # The following method relies as little as possible on the SRF header
+        # values. This is because they frequently lie! See the darfield SRF
+        # in the test cases for examples of this
         planes = []
         for (_, segment_header), segment in zip(self.header.iterrows(), self.segments):
-            length = segment_header["len"]
-            width = segment_header["wid"]
-            nstk = int(segment_header["nstk"])
-            centroid = np.array([segment_header["elat"], segment_header["elon"]])
-            dip = segment_header["dip"]
-            dtop = segment_header["dtop"]
-
-            dip_direction = coordinates.wgs_depth_to_nztm(
-                segment[["lat", "lon"]].iloc[nstk]
-            ) - coordinates.wgs_depth_to_nztm(segment[["lat", "lon"]].iloc[0])
-            dip_direction_bearing = None
-            if not np.allclose(dip_direction, 0):
-                dip_direction_bearing = geo.oriented_bearing_wrt_normal(
-                    np.array([1.0, 0.0, 0.0]),
-                    np.append(dip_direction, 0),
-                    np.array([0.0, 0.0, 1.0]),
-                )
-
-            strike = segment_header["stk"]
-
-            planes.append(
-                Plane.from_centroid_strike_dip(
-                    centroid,
-                    dip,
-                    length,
-                    width,
-                    dtop=dtop,
-                    strike=strike,
-                    dip_dir_nztm=dip_direction_bearing,
-                )
-            )
+            nstk = segment_header["nstk"]
+            ndip = segment_header["ndip"]
+            # These points are the outer-most points and centres of the
+            # corner patches in the SRF (* in the diagram below).
+            corners = coordinates.wgs_depth_to_nztm(
+                segment[["lat", "lon", "dep"]]
+                .iloc[[0, nstk - 1, nstk * (ndip - 1), nstk * ndip - 1]]
+                .values
+            ) * np.array([1, 1, 1000])
+            # These points are the next step inside the SRF from the corners
+            # (marked . in the diagram below).
+            interior = coordinates.wgs_depth_to_nztm(
+                segment[["lat", "lon", "dep"]]
+                .iloc[
+                    [
+                        nstk + 1,
+                        2 * (nstk - 1),
+                        (ndip - 2) * nstk + 1,
+                        nstk * (ndip - 1) - 2,
+                    ]
+                ]
+                .values
+            ) * np.array([1, 1, 1000])
+            #
+            # ┌─────────────────┐
+            # │*               *│             * - corner patch centres
+            # │                 │             . - interior patch centres
+            # │  .           .  │             | - actual geometry
+            # │                 │
+            # │                 │
+            # │                 │
+            # │                 │
+            # │  .           .  │
+            # │                 │
+            # │*               *│
+            # └─────────────────┘
+            # the difference (corners - interior) / 2 is half the distance
+            # between patch centres, distance between patch centre and patch corners.
+            planes.append(Plane(corners + (corners - interior) / 2))
         return planes
 
 
