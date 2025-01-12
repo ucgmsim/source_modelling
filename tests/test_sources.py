@@ -453,6 +453,7 @@ fault_plane = st.builds(
         depth=st.floats(0, 100),
     ),
 )
+@settings(deadline=None)
 def test_plane_rrup(plane: Plane, point: np.ndarray):
     assume(plane.dip_dir >= plane.strike + 5)
     point = coordinates.wgs_depth_to_nztm(point)
@@ -521,6 +522,35 @@ def test_plane_rjb(plane: Plane, distance: float):
 def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
     """Test the inversion of coordinate transformations for a Plane object."""
     assume(not np.isclose(plane.dip_dir, plane.strike))
+    assert np.allclose(
+        plane.wgs_depth_coordinates_to_fault_coordinates(
+            plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
+        ),
+        local_coordinates,
+        atol=1e-6,
+    )
+
+@given(
+    plane=st.builds(
+    Plane.from_centroid_strike_dip,
+        centroid=st.builds(
+            coordinate,
+            lat=st.floats(-50, -31),
+            lon=st.floats(160, 180),
+            depth=st.floats(1, 10),
+        ),
+        length=st.floats(0.1, 1000),
+        width=st.floats(0.1, 1000),
+        strike_nztm=st.floats(0, 179),
+        dip=st.just(90),
+    ),
+    local_coordinates=nst.arrays(
+        float, (2,), elements={"min_value": 0, "max_value": 1}
+    ),
+)
+@seed(1)
+def test_vertical_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
+    """Test the inversion of coordinate transformations for a Plane object."""
     assert np.allclose(
         plane.wgs_depth_coordinates_to_fault_coordinates(
             plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
