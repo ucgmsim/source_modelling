@@ -18,12 +18,12 @@ It may be tempting to write your own code to do this! However, it is easy to sho
 > [!TIP]
 > Just want to have your questions answered? See the [FAQ](#answering-geometry-questions-with-the-sources-module) section.
 
-The goal of the `source_modelling.sources` module is to provide a Pythonic interface to source geometry. It must be general to accommodate new kinds of sources, and it should not depend on naming conventions that can change (type-I, type-II, etc). The definition should minimise parameter redundancy. That is, instead of providing strike, dip, length, width, bottom, top, we should let as many parameters as possible be derived. The bottom and top depth values for example, can be derived from strike, dip, length, and width values. In fact, all the essential parameters can be found ideally from the supplied corners of a fault plane in three dimensions. The fault corners, rather than the standard centroid-dip-strike-length-width-... specification we have use in the past, will now be the privileged information defining a fault. Everything else will be measured from the definition of the corners. This has a number of advantages over the old approach:
+The goal of the `source_modelling.sources` module is to provide a Pythonic interface to source geometry. It must be general to accommodate new kinds of sources, and it should not depend on naming conventions that can change (type-I, type-II, etc). The definition should minimise parameter redundancy. That is, instead of providing strike, dip, length, width, bottom, top, we should let as many parameters as possible be derived. The bottom and top depth values for example, can be derived from strike, dip, length, and width values. In fact, all the essential parameters can be found ideally from the supplied corners of a fault plane in three dimensions. The fault corners, rather than the standard centroid-dip-strike-length-width-... specification we have used in the past, will now be the privileged information defining a fault. Everything else will be measured from the definition of the corners. This has a number of advantages over the old approach:
 
 1. It completely minimises parameter redundancy, and ensures that all the paramaters are geometrically consistent. It will now be impossible, for example, to specify a plane with inconsistent length, width and depth parameters since these will be derived from the corners of the fault.
 2. Using corners allows us to frame problems of fault geometry as problems in linear algebra. The advantage of this is that we can take advantage of the wealth of tools available in numpy, scipy, etc. In the past, we would write functions like `geo.ll2gp` and do everything without any vectorisation. In the future we can use matrix transformations to manipulate faults in an efficient and concise manner.
    
-We also refrain from using inheritance hierarchies and factories to define sources, instead using simple dataclasses and duck-typing. This approach more closely matches Python development standards than, for example, factories and other gang-of-four style patterns common to Java. Accordingly, there is no Source superclass, and instead a Protocol (like an interface) that defines the functions that should exist for any object to be considered a source geometry.
+We also refrain from using inheritance hierarchies and factories to define sources, instead using simple dataclasses and duck-typing. This approach more closely matches Python development standards than, for example, factories and other gang-of-four (see _"Design Patterns: Elements of Reusable Object-Oriented Software"_) style patterns common to Java. Accordingly, there is no `Source` superclass, and instead a `Protocol` (like an interface) that defines the functions that should exist for any object to be considered a source geometry.
 
 ## What Is a Source Geometry?
 
@@ -134,6 +134,7 @@ global_point_meshgrid = (
 ```
 
 Q: How can I find the closest points between two fault geometries?
+
 A: You can use `sources.closest_point_between_sources` to find the closest points between two sources.
 
 ```python
