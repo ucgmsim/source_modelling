@@ -13,6 +13,7 @@ To understand the purpose and implementation of the algorithms in the
 """
 
 import random
+import warnings
 from collections import defaultdict, namedtuple
 from collections.abc import Generator
 from typing import Literal, Optional
@@ -57,6 +58,7 @@ def spanning_tree_with_probabilities(
 
     trees = []
     probabilities = []
+
     for tree in mst.SpanningTreeIterator(graph):
         p_tree = 1.0
         for u, v in graph.edges:
@@ -99,9 +101,14 @@ def sampled_spanning_tree(
     for u, v in weight_graph.edges:
         weight_graph[u][v]["weight"] /= 1 - weight_graph[u][v]["weight"]
 
-    trees = [
-        nx.random_spanning_tree(weight_graph, weight="weight") for _ in range(n_samples)
-    ]
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", category=DeprecationWarning, module="networkx"
+        )
+        trees = [
+            nx.random_spanning_tree(weight_graph, weight="weight")
+            for _ in range(n_samples)
+        ]
 
     if n_samples == 1:
         return trees[0]
