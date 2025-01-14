@@ -101,6 +101,10 @@ def sampled_spanning_tree(
     for u, v in weight_graph.edges:
         weight_graph[u][v]["weight"] /= 1 - weight_graph[u][v]["weight"]
 
+    # `nx.random_spanning_tree` has a warning related to a deprecated use of
+    # the `nx.total_spanning_tree_weight` function.  Because we don't cause
+    # the deprecation, the warning is silenced (and should be removed when
+    # the function is updated in networkx code).
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", category=DeprecationWarning, module="networkx"
@@ -178,6 +182,7 @@ def select_top_spanning_trees(
         A list of spanning trees that cumulatively meet or exceed the probability threshold.
     """
     weighted_graph = graph.copy()
+    # See https://github.com/ucgmsim/source_modelling/wiki/Rupture-Propagation#using-networkx-to-order-spanning-trees
     # First pass converts the graph into one with weights appropriate
     # for finding spanning trees by probability.
     for node_u, node_v in weighted_graph.edges:
@@ -228,18 +233,15 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
     """
 
     weighted_graph = graph.copy()
-    # First pass converts the graph into one with weights appropriate
-    # for finding spanning trees by probability.
-    for node_u, node_v in weighted_graph.edges:
-        weighted_graph[node_u][node_v]["weight"] /= (
-            1 - weighted_graph[node_u][node_v]["weight"]
-        )
 
-    # Second pass computes log of edge-weights so that maximum spanning tree
-    # returns the tree maximising probability.
+    # See `select_top_spanning_trees` for an explaination of what the following
+    # loop does. This is just the same except we combine the two passes into one step and
+    # use log(w / (1 - w)) = log(w) - log(1 - w) to eliminate the division.
     for node_u, node_v in weighted_graph.edges:
         edge_weight = weighted_graph[node_u][node_v]["weight"]
-        weighted_graph[node_u][node_v]["weight"] = np.log(edge_weight)
+        weighted_graph[node_u][node_v]["weight"] = np.log(edge_weight) - np.log(
+            1 - edge_weight
+        )
 
     return nx.maximum_spanning_tree(weighted_graph)
 
