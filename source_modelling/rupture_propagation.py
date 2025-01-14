@@ -229,7 +229,7 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
     Returns
     -------
     nx.Graph
-        The most likely minimum spanning tree for this graph.
+        The most likely maximum spanning tree for this graph.
     """
 
     weighted_graph = graph.copy()
