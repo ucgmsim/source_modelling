@@ -15,7 +15,7 @@ To understand the purpose and implementation of the algorithms in the
 import random
 from collections import defaultdict, namedtuple
 from collections.abc import Generator
-from typing import Optional
+from typing import Literal, Optional
 
 import networkx as nx
 import numpy as np
@@ -70,7 +70,9 @@ def spanning_tree_with_probabilities(
     return trees, probabilities
 
 
-def sampled_spanning_tree(graph: nx.Graph, n_samples: int = 1) -> list[nx.Graph]:
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: int = 1
+) -> list[nx.Graph] | nx.Graph:
     r"""
     Sample spanning trees from a graph based on edge weights.
 
@@ -90,8 +92,8 @@ def sampled_spanning_tree(graph: nx.Graph, n_samples: int = 1) -> list[nx.Graph]
 
     Returns
     -------
-    list[nx.Graph]
-        A list of sampled spanning trees.
+    list[nx.Graph] or nx.Graph
+        A list of sampled spanning trees, or a graph if `n_samples = 1`.
     """
     weight_graph = graph.copy()
     for u, v in weight_graph.edges:
@@ -100,6 +102,10 @@ def sampled_spanning_tree(graph: nx.Graph, n_samples: int = 1) -> list[nx.Graph]
     trees = [
         nx.random_spanning_tree(weight_graph, weight="weight") for _ in range(n_samples)
     ]
+
+    if n_samples == 1:
+        return trees[0]
+
     return trees
 
 
@@ -139,43 +145,6 @@ def tree_root(tree: nx.DiGraph) -> str:
         The root node of the tree.
     """
     return next(n for n in tree.nodes if tree.in_degree(n) == 0)
-
-
-def sample_tree_with_root_probabilities(
-    graph: nx.Graph, root_probabilities: dict[str, float], n_samples: int = 1
-) -> list[Tree]:
-    """
-    Sample spanning trees with root selection based on probabilities.
-
-    This method combines the sampling of spanning trees with prior probabilities
-    assigned to the root nodes. Trees are sampled according to their probabilities,
-    and the root node is selected proportionally to the given `root_probabilities`.
-
-    Parameters
-    ----------
-    graph : nx.DiGraph
-        Directed graph with weighted edges.
-    root_probabilities : dict[str, float]
-        Prior probabilities for each node to be selected as the root.
-    n_samples : int, optional
-        Number of trees to sample. Default is 1.
-
-    Returns
-    -------
-    Tree or list[Tree]
-        A single sampled spanning tree if `n_samples == 1`, otherwise a list of
-        sampled spanning trees.
-    """
-    sampled_trees: list[nx.Graph] = sampled_spanning_tree(graph, n_samples)
-    roots = random.choices(
-        list(root_probabilities), k=n_samples, weights=list(root_probabilities.values())
-    )
-    rooted_trees = [
-        graph_to_tree(nx.dfs_tree(tree, root))
-        for tree, root in zip(sampled_trees, roots)
-    ]
-
-    return rooted_trees
 
 
 def select_top_spanning_trees(
@@ -233,6 +202,39 @@ def select_top_spanning_trees(
             break
 
     return spanning_trees
+
+
+def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
+    """
+    Generate the most likely spanning tree for a probability graph G.
+
+    Parameters
+    ----------
+    graph : nx.Graph
+        The input graph from which to generate spanning trees. Edge
+        weights are probabilities of inclusion in the range [0, 1).
+
+    Returns
+    -------
+    nx.Graph
+        The most likely minimum spanning tree for this graph.
+    """
+
+    weighted_graph = graph.copy()
+    # First pass converts the graph into one with weights appropriate
+    # for finding spanning trees by probability.
+    for node_u, node_v in weighted_graph.edges:
+        weighted_graph[node_u][node_v]["weight"] /= (
+            1 - weighted_graph[node_u][node_v]["weight"]
+        )
+
+    # Second pass computes log of edge-weights so that maximum spanning tree
+    # returns the tree maximising probability.
+    for node_u, node_v in weighted_graph.edges:
+        edge_weight = weighted_graph[node_u][node_v]["weight"]
+        weighted_graph[node_u][node_v]["weight"] = np.log(edge_weight)
+
+    return nx.maximum_spanning_tree(weighted_graph)
 
 
 JumpPair = namedtuple("JumpPair", ["from_point", "to_point"])
@@ -375,6 +377,7 @@ def sample_rupture_propagation(
     sources_map: dict[str, sources.IsSource],
     initial_source: Optional[str] = None,
     initial_source_distribution: Optional[dict[str, float]] = None,
+    strategy: Literal["random", "maximising"] = "random",
     jump_impossibility_limit_distance: int = 15000,
 ) -> Tree:
     """
@@ -395,6 +398,12 @@ def sample_rupture_propagation(
     initial_source_distribution : dict[str, float], optional
         A probability distribution over the initial sources. Cannot be specified
         alongside `initial_source`.
+    strategy : `random` or `maximising`
+        The sampling strategy for the rupture propagation tree. If
+        `strategy=random`, then a spanning tree is sampled randomly
+        according to it's probability via `sampled_spanning_tree`. If
+        `strategy=maximising`, only the most likely spanning tree is used,
+        see `most_likely_spanning_tree`.
     jump_impossibility_limit_distance : int, optional
         The maximum distance (in metres) for a fault-to-fault jump to be considered
         possible. Default is 15,000.
@@ -428,23 +437,23 @@ def sample_rupture_propagation(
     )
     # Convert the distance graph to a probability graph.
     jump_probability_graph = probability_graph(distance_graph)
+    tree_sampler = (
+        sampled_spanning_tree if strategy == "random" else most_likely_spanning_tree
+    )
 
-    if initial_source:
-        return graph_to_tree(
-            nx.dfs_tree(
-                sampled_spanning_tree(jump_probability_graph)[0], initial_source
-            )
-        )
-
-    if initial_source_distribution:
-        return sample_tree_with_root_probabilities(
-            jump_probability_graph, root_probabilities=initial_source_distribution
+    if not initial_source:
+        initial_source_distribution = initial_source_distribution or {
+            source: 1.0 / len(sources_map) for source in sources_map
+        }
+        initial_source = random.choices(
+            list(initial_source_distribution),
+            k=1,
+            weights=list(initial_source_distribution.values()),
         )[0]
 
-    return sample_tree_with_root_probabilities(
-        jump_probability_graph,
-        root_probabilities={source: 1.0 / len(sources_map) for source in sources_map},
-    )[0]
+    return graph_to_tree(
+        nx.dfs_tree(tree_sampler(jump_probability_graph), initial_source)
+    )
 
 
 def jump_points_from_rupture_tree(
