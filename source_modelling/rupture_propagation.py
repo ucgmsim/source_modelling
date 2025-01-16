@@ -234,7 +234,7 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
 
     weighted_graph = graph.copy()
 
-    # See `select_top_spanning_trees` for an explaination of what the following
+    # See `select_top_spanning_trees` for an explanation of what the following
     # loop does. This is just the same except we combine the two passes into one step and
     # use log(w / (1 - w)) = log(w) - log(1 - w) to eliminate the division.
     for node_u, node_v in weighted_graph.edges:
