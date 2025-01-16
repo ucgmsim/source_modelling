@@ -257,103 +257,73 @@ def test_select_top_spanning_trees(graph: nx.Graph, probability_threshold: float
 
 
 @pytest.mark.parametrize(
-    "graph, root_probabilities, n_samples",
+    "graph",
     [
-        # Test case 1: Simple graph with equal root probabilities
-        (
-            nx.Graph(
-                [
-                    (0, 1, {"weight": 0.8}),
-                    (1, 2, {"weight": 0.6}),
-                    (2, 0, {"weight": 0.7}),
-                ]
-            ),
-            {0: 0.33, 1: 0.33, 2: 0.34},
-            1000,
+        # Test case 1: Simple graph with a low probability threshold
+        nx.Graph(
+            [
+                (0, 1, {"weight": 0.8}),
+                (1, 2, {"weight": 0.6}),
+                (2, 0, {"weight": 0.7}),
+            ]
         ),
-        # Test case 2: Simple graph with skewed root probabilities
-        (
-            nx.Graph(
-                [
-                    (0, 1, {"weight": 0.8}),
-                    (1, 2, {"weight": 0.6}),
-                    (2, 0, {"weight": 0.7}),
-                ]
-            ),
-            {0: 0.1, 1: 0.2, 2: 0.7},
-            1000,
+        # Test case 2: Simple graph with a higher probability threshold
+        nx.Graph(
+            [
+                (0, 1, {"weight": 0.8}),
+                (1, 2, {"weight": 0.6}),
+                (2, 0, {"weight": 0.7}),
+            ]
         ),
-        # Test case 3: Larger graph with equal root probabilities
-        (
-            nx.Graph(
-                [
-                    (0, 1, {"weight": 0.5}),
-                    (1, 2, {"weight": 0.4}),
-                    (2, 3, {"weight": 0.3}),
-                    (3, 0, {"weight": 0.2}),
-                    (0, 2, {"weight": 0.1}),
-                ]
-            ),
-            {0: 0.25, 1: 0.25, 2: 0.25, 3: 0.25},
-            1000,
+        # Test case 3: Larger graph with a moderate probability threshold
+        nx.Graph(
+            [
+                (0, 1, {"weight": 0.5}),
+                (1, 2, {"weight": 0.4}),
+                (2, 3, {"weight": 0.3}),
+                (3, 0, {"weight": 0.2}),
+                (0, 2, {"weight": 0.1}),
+            ]
         ),
-        # Test case 4: Larger graph with skewed root probabilities
-        (
-            nx.Graph(
-                [
-                    (0, 1, {"weight": 0.5}),
-                    (1, 2, {"weight": 0.4}),
-                    (2, 3, {"weight": 0.3}),
-                    (3, 0, {"weight": 0.2}),
-                    (0, 2, {"weight": 0.1}),
-                ]
-            ),
-            {0: 0.1, 1: 0.1, 2: 0.4, 3: 0.4},
-            1000,
+        # Test case 4: Graph with edges having very low probabilities
+        nx.Graph(
+            [
+                (0, 1, {"weight": 0.01}),
+                (1, 2, {"weight": 0.02}),
+                (2, 0, {"weight": 0.03}),
+            ]
+        ),
+        # Test case 5: Graph with edges having very high probabilities
+        nx.Graph(
+            [
+                (0, 1, {"weight": 0.99}),
+                (1, 2, {"weight": 0.98}),
+                (2, 0, {"weight": 0.97}),
+            ]
         ),
     ],
 )
-def test_sample_tree_with_root_probabilities(
-    graph: nx.Graph, root_probabilities: dict[int, float], n_samples: int
-):
-    sampled_trees = rupture_propagation.sample_tree_with_root_probabilities(
-        graph, root_probabilities, n_samples
+def test_most_likely_spanning_tree(graph: nx.Graph):
+    # Compute all spanning trees and their probabilities using the brute force method
+
+    all_trees, all_probabilities = rupture_propagation.spanning_tree_with_probabilities(
+        graph
+    )
+    selected_top_tree = rupture_propagation.most_likely_spanning_tree(graph)
+    mst_probability = 1
+
+    for u, v in graph.edges:
+        if selected_top_tree.has_edge(u, v):
+            mst_probability *= graph[u][v]["weight"]
+        else:
+            mst_probability *= 1 - graph[u][v]["weight"]
+
+    # Sort trees by probability
+    top_tree, top_probability = max(
+        zip(all_trees, all_probabilities), key=lambda kv: kv[1]
     )
 
-    # Extract the roots from the sampled trees
-    sampled_roots = [
-        node
-        for tree in sampled_trees
-        for node, parent in tree.items()
-        if parent is None
-    ]
-
-    # Count the occurrences of each root
-    root_counts = collections.Counter(sampled_roots)
-
-    # Calculate the empirical probabilities
-    empirical_probabilities = {
-        root: count / n_samples for root, count in root_counts.items()
-    }
-
-    # Ensure all nodes are in empirical_probabilities
-    for root in root_probabilities:
-        if root not in empirical_probabilities:
-            empirical_probabilities[root] = 0.0
-
-    # Convert dictionaries to lists of probabilities
-    empirical_probs = np.array(
-        [empirical_probabilities[root] for root in sorted(root_probabilities.keys())]
-    )
-    expected_probs = np.array(
-        [root_probabilities[root] for root in sorted(root_probabilities.keys())]
-    )
-
-    # Calculate KL divergence
-    kl_divergence = sp.stats.entropy(empirical_probs, expected_probs)
-
-    # Assert that the KL divergence is small
-    assert kl_divergence < 0.1
+    assert (top_tree == mst) or (np.isclose(top_probability, mst_probability))
 
 
 @pytest.mark.parametrize(
