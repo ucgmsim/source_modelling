@@ -27,15 +27,16 @@ from typing import Callable, Optional
 import pandas as pd
 import parse
 
+# Adapted from regex: https://stackoverflow.com/a/4703508
 HEADER_PATTERN = """EventTAG: {event_tag}
-Loc : LAT = {latitude:f} LON = {longitude:f} DEP = {depth:f}
-Size : LEN = {length:f} km WID = {width:f} km Mw = {magnitude:f} Mo = {moment:e} Nm
-Mech : STRK = {strike:f} DIP = {dip:f} RAKE = {rake:f} Htop = {htop:f} km
-Rupt : HypX = {hypx:f} km Hypz = {hypz:f} km avTr = {average_rise_time:f} s avVr = {average_rupture_speed:f} km/s
-Invs : Nx = {nx:d} Nz = {nz:d} Fmin = {fmin:f} Hz Fmax = {fmax:f} Hz
-Invs : Dx = {dx:f} km Dz = {dz:f} km
+Loc : LAT = {latitude:g} LON = {longitude:g} DEP = {depth:g}
+Size : LEN = {length:g} km WID = {width:g} km Mw = {magnitude:g} Mo = {moment:g} Nm
+Mech : STRK = {strike:g} DIP = {dip:g} RAKE = {rake:g} Htop = {htop:g} km
+Rupt : HypX = {hypx:g} km Hypz = {hypz:g} km avTr = {average_rise_time:g} s avVr = {average_rupture_speed:g} km/s
+Invs : Nx = {nx:d} Nz = {nz:d} Fmin = {fmin:g} Hz Fmax = {fmax:g} Hz
+Invs : Dx = {dx:g} km Dz = {dz:g} km
 Invs : Ntw = {time_window_count:d} Nsg = {segment_count:d} (# of time-windows,# of fault segments)
-Invs : LEN = {time_window_length:f} s SHF = {time_shift:f} s (time-window length and time-shift)
+Invs : LEN = {time_window_length:g} s SHF = {time_shift:g} s (time-window length and time-shift)
 SVF : {slip_velocity_function} (type of slip-velocity function used)
 """
 
@@ -188,7 +189,7 @@ class FSPFile:
             # Collect and normalise all the lines that make up the header
             # of the file.
             for line in fsp_file_handle:
-                if line.startswith("% Data :"):
+                if line.startswith("% Data"):
                     break
                 if (
                     line.startswith("% -")
@@ -203,9 +204,10 @@ class FSPFile:
 
             # Now we can parse the header according to the header pattern.
             parse_result = parse.parse(
-                HEADER_PATTERN,
-                header,
+                HEADER_PATTERN.strip(),
+                header.strip(),
             )
+
             if not parse_result:
                 raise FSPParseError("Failed to parse FSP file header")
             metadata = parse_result.named
@@ -225,7 +227,9 @@ class FSPFile:
                 names=columns,
                 comment="%",
             )
-            data = data.rename(columns={"x==ew": "x", "y==ns": "y"})
+            data = data.rename(
+                columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
+            )
             fsp_file = cls(data=data, **metadata)
 
             # A lot of parameters can be 999 or -999 to indicate "no known
