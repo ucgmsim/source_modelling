@@ -1,0 +1,55 @@
+% ----------------------------------  FINITE-SOURCE RUPTURE MODEL  --------------------------------
+%
+% Event : Little Skull Mnts (Nevada)   06/29/1992   [W. Silva (pers. comm.)]
+% EventTAG: s1992LITTLEsilv   
+%
+% Loc  : LAT  =  36.432      LON = -116.178     DEP = 11.80
+% Size : LEN  =   6.99 km    WID =   6.61 km    Mw = 5.63       Mo = 3.12e+017 Nm
+% Mech : STRK =   60         DIP =  70          RAKE = 270      Htop = 9.40 km
+% Rupt : HypX =   3.50 km    HypZ =  3.31 km    avTr = 999.0 s    avVr = 999.0 km/s
+%
+% ----------------------------------  inversion-related parameters  --------------------------------
+%
+% Invs :   Nx  =    3           Nz  =    2        Fmin = 999.00 Hz     Fmax = 999.0 Hz
+% Invs :   Dx  =   2.33 km      Dz  =  3.31 km    
+% Invs :   Ntw =   1            Nsg =   1         (# of time-windows,# of fault segments)
+% Invs :   LEN = 999.00 s        SHF =  0.00 s     (time-window length and time-shift)
+% SVF  :   unknown                                 (type of slip-velocity function used)
+%
+% Data :   SGM        TELE         GPS      tril      level 
+% Data :  999           0           0         0          0
+% PHImx:  999           0           0         0          0
+% Rmin :  999.0         0.0         0.0       0.0        0.0
+%
+% -------------------------------------------------------------------------------------------------- 
+%
+% VELOCITY-DENSITY STRUCTURE 
+% No. of layers =   5  
+%
+%   DEPTH    P-VEL    S-VEL     DENS
+%   [km]     [km/s]   [km/s]   [g/cm^3]
+%   0.00     5.85     3.38      2.40
+%   1.00     6.00     3.46      2.50
+%  25.00     6.35     3.67      2.60
+%  30.00     6.60     3.81      2.70
+%  35.00     7.80     4.50      3.20
+%
+% -------------------------------------------------------------------------------------------------- 
+% 22-Aug-2007, created by P.Martin Mai (mai@sed.ethz.ch)
+% -------------------------------------------------------------------------------------------------- 
+%
+% SOURCE MODEL PARAMETERS 
+%   Nsbfs =      6 subfaults
+%        X,Y,Z coordinates in km; SLIP in m
+%        if applicable: RAKE in deg, RISE in s, TRUP in s, slip in each TW in m
+%
+%   Coordinates are given for top-center of each subfault or segment: |'| 
+%   Origin of local coordinate system at epicenter: X (NS) = 0,  Y (EW) = 0 
+%   LAT       LON       X==NS     Y==EW       Z       SLIP
+% -------------------------------------------------------------------------------------------------- 
+   36.430  -116.206    -2.583    -0.186     9.400     0.200
+   36.440  -116.184    -0.565     0.979     9.400     0.104
+   36.451  -116.161     1.453     2.144     9.400     0.031
+   36.421  -116.200    -2.018    -1.165    12.506     0.498
+   36.432  -116.178     0.000     0.000    12.506     0.285
+   36.442  -116.155     2.018     1.165    12.506     0.131
