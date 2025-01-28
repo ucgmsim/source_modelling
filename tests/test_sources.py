@@ -341,7 +341,7 @@ def valid_trace_definition(draw: st.DrawFn):
             x=st.floats(1073000, 2154000),
         )
     )
-    assume(np.all(trace_point_1_nztm != trace_point_2_nztm))
+    assume(not np.allclose(trace_point_1_nztm, trace_point_2_nztm))
     trace_points_nztm = np.stack((trace_point_1_nztm, trace_point_2_nztm), axis=0)
 
     # Compute strike
