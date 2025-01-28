@@ -327,21 +327,29 @@ def trace(
 
 @st.composite
 def valid_trace_definition(draw: st.DrawFn):
-    strike = draw(st.floats(1, 179))
-
-    start_trace_nztm = draw(
+    trace_point_1_nztm = draw(
         st.builds(
             nztm_coordinate,
             y=st.floats(4715500, 6221500),
             x=st.floats(1073000, 2154000),
         )
     )
+    trace_point_2_nztm = draw(
+        st.builds(
+            nztm_coordinate,
+            y=st.floats(4715500, 6221500),
+            x=st.floats(1073000, 2154000),
+        )
+    )
+    assume(np.all(trace_point_1_nztm != trace_point_2_nztm))
+    trace_points_nztm = np.stack((trace_point_1_nztm, trace_point_2_nztm), axis=0)
 
-    length = draw(st.floats(100, 1000_000))
-    trace_points = trace(
-        start_trace_nztm=start_trace_nztm,
-        length=length,
-        strike=strike,
+    # Compute strike
+    north_direction = np.array([1, 0, 0])
+    up_direction = np.array([0, 0, 1])
+    strike_vec = np.concatenate((trace_point_2_nztm - trace_point_1_nztm, [0]))
+    strike_nztm = geo.oriented_bearing_wrt_normal(
+        north_direction, strike_vec, up_direction
     )
 
     dtop = draw(st.floats(0, 100))
@@ -349,50 +357,37 @@ def valid_trace_definition(draw: st.DrawFn):
     dip = draw(st.floats(1, 90))
 
     if np.isclose(dip, 90):
-        dip_dir_nztm, dip_dir = 0, 0
+        dip_dir_nztm = 0
     else:
-        dip_dir_nztm = (strike + draw(st.floats(1, 179))) % 360
-        dip_dir = coordinates.nztm_bearing_to_great_circle_bearing(
-            trace_points[0], 1, dip_dir_nztm
-        )
+        dip_dir_nztm = (strike_nztm + draw(st.floats(1, 179))) % 360
 
     return (
-        trace_points,
+        trace_points_nztm,
         dtop,
         depth,
         dip,
-        dip_dir,
         dip_dir_nztm,
-        strike,
-        length,
-        start_trace_nztm,
+        strike_nztm,
     )
 
 
 @given(valid_trace_definition())
 def test_plane_from_trace(data: tuple):
     (
-        trace_points,
+        trace_points_nztm,
         dtop,
         depth,
         dip,
-        dip_dir,
         dip_dir_nztm,
-        strike,
-        length,
-        start_trace_nztm,
+        strike_nztm,
     ) = data
 
-    assume(valid_coordinates(trace_points[0]))
-    assume(valid_coordinates(trace_points[1]))
-
-    plane = Plane.from_trace(trace_points, dtop, dtop + depth, dip, dip_dir)
+    plane = Plane.from_nztm_trace(trace_points_nztm, dtop, dtop + depth, dip, dip_dir_nztm)
     assert np.isclose(plane.top_m, dtop * 1000, atol=1e-3)
     assert np.isclose(plane.bottom_m, (dtop + depth) * 1000, atol=1e-3)
     assert np.isclose(plane.dip, dip, atol=1e-6)
-    assert np.isclose(plane.dip_dir, dip_dir_nztm, atol=1e-3)
-    assert np.isclose(plane.strike, strike, atol=1e-6)
-    assert np.isclose(plane.length_m, length, atol=1e-3)
+    assert np.isclose(plane.dip_dir_nztm, dip_dir_nztm, atol=1e-3)
+    assert np.isclose(plane.strike_nztm, strike_nztm, atol=1e-6)
     assert np.isclose(
         plane.width, plane.projected_width / np.cos(np.radians(plane.dip)), atol=1e-6
     )
@@ -405,33 +400,20 @@ def test_invalid_trace_points():
     """Test that constructing a Plane with invalid trace points raises a ValueError."""
     trace_points = np.array([[0, 0], [1, 1], [2, 2]])  # 3 points
     with pytest.raises(ValueError, match="Trace points must be a 2x2 array."):
-        Plane.from_trace(trace_points, 0, 1, 45, 45)
-
-
-def test_invalid_dip_dir():
-    """Test that constructing a Plane with an invalid dip direction raises a ValueError."""
-    start_trace_point = np.asarray([-43.5321, 172.6362])
-    end_trace_point = geo.ll_shift(start_trace_point[0], start_trace_point[1], 5, 0)
-    trace_points = np.stack((start_trace_point, end_trace_point), axis=0)
-
-    with pytest.raises(
-        ValueError,
-        match="Dip direction is inconsistent with the strike defined by the trace points.",
-    ):
-        Plane.from_trace(trace_points, 0, 1, 45, 260)
+        Plane.from_nztm_trace(trace_points, 0, 1, 45, 45)
 
 
 def test_invalid_dip_dir_90_dip():
     """Test that constructing a Plane with an invalid dip direction raises a ValueError."""
     start_trace_point = np.asarray([-43.5321, 172.6362])
     end_trace_point = geo.ll_shift(start_trace_point[0], start_trace_point[1], 5, 0)
-    trace_points = np.stack((start_trace_point, end_trace_point), axis=0)
+    trace_points_nztm = coordinates.wgs_depth_to_nztm(np.stack((start_trace_point, end_trace_point), axis=0))
 
     with pytest.raises(
         ValueError,
         match="Dip direction must be 0 for vertical faults.",
     ):
-        Plane.from_trace(trace_points, 0, 1, 90, 20)
+        Plane.from_nztm_trace(trace_points_nztm, 0, 1, 90, 20)
 
 
 @pytest.mark.parametrize(

@@ -402,23 +402,25 @@ class Plane:
         return shapely.Polygon(self.bounds)
 
     @staticmethod
-    def from_trace(
-        trace_points: np.ndarray[float],
+    def from_nztm_trace(
+        trace_points_nztm: np.ndarray[float],
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: float,
+        dip_dir_nztm: float,
     ) -> "Plane":
-        """Create a fault plane from the surface trace, depth parameters and dip.
+        """Create a fault plane from the surface trace, depth parameters, 
+        dip and dip direction. 
+
+        Note: Strike is defined by the dip direction, not the order of the trace points!
 
         Parameters
         ----------
         trace_points: np.ndarray
-            The surface trace of the fault in lat, lon format.
-            Points need to be ordered, i.e. first points is the start
-            and last point is the end of the fault trace.
-            [[start_lat, start_lon],
-             [end_lat  , end_lon  ]]
+            The surface trace of the fault in NZTM (y, x) format.
+            The order of the points is not important, as
+            strike, and therefore the correct order, is determined 
+            from dip direction.
         dtop: float
             The top depth of the plane (in km).
         dbottom: float
@@ -434,27 +436,13 @@ class Plane:
         Plane
             The fault plane with the given parameters.
         """
-        if trace_points.shape != (2, 2):
+        if trace_points_nztm.shape != (2, 2):
             raise ValueError("Trace points must be a 2x2 array.")
 
-        if np.isclose(dip, 90) and dip_dir != 0:
+        if np.isclose(dip, 90) and dip_dir_nztm != 0:
             raise ValueError("Dip direction must be 0 for vertical faults.")
 
-        # Get the trace endpoints in NZTM coordinates (y, x)
-        trace_points_nztm = coordinates.wgs_depth_to_nztm(trace_points)
         dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
-
-        dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(trace_points[0], 1, dip_dir)
-
-        # Check that dip-direction is consistent with the trace
-        dip_vec = np.array([np.cos(np.radians(dip_dir_nztm)), np.sin(np.radians(dip_dir_nztm))])
-        strike_vec = trace_points_nztm[1] - trace_points_nztm[0]
-        orientation = np.linalg.det(np.array([strike_vec, dip_vec]))
-        if not np.isclose(dip, 90) and not np.isclose(orientation, 0) and orientation < 0:
-            raise ValueError(
-                "Dip direction is inconsistent with the "
-                "strike defined by the trace points."
-            )
 
         # Define the trace corners in NZTM coordinates (y, x, depth)
         c1 = (*trace_points_nztm[0], dtop)
@@ -478,9 +466,7 @@ class Plane:
                 dbottom,
             )
 
-        # Convert to lat, lon, depth
-        corners = coordinates.nztm_to_wgs_depth(np.array([c1, c2, c3, c4]))
-        return Plane.from_corners(corners)
+        return Plane(np.array([c1, c2, c3, c4]))
 
     @classmethod
     def from_centroid_strike_dip(
@@ -823,7 +809,7 @@ class Fault:
                 np.isclose(plane.dip_dir_nztm, self.planes[0].dip_dir_nztm, atol=0.1)
             ):
                 raise ValueError(
-                    f"Fault must have a constant dip direction (plane dip dir = {plane.dip_dir}, fault dip dir is {self.planes[0].dip_dir})."
+                    f"Fault must have a constant dip direction (plane dip dir = {plane.dip_dir_nztm}, fault dip dir is {self.planes[0].dip_dir_nztm})."
                 )
             if not (np.isclose(plane.dip, self.planes[0].dip, atol=0.1)):
                 raise ValueError(
