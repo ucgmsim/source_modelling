@@ -386,17 +386,18 @@ def test_plane_from_trace(data: tuple):
     plane = Plane.from_nztm_trace(
         trace_points_nztm, dtop, dtop + depth, dip, dip_dir_nztm
     )
-    assert np.isclose(plane.top_m, dtop * 1000, atol=1e-3)
-    assert np.isclose(plane.bottom_m, (dtop + depth) * 1000, atol=1e-3)
-    assert np.isclose(plane.dip, dip, atol=1e-6)
-    assert np.isclose(plane.dip_dir_nztm, dip_dir_nztm, atol=1e-3)
-    assert np.isclose(plane.strike_nztm, strike_nztm, atol=1e-6)
-    assert np.isclose(
-        plane.width, plane.projected_width / np.cos(np.radians(plane.dip)), atol=1e-6
+    assert pytest.approx(plane.top_m, abs=1e-3) == dtop * 1000
+    assert pytest.approx(plane.bottom_m, abs=1e-3) == (dtop + depth) * 1000
+    assert pytest.approx(plane.dip, abs=1e-6) == dip
+    assert pytest.approx(plane.dip_dir_nztm, abs=1e-3) == dip_dir_nztm
+    assert pytest.approx(plane.strike_nztm, abs=1e-6) == strike_nztm
+    assert pytest.approx(plane.width, abs=1e-6) == plane.projected_width / np.cos(
+        np.radians(plane.dip)
     )
-    assert np.allclose(
-        shapely.get_coordinates(plane.geometry, include_z=True)[:-1], plane.bounds
-    )
+
+    assert shapely.get_coordinates(plane.geometry, include_z=True)[
+        :-1
+    ] == pytest.approx(plane.bounds)
 
 
 def test_invalid_trace_points():
@@ -869,7 +870,7 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
         (
             [
                 Plane.from_centroid_strike_dip(
-                    np.array([-41.2865, 174.7762, 5000]),
+                    np.array([-41.2865, 174.7762, 50]),
                     30,
                     4,
                     4,
@@ -877,9 +878,13 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
                     dip_dir_nztm=30,
                 ),
                 Plane.from_centroid_strike_dip(
-                    np.array(
-                        [-41.2865 + 0.036, 174.7862, 5000]
-                    ),  # 1 degree of latitude is approximately 111 km
+                    coordinates.nztm_to_wgs_depth(
+                        coordinates.wgs_depth_to_nztm(
+                            np.array([-41.2865, 174.7762, 50])
+                        )
+                        + np.array([4000, 0, 0], dtype=float)
+                        + np.array([-15.3426846, 26.04670979, 0.0])
+                    ),
                     30,
                     4,
                     4,
