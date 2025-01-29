@@ -409,8 +409,8 @@ class Plane:
         dip: float,
         dip_dir_nztm: float,
     ) -> "Plane":
-        """Create a fault plane from the surface trace, depth parameters, 
-        dip and dip direction. 
+        """Create a fault plane from the surface trace, depth parameters,
+        dip and dip direction.
 
         Note: Strike is defined by the dip direction, not the order of the trace points!
 
@@ -419,7 +419,7 @@ class Plane:
         trace_points: np.ndarray
             The surface trace of the fault in NZTM (y, x) format.
             The order of the points is not important, as
-            strike, and therefore the correct order, is determined 
+            strike, and therefore the correct order, is determined
             from dip direction.
         dtop: float
             The top depth of the plane (in km).
@@ -804,9 +804,13 @@ class Fault:
         ValueError
             If the planes are not consistent in dip direction or width."""
         # Planes can only have one dip, dip direction, and width.
+        dip_dir_0 = self.planes[0].bounds[-1] - self.planes[0].bounds[0]
         for plane in self.planes:
-            if not (
-                np.isclose(plane.dip_dir_nztm, self.planes[0].dip_dir_nztm, atol=0.1)
+            dip_dir = plane.bounds[-1] - plane.bounds[0]
+            if not (np.isclose(plane.width, self.planes[0].width)):
+                raise ValueError("Fault must have constant width.")
+            if not np.isclose(
+                np.dot(dip_dir, dip_dir_0), self.planes[0].width_m ** 2, atol=0.01
             ):
                 raise ValueError(
                     f"Fault must have a constant dip direction (plane dip dir = {plane.dip_dir_nztm}, fault dip dir is {self.planes[0].dip_dir_nztm})."
@@ -815,11 +819,6 @@ class Fault:
                 raise ValueError(
                     f"Fault must have a constant dip (plane dip = {plane.dip}, fault dip is {self.planes[0].dip})."
                 )
-
-        if not all(
-            np.isclose(plane.width, self.planes[0].width) for plane in self.planes
-        ):
-            raise ValueError("Fault must have constant width.")
 
     def _validate_fault_plane_connectivity(self, connection_graph: nx.DiGraph):
         """Validate that the fault planes are connected in a line.
