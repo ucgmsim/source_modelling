@@ -404,15 +404,16 @@ class Plane:
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
 
-    @staticmethod
+    @classmethod
     def from_nztm_trace(
+        cls,
         trace_points_nztm: np.ndarray[float],
         dtop: float,
         dbottom: float,
         dip: float,
         dip_dir: Optional[float] = None,
         dip_dir_nztm: Optional[float] = None,
-    ) -> "Plane":
+    ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
 
@@ -423,6 +424,7 @@ class Plane:
         trace_points: np.ndarray
             The surface trace of the fault in NZTM (y, x) format.
             The order of the points is not important, as
+            strike, and therefore the correct order, is determined
             strike, and therefore the correct order, is determined
             from dip direction.
         dtop: float
@@ -470,24 +472,29 @@ class Plane:
         dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
 
         # Define the trace corners in NZTM coordinates (y, x, depth)
-        corners_top = np.hstack((trace_points_nztm, np.full((2, 1), dtop)))
+        corners_top = np.column_stack((trace_points_nztm, np.array([dtop, dtop])))
 
         # Compute remaining corners
         if np.isclose(dip, 90):
-            corners_bottom = np.concatenate(
-                (trace_points_nztm, np.full((2, 1), dbottom)), axis=1
+            corners_bottom = np.column_stack(
+                (trace_points_nztm, np.array([dbottom, dbottom]))
             )
         else:
             dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
             proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
-            displacement = proj_width * np.array(
-                [np.cos(dip_dir_nztm_rad), np.sin(dip_dir_nztm_rad)]
-            )
-            corners_bottom = np.concatenate(
-                (trace_points_nztm + displacement, np.full((2, 1), dbottom)), axis=1
+
+            displacement = np.array(
+                [
+                    np.cos(dip_dir_nztm_rad) * proj_width,
+                    np.sin(dip_dir_nztm_rad) * proj_width,
+                    dbottom - dtop,
+                ]
             )
 
-        return Plane(np.concatenate((corners_top, corners_bottom), axis=0))
+            # Apply displacement to trace points to get c3 and c4
+            corners_bottom = corners_top + displacement
+
+        return cls(np.vstack((corners_top, corners_bottom)))
 
     @classmethod
     def from_centroid_strike_dip(
@@ -825,9 +832,13 @@ class Fault:
         ValueError
             If the planes are not consistent in dip direction or width."""
         # Planes can only have one dip, dip direction, and width.
+        dip_dir_0 = self.planes[0].bounds[-1] - self.planes[0].bounds[0]
         for plane in self.planes:
-            if not (
-                np.isclose(plane.dip_dir_nztm, self.planes[0].dip_dir_nztm, atol=0.1)
+            dip_dir = plane.bounds[-1] - plane.bounds[0]
+            if not (np.isclose(plane.width, self.planes[0].width)):
+                raise ValueError("Fault must have constant width.")
+            if not np.isclose(
+                np.dot(dip_dir, dip_dir_0), self.planes[0].width_m ** 2, atol=0.01
             ):
                 raise ValueError(
                     f"Fault must have a constant dip direction (plane dip dir = {plane.dip_dir_nztm}, fault dip dir is {self.planes[0].dip_dir_nztm})."
@@ -836,11 +847,6 @@ class Fault:
                 raise ValueError(
                     f"Fault must have a constant dip (plane dip = {plane.dip}, fault dip is {self.planes[0].dip})."
                 )
-
-        if not all(
-            np.isclose(plane.width, self.planes[0].width) for plane in self.planes
-        ):
-            raise ValueError("Fault must have constant width.")
 
     def _validate_fault_plane_connectivity(self, connection_graph: nx.DiGraph):
         """Validate that the fault planes are connected in a line.
