@@ -374,6 +374,9 @@ class Plane:
     @property
     def dip_dir(self) -> float:
         """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
+        if self.dip_dir_nztm == 0.0:
+            return 0.0
+
         return coordinates.nztm_bearing_to_great_circle_bearing(
             self.corners[0, :2], self.width, self.dip_dir_nztm
         )
@@ -407,10 +410,11 @@ class Plane:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir_nztm: float,
+        dip_dir: Optional[float] = None,
+        dip_dir_nztm: Optional[float] = None,
     ) -> "Plane":
-        """Create a fault plane from the surface trace, depth parameters, 
-        dip and dip direction. 
+        """Create a fault plane from the surface trace, depth parameters,
+        dip and dip direction.
 
         Note: Strike is defined by the dip direction, not the order of the trace points!
 
@@ -419,7 +423,7 @@ class Plane:
         trace_points: np.ndarray
             The surface trace of the fault in NZTM (y, x) format.
             The order of the points is not important, as
-            strike, and therefore the correct order, is determined 
+            strike, and therefore the correct order, is determined
             from dip direction.
         dtop: float
             The top depth of the plane (in km).
@@ -427,15 +431,36 @@ class Plane:
             The bottom depth of the plane (in km).
         dip: float
             The dip of the fault plane (degrees).
-        dip_dir: float
-            The dip direction of the fault plane (degrees)
-             as great circle bearing.
+        dip_dir: float, optional
+            Plane dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+
+            Note: If combining multiple planes into a fault using the great
+            circle bearing dip direction will cause issues, as the NZTM dip
+            direction across the Planes will not be consistent.
+        dip_dir_nztm: float, optional
+            Plane NZTM dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
 
         Returns
         -------
         Plane
             The fault plane with the given parameters.
         """
+        if dip_dir is not None and dip_dir_nztm is not None:
+            raise ValueError("Must supply at most one of dip_dir or dip_dir_nztm.")
+
+        if dip_dir_nztm is None and dip_dir is None:
+            raise ValueError("Must supply at least one of dip_dir or dip_dir_nztm.")
+
+        if dip_dir_nztm is None and dip_dir is not None:
+            if np.isclose(dip, 90):
+                dip_dir_nztm = 0
+            else:
+                dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
+                    coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), 1, dip_dir
+                )
+
         if trace_points_nztm.shape != (2, 2):
             raise ValueError("Trace points must be a 2x2 array.")
 
@@ -445,28 +470,24 @@ class Plane:
         dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
 
         # Define the trace corners in NZTM coordinates (y, x, depth)
-        c1 = (*trace_points_nztm[0], dtop)
-        c2 = (*trace_points_nztm[1], dtop)
+        corners_top = np.hstack((trace_points_nztm, np.full((2, 1), dtop)))
 
         # Compute remaining corners
         if np.isclose(dip, 90):
-            c3 = (c2[0], c2[1], dbottom)
-            c4 = (c1[0], c1[1], dbottom)
+            corners_bottom = np.concatenate(
+                (trace_points_nztm, np.full((2, 1), dbottom)), axis=1
+            )
         else:
             dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
             proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
-            c3 = (
-                c2[0] + proj_width * np.cos(dip_dir_nztm_rad),
-                c2[1] + proj_width * np.sin(dip_dir_nztm_rad),
-                dbottom,
+            displacement = proj_width * np.array(
+                [np.cos(dip_dir_nztm_rad), np.sin(dip_dir_nztm_rad)]
             )
-            c4 = (
-                c1[0] + proj_width * np.cos(dip_dir_nztm_rad),
-                c1[1] + proj_width * np.sin(dip_dir_nztm_rad),
-                dbottom,
+            corners_bottom = np.concatenate(
+                (trace_points_nztm + displacement, np.full((2, 1), dbottom)), axis=1
             )
 
-        return Plane(np.array([c1, c2, c3, c4]))
+        return Plane(np.concatenate((corners_top, corners_bottom), axis=0))
 
     @classmethod
     def from_centroid_strike_dip(
