@@ -401,14 +401,15 @@ class Plane:
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
 
-    @staticmethod
+    @classmethod
     def from_nztm_trace(
+        cls,
         trace_points_nztm: np.ndarray[float],
         dtop: float,
         dbottom: float,
         dip: float,
         dip_dir_nztm: float,
-    ) -> "Plane":
+    ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
 
@@ -427,9 +428,8 @@ class Plane:
             The bottom depth of the plane (in km).
         dip: float
             The dip of the fault plane (degrees).
-        dip_dir: float
-            The dip direction of the fault plane (degrees)
-             as great circle bearing.
+        dip_dir_nztm: float
+            The dip direction of the fault plane (degrees) as an NZTM bearing.
 
         Returns
         -------
@@ -445,28 +445,29 @@ class Plane:
         dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
 
         # Define the trace corners in NZTM coordinates (y, x, depth)
-        c1 = (*trace_points_nztm[0], dtop)
-        c2 = (*trace_points_nztm[1], dtop)
+        corners_top = np.column_stack((trace_points_nztm, np.array([dtop, dtop])))
 
         # Compute remaining corners
         if np.isclose(dip, 90):
-            c3 = (c2[0], c2[1], dbottom)
-            c4 = (c1[0], c1[1], dbottom)
+            corners_bottom = np.column_stack(
+                (trace_points_nztm, np.array([dbottom, dbottom]))
+            )
         else:
             dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
             proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
-            c3 = (
-                c2[0] + proj_width * np.cos(dip_dir_nztm_rad),
-                c2[1] + proj_width * np.sin(dip_dir_nztm_rad),
-                dbottom,
-            )
-            c4 = (
-                c1[0] + proj_width * np.cos(dip_dir_nztm_rad),
-                c1[1] + proj_width * np.sin(dip_dir_nztm_rad),
-                dbottom,
+
+            displacement = np.array(
+                [
+                    np.cos(dip_dir_nztm_rad) * proj_width,
+                    np.sin(dip_dir_nztm_rad) * proj_width,
+                    dbottom - dtop,
+                ]
             )
 
-        return Plane(np.array([c1, c2, c3, c4]))
+            # Apply displacement to trace points to get c3 and c4
+            corners_bottom = corners_top + displacement
+
+        return cls(np.vstack((corners_top, corners_bottom)))
 
     @classmethod
     def from_centroid_strike_dip(
