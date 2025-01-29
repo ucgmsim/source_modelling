@@ -314,6 +314,7 @@ def test_general_invalid_input():
     with pytest.raises(ValueError, match="Bounds do not form a plane."):
         Plane(bounds)
 
+
 def trace(
     start_trace_nztm: np.ndarray[float], length: float, strike: float
 ) -> np.ndarray:
@@ -382,7 +383,9 @@ def test_plane_from_trace(data: tuple):
         strike_nztm,
     ) = data
 
-    plane = Plane.from_nztm_trace(trace_points_nztm, dtop, dtop + depth, dip, dip_dir_nztm)
+    plane = Plane.from_nztm_trace(
+        trace_points_nztm, dtop, dtop + depth, dip, dip_dir_nztm
+    )
     assert np.isclose(plane.top_m, dtop * 1000, atol=1e-3)
     assert np.isclose(plane.bottom_m, (dtop + depth) * 1000, atol=1e-3)
     assert np.isclose(plane.dip, dip, atol=1e-6)
@@ -407,7 +410,9 @@ def test_invalid_dip_dir_90_dip():
     """Test that constructing a Plane with an invalid dip direction raises a ValueError."""
     start_trace_point = np.asarray([-43.5321, 172.6362])
     end_trace_point = geo.ll_shift(start_trace_point[0], start_trace_point[1], 5, 0)
-    trace_points_nztm = coordinates.wgs_depth_to_nztm(np.stack((start_trace_point, end_trace_point), axis=0))
+    trace_points_nztm = coordinates.wgs_depth_to_nztm(
+        np.stack((start_trace_point, end_trace_point), axis=0)
+    )
 
     with pytest.raises(
         ValueError,
@@ -638,9 +643,10 @@ def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray)
         atol=1e-6,
     )
 
+
 @given(
     plane=st.builds(
-    Plane.from_centroid_strike_dip,
+        Plane.from_centroid_strike_dip,
         centroid=st.builds(
             coordinate,
             lat=st.floats(-50, -31),
@@ -657,7 +663,9 @@ def test_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray)
     ),
 )
 @seed(1)
-def test_vertical_plane_coordinate_inversion(plane: Plane, local_coordinates: np.ndarray):
+def test_vertical_plane_coordinate_inversion(
+    plane: Plane, local_coordinates: np.ndarray
+):
     """Test the inversion of coordinate transformations for a Plane object."""
     assert np.allclose(
         plane.wgs_depth_coordinates_to_fault_coordinates(
@@ -860,25 +868,23 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
         # Inconsistent dip directions
         (
             [
-                Plane.from_corners(
-                    np.array(
-                        [
-                            [-41.2865, 174.7762, 0],
-                            [-41.2865, 174.7862, 0],
-                            [-41.2965, 174.7962, 10000],
-                            [-41.2965, 174.7862, 10000],
-                        ]
-                    )
+                Plane.from_centroid_strike_dip(
+                    np.array([-41.2865, 174.7762, 5000]),
+                    30,
+                    4,
+                    4,
+                    strike_nztm=0,
+                    dip_dir_nztm=30,
                 ),
-                Plane.from_corners(
+                Plane.from_centroid_strike_dip(
                     np.array(
-                        [
-                            [-41.2865, 174.7862, 0],
-                            [-41.2865, 174.7962, 0],
-                            [-41.2965, 174.7962, 10000],
-                            [-41.2965, 174.7862, 10000],
-                        ]
-                    )
+                        [-41.2865 + 0.036, 174.7862, 5000]
+                    ),  # 1 degree of latitude is approximately 111 km
+                    30,
+                    4,
+                    4,
+                    strike_nztm=0,
+                    dip_dir_nztm=31,
                 ),
             ],
             "Fault must have a constant dip direction",
@@ -886,25 +892,23 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
         # Inconsistent dip angles
         (
             [
-                Plane.from_corners(
-                    np.array(
-                        [
-                            [-41.2865, 174.7762, 0],
-                            [-41.2865, 174.7862, 0],
-                            [-41.2965, 174.7862, 10000],
-                            [-41.2965, 174.7762, 10000],
-                        ]
-                    )
+                Plane.from_centroid_strike_dip(
+                    np.array([-41.2865, 174.7762, 5000]),
+                    30,
+                    4,
+                    4,
+                    strike_nztm=0,
+                    dip_dir_nztm=30,
                 ),
-                Plane.from_corners(
+                Plane.from_centroid_strike_dip(
                     np.array(
-                        [
-                            [-41.2865, 174.7862, 0.0],
-                            [-41.2865, 174.7762, 0.0],
-                            [-41.25013347, 174.77620387, 9215.48081363],
-                            [-41.25013361, 174.78619679, 9215.48252053],
-                        ]
-                    )
+                        [-41.2865 + 0.036, 174.7862, 5000]
+                    ),  # 1 degree of latitude is approximately 111 km
+                    31,
+                    4,
+                    4,
+                    strike_nztm=0,
+                    dip_dir_nztm=30,
                 ),
             ],
             "Fault must have a constant dip",
@@ -912,25 +916,23 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
         # Inconsistent widths
         (
             [
-                Plane.from_corners(
-                    np.array(
-                        [
-                            [-41.2865, 174.7762, 0],
-                            [-41.2865, 174.7862, 0],
-                            [-41.2965, 174.7862, 10000],
-                            [-41.2965, 174.7762, 10000],
-                        ]
-                    )
+                Plane.from_centroid_strike_dip(
+                    np.array([-41.2865, 174.7762, 5000]),
+                    30,
+                    4,
+                    4.01,
+                    strike_nztm=0,
+                    dip_dir_nztm=30,
                 ),
-                Plane.from_corners(
+                Plane.from_centroid_strike_dip(
                     np.array(
-                        [
-                            [-41.2865, 174.7762, 0.0],
-                            [-41.2865, 174.7862, 0.0],
-                            [-41.30149995, 174.78620231, 15000.0],
-                            [-41.30149999, 174.77620002, 15000.0],
-                        ]
-                    )
+                        [-41.2865 + 0.036, 174.7862, 5000]
+                    ),  # 1 degree of latitude is approximately 111 km
+                    30,
+                    4,
+                    4,
+                    strike_nztm=0,
+                    dip_dir_nztm=30,
                 ),
             ],
             "Fault must have constant width",
@@ -938,25 +940,23 @@ def test_fault_closest_point_comparison(fault: Fault, other_fault: Fault):
         # Not connected end-to-end
         (
             [
-                Plane.from_corners(
-                    np.array(
-                        [
-                            [-41.2865, 174.7762, 0],
-                            [-41.2865, 174.7862, 0],
-                            [-41.2965, 174.7862, 10000],
-                            [-41.2965, 174.7762, 10000],
-                        ]
-                    )
+                Plane.from_centroid_strike_dip(
+                    np.array([-41.2865, 174.7762, 5000]),
+                    30,
+                    4,
+                    4,
+                    strike_nztm=0,
+                    dip_dir_nztm=30,
                 ),
-                Plane.from_corners(
+                Plane.from_centroid_strike_dip(
                     np.array(
-                        [
-                            [-41.2965, 174.7962, 0],
-                            [-41.2965, 174.8062, 0],
-                            [-41.3065, 174.8062, 10000],
-                            [-41.3065, 174.7962, 10000],
-                        ]
-                    )
+                        [-41.2865 + 0.05, 174.7862, 5000]
+                    ),  # 1 degree of latitude is approximately 111 km
+                    30,
+                    4,
+                    4,
+                    strike_nztm=0,
+                    dip_dir_nztm=30,
                 ),
             ],
             "Fault planes must be connected",
