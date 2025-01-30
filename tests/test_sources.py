@@ -1,4 +1,6 @@
 import itertools
+import json
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -12,6 +14,8 @@ from hypothesis.extra import numpy as nst
 from qcore import coordinates, geo
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
+
+DATA_PATH = Path("tests") / "data"
 
 
 def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndarray:
@@ -364,7 +368,7 @@ def valid_trace_definition(draw: st.DrawFn):
         dip_dir_nztm = (strike_nztm + draw(st.floats(1, 179))) % 360
         dip_dir = coordinates.nztm_bearing_to_great_circle_bearing(
             coordinates.nztm_to_wgs_depth(trace_point_1_nztm), 1, dip_dir_nztm
-        ) 
+        )
 
     return (
         trace_points_nztm,
@@ -405,23 +409,29 @@ def test_plane_from_trace(data: tuple):
     ] == pytest.approx(plane.bounds)
 
     # Generate plane using dip_dir
-    plane = Plane.from_nztm_trace(trace_points_nztm, dtop, dtop + depth, dip, dip_dir=dip_dir)
+    plane = Plane.from_nztm_trace(
+        trace_points_nztm, dtop, dtop + depth, dip, dip_dir=dip_dir
+    )
     assert plane.top_m == pytest.approx(dtop * 1000, abs=1e-3)
     assert plane.bottom_m == pytest.approx((dtop + depth) * 1000, abs=1e-3)
     assert plane.dip == pytest.approx(dip, abs=1e-6)
     assert plane.dip_dir == pytest.approx(dip_dir, abs=10)
     assert plane.dip_dir_nztm == pytest.approx(dip_dir_nztm, abs=1)
     assert plane.strike_nztm == pytest.approx(strike_nztm, abs=1e-6)
-    assert plane.width == pytest.approx(plane.projected_width / np.cos(np.radians(plane.dip)), abs=1e-6)
+    assert plane.width == pytest.approx(
+        plane.projected_width / np.cos(np.radians(plane.dip)), abs=1e-6
+    )
     assert shapely.get_coordinates(plane.geometry, include_z=True)[
         :-1
     ] == pytest.approx(plane.bounds)
+
 
 def test_invalid_trace_points():
     """Test that constructing a Plane with invalid trace points raises a ValueError."""
     trace_points = np.array([[0, 0], [1, 1], [2, 2]])  # 3 points
     with pytest.raises(ValueError, match="Trace points must be a 2x2 array."):
         Plane.from_nztm_trace(trace_points, 0, 1, 45, 45)
+
 
 def test_invalid_dip_dir_90_dip():
     """Test that constructing a Plane with an invalid dip direction raises a ValueError."""
@@ -437,16 +447,22 @@ def test_invalid_dip_dir_90_dip():
     ):
         Plane.from_nztm_trace(trace_points_nztm, 0, 1, 90, dip_dir_nztm=20)
 
+
 def test_missing_dip_dir():
     """Test that constructing a Plane without dip_dir or dip_dir_nztm raises a ValueError."""
     trace_points = np.array([[0, 0], [1, 1]])
-    with pytest.raises(ValueError, match="Must supply at least one of dip_dir or dip_dir_nztm."):
+    with pytest.raises(
+        ValueError, match="Must supply at least one of dip_dir or dip_dir_nztm."
+    ):
         Plane.from_nztm_trace(trace_points, 0, 1, 45)
+
 
 def test_both_dip_dir_provided():
     """Test that constructing a Plane with both dip_dir and dip_dir_nztm raises a ValueError."""
     trace_points = np.array([[0, 0], [1, 1]])
-    with pytest.raises(ValueError, match="Must supply at most one of dip_dir or dip_dir_nztm."):
+    with pytest.raises(
+        ValueError, match="Must supply at most one of dip_dir or dip_dir_nztm."
+    ):
         Plane.from_nztm_trace(trace_points, 0, 1, 45, dip_dir=90, dip_dir_nztm=90)
 
 
@@ -1000,3 +1016,38 @@ def test_fault_construction_failures(planes: list[Plane], expected_message: str)
     with pytest.raises(ValueError) as excinfo:
         Fault(planes=planes)
     assert expected_message in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("fault_name"),
+    [
+        "Alpine: Caswell",
+        "Alpine: Caswell - South George",
+        "Alpine: George landward",
+        "Alpine: George to Jacksons",
+        "Alpine: Jacksons to Kaniere",
+        "Alpine: Resolution - Charles",
+        "Alpine: Resolution - Dagg",
+        "Alpine: Resolution - Five Fingers",
+        "Hope: Hanmer NW",
+        "Hope: Hurunui",
+        "Hope: Kakapo-2-Hamner",
+        "Kakapo",
+        "Kelly",
+    ],
+)
+def test_load_fault(fault_name: str):
+    with open(DATA_PATH / "alpine_faults.json") as f:
+        fault_json = json.load(f)[fault_name]
+
+    corners = np.array(
+        [
+            [corner["latitude"], corner["longitude"], corner["depth"]]
+            for corner in fault_json["corners"]
+        ]
+    ).reshape((-1, 4, 3))
+    dip = fault_json["dip"]
+    dip_dir = fault_json["dip_dir"]
+    fault = Fault(planes=[Plane.from_corners(c) for c in corners])
+    assert fault.dip == pytest.approx(dip, abs=0.5)
+    assert fault.dip_dir == pytest.approx(dip_dir, abs=1)
