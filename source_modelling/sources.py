@@ -958,10 +958,10 @@ class Fault:
         ]
         # Now check that the plane edges line up.
         for i in range(1, len(self.planes)):
-            dip_dir = self.planes[i].dip_dir_nztm
-            dip_dir_prev = self.planes[i - 1].dip_dir_nztm
-            diff = (dip_dir - dip_dir_prev + 180) % 360 - 180
-            if not np.isclose(diff, 0, atol=0.1):
+            dip_dir = self.planes[i].bounds[-1] - self.planes[i].bounds[0]
+            dip_dir_prev = self.planes[i - 1].bounds[-1] - self.planes[i - 1].bounds[0]
+            diff = sp.spatial.distance.cosine(dip_dir, dip_dir_prev)
+            if not np.isclose(diff, 0, atol=1e-5):
                 raise ValueError(
                     f"Fault must have a constant dip direction, plane {i} has dip direction {dip_dir}, but plane {i - 1} hase dip direction {dip_dir_prev}"
                 )
