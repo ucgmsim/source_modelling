@@ -390,7 +390,7 @@ def test_plane_from_trace(data: tuple):
     ) = data
 
     plane = Plane.from_nztm_trace(
-        trace_points_nztm, dtop, dtop + depth, dip, dip_dir_nztm
+        trace_points_nztm, dtop, dtop + depth, dip, dip_dir_nztm=dip_dir_nztm
     )
     assert pytest.approx(plane.top_m, abs=1e-3) == dtop * 1000
     assert pytest.approx(plane.bottom_m, abs=1e-3) == (dtop + depth) * 1000
