@@ -1,0 +1,57 @@
+% ----------------------------------  FINITE-SOURCE RUPTURE MODEL  --------------------------------
+%
+% Event : Tonankai (Japan)   12/07/1944   [Kato and Ando (1997)]
+% EventTAG: s1944TONANKkato   
+%
+% Loc  : LAT  =  33.800      LON = 136.620      DEP = 30.00
+% Size : LEN  = 240.00 km    WID = 180.00 km    Mw = 8.20       Mo = 2.80e+021 Nm
+% Mech : STRK =  240         DIP =  10          RAKE = 108      Htop = 15.00 km
+% Rupt : HypX = 150.00 km    HypZ = 120.00 km    avTr = 0.0 s    avVr = 0.0 km/s
+%
+% ----------------------------------  inversion-related parameters  --------------------------------
+%
+% Invs :   Nx  =    4           Nz  =    3        Fmin = 0.00 Hz     Fmax = 0.0 Hz
+% Invs :   Dx  =  60.00 km      Dz  = 60.00 km    
+% Invs :   Ntw =   0            Nsg =   1         (# of time-windows,# of fault segments)
+% Invs :   LEN =  0.00 s        SHF =  0.00 s     (time-window length and time-shift)
+% SVF  :   tsunami modeling                                 (type of slip-velocity function used)
+%
+% Data :   SGM        TELE         GPS      tril      level 
+% Data :    0           0           0         0          0
+% PHImx:    0           0           0         0          0
+% Rmin :   0.0         0.0         0.0       0.0        0.0
+%
+% -------------------------------------------------------------------------------------------------- 
+%
+% VELOCITY-DENSITY STRUCTURE 
+% No. of layers =   1  
+%
+% Crustal Model unknown for this model; assumed shear modulus:
+%   [10**10 N/m^2]
+%  3.30
+%
+% -------------------------------------------------------------------------------------------------- 
+% 22-Aug-2007, created by P.Martin Mai (mai@sed.ethz.ch)
+% -------------------------------------------------------------------------------------------------- 
+%
+% SOURCE MODEL PARAMETERS 
+%   Nsbfs =     12 subfaults
+%        X,Y,Z coordinates in km; SLIP in m
+%        if applicable: RAKE in deg, RISE in s, TRUP in s, slip in each TW in m
+%
+%   Coordinates are given for top-center of each subfault or segment: |'| 
+%   Origin of local coordinate system at epicenter: X (NS) = 0,  Y (EW) = 0 
+%   LAT       LON       X==NS     Y==EW       Z       SLIP
+% -------------------------------------------------------------------------------------------------- 
+   33.418   138.386   163.083   -42.468    15.000     4.480
+   33.148   137.823   111.121   -72.468    15.000     1.230
+   32.878   137.261    59.160  -102.468    15.000     2.720
+   32.608   136.698     7.198  -132.468    15.000     0.590
+   33.879   138.066   133.503     8.766    25.006     1.150
+   33.609   137.503    81.541   -21.234    25.006     2.290
+   33.339   136.940    29.580   -51.234    25.006     0.600
+   33.069   136.378   -22.382   -81.234    25.006     0.780
+   34.340   137.745   103.923    60.000    35.012     0.760
+   34.070   137.183    51.962    30.000    35.012     0.590
+   33.800   136.620     0.000     0.000    35.012     0.170
+   33.530   136.057   -51.962   -30.000    35.012     2.130

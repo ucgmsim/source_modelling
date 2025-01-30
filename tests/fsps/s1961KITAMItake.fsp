@@ -1,0 +1,61 @@
+% ----------------------------------  FINITE-SOURCE RUPTURE MODEL  --------------------------------
+%
+% Event : Kitamino (Japan)   08/19/1961   [Takeo and Mikami (1990)]
+% EventTAG: s1961KITAMItake   
+%
+% Loc  : LAT  =  36.200      LON = 136.800      DEP = 10.00
+% Size : LEN  =  16.00 km    WID =  12.00 km    Mw = 6.47       Mo = 5.76e+018 Nm
+% Mech : STRK =   20         DIP =  60          RAKE =  90      Htop = 1.70 km
+% Rupt : HypX =  14.00 km    HypZ =  6.00 km    avTr = 3.0 s    avVr = -99.0 km/s
+%
+% ----------------------------------  inversion-related parameters  --------------------------------
+%
+% Invs :   Nx  =    4           Nz  =    3        Fmin = 0.00 Hz     Fmax = 0.5 Hz
+% Invs :   Dx  =   4.00 km      Dz  =  4.00 km    
+% Invs :   Ntw =   1            Nsg =   1         (# of time-windows,# of fault segments)
+% Invs :   LEN =  3.00 s        SHF =  0.00 s     (time-window length and time-shift)
+% SVF  :   parab.ramp                                 (type of slip-velocity function used)
+%
+% Data :   SGM        TELE         GPS      tril      level 
+% Data :    6           0           0         0          0
+% PHImx:  125           0           0         0          0
+% Rmin :  46.8         0.0         0.0       0.0        0.0
+%
+% -------------------------------------------------------------------------------------------------- 
+%
+% VELOCITY-DENSITY STRUCTURE 
+% No. of layers =   5  
+%
+%   DEPTH      P-VEL      S-VEL       DENS        QP     QS
+%   [km]       [km/s]     [km/s]     [g/cm^3]
+%     0.00       3.30       2.00        0.00       80     45
+%     2.00       5.40       3.30        0.00      300    150
+%     4.00       6.00       3.60        0.00      300    150
+%    24.00       6.80       3.90        0.00      300    500
+%    34.00       7.70       4.40        0.00     1000    500
+%
+% -------------------------------------------------------------------------------------------------- 
+% 22-Aug-2007, created by P.Martin Mai (mai@sed.ethz.ch)
+% -------------------------------------------------------------------------------------------------- 
+%
+% SOURCE MODEL PARAMETERS 
+%   Nsbfs =     12 subfaults
+%        X,Y,Z coordinates in km; SLIP in m
+%        if applicable: RAKE in deg, RISE in s, TRUP in s, slip in each TW in m
+%
+%   Coordinates are given for top-center of each subfault or segment: |'| 
+%   Origin of local coordinate system at epicenter: X (NS) = 0,  Y (EW) = 0 
+%   LAT       LON       X==NS     Y==EW       Z       SLIP      TRUP
+% -------------------------------------------------------------------------------------------------- 
+   36.108   136.723    -6.923   -10.250     1.700     0.700     7.750
+   36.142   136.738    -5.555    -6.491     1.700     0.600     3.000
+   36.175   136.753    -4.187    -2.733     1.700     1.600     2.000
+   36.209   136.769    -2.819     1.026     1.700     1.500     1.250
+   36.102   136.744    -5.044   -10.934     5.164     1.000     5.250
+   36.135   136.759    -3.676    -7.176     5.164     0.800     3.500
+   36.169   136.774    -2.308    -3.417     5.164     0.800     0.750
+   36.203   136.790    -0.940     0.342     5.164     0.600     0.000
+   36.095   136.765    -3.165   -11.618     8.628     0.500     7.000
+   36.129   136.780    -1.796    -7.860     8.628     0.900     6.000
+   36.163   136.795    -0.428    -4.101     8.628     0.900     1.500
+   36.197   136.810     0.940    -0.342     8.628     1.000     0.750
