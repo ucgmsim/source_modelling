@@ -41,6 +41,29 @@ def graph_repr(graph: nx.Graph) -> str:
 
 
 @pytest.mark.parametrize(
+    "graph",
+    [
+        nx.from_edgelist(
+            [
+                (0, 1, {"weight": 0.482}),
+                (0, 2, {"weight": 0.387}),
+                (3, 4, {"weight": 0.473}),
+            ]
+        )
+    ],
+)
+def test_disconnected_graph(graph: nx.Graph):
+    with pytest.raises(
+        ValueError, match="The graph must be connected to find a spanning tree."
+    ):
+        rupture_propagation.most_likely_spanning_tree(graph)
+    with pytest.raises(
+        ValueError, match="The graph must be connected to find a spanning tree."
+    ):
+        rupture_propagation.sampled_spanning_tree(graph, 1)
+
+
+@pytest.mark.parametrize(
     "graph,n",
     [
         (

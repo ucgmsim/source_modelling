@@ -96,7 +96,14 @@ def sampled_spanning_tree(
     -------
     list[nx.Graph] or nx.Graph
         A list of sampled spanning trees, or a graph if `n_samples = 1`.
+
+    Raises
+    ------
+    ValueError
+        If `graph` is not connected.
     """
+    if not nx.is_connected(graph):
+        raise ValueError("The graph must be connected to find a spanning tree.")
     weight_graph = graph.copy()
     for u, v in weight_graph.edges:
         weight_graph[u][v]["weight"] /= 1 - weight_graph[u][v]["weight"]
@@ -230,8 +237,14 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
     -------
     nx.Graph
         The most likely maximum spanning tree for this graph.
-    """
 
+    Raises
+    ------
+    ValueError
+        If `graph` is not connected.
+    """
+    if not nx.is_connected(graph):
+        raise ValueError("The graph must be connected to find a spanning tree.")
     weighted_graph = graph.copy()
 
     # See `select_top_spanning_trees` for an explanation of what the following
