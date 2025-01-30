@@ -1,6 +1,8 @@
-import numpy as np
-import numba
+from typing import NamedTuple
+
 import gpytoolbox
+import numba
+import numpy as np
 
 
 @numba.njit
@@ -101,7 +103,7 @@ def edge_edge_distance(P1, Q1, P2, Q2):
 
     R1 = X
     R2 = Y
-    dist = np.linalg.norm(R1 - R2)
+    dist = np.square(R1 - R2).sum()
     return dist, R1, R2
 
 
@@ -149,140 +151,152 @@ def triangle_triangle_distance(s0, s1, s2, t0, t1, t2):
     ```
     """
     shown_disjoint = False
-    S = [s0, s1, s2]
-    T = [t0, t1, t2]
-    Sv = [s1 - s0, s2 - s1, s0 - s2]
-    Tv = [t1 - t0, t2 - t1, t0 - t2]
-    # Sv1 = s2 - s1
-    # Sv2 = s0 - s2
+    triangle_s = np.vstack((s0, s1, s2))
+    triangle_t = np.vstack((t0, t1, t2))
+    s_triangle_edges = np.vstack((s1 - s0, s2 - s1, s0 - s2))
+    t_triangle_edges = np.vstack((t1 - t0, t2 - t1, t0 - t2))
 
-    mindd = np.sum((S[0] - T[0]) ** 2) + 10.0
+    min_dist = np.inf
+    min_p = None
+    min_q = None
 
     for i in range(3):
         for j in range(3):
-            # print("S[i] : ", S[i])
-            # print("Sv[i] : ", S[i]+Sv[i])
-            # print("T[j] : ", T[j])
-            # print("Tv[j] : ", T[j]+Tv[j])
-            _, P, Q = edge_edge_distance(S[i], S[i] + Sv[i], T[j], T[j] + Tv[j])
-            # print("P : ", P)
-            # print("Q : ", Q)
-            # # print(P)
-            # # print(Q)
-            VEC = Q - P
-            V = Q - P
-            dd = np.dot(V, V)
-            # # print("BB")
-            if dd <= mindd:
-                minP = P.copy()
-                minQ = Q.copy()
-                mindd = dd
-                Z = S[(i + 2) % 3] - P
-                a = np.dot(Z, VEC)
-                Z = T[(j + 2) % 3] - Q
-                b = np.dot(Z, VEC)
-                if (a <= 0) and (b >= 0):
-                    # print("Here0")
-                    return np.sqrt(mindd), minP, minQ
-                p = np.dot(V, VEC)
+            dist_sq, edge_p, edge_q = edge_edge_distance(
+                triangle_s[i],
+                triangle_s[i] + s_triangle_edges[i],
+                triangle_t[j],
+                triangle_t[j] + t_triangle_edges[j],
+            )
+            vec_distance = edge_p - edge_q
+            if dist_sq <= min_dist:
+                min_p = edge_p
+                min_q = edge_q
+                min_dist = dist_sq
+                a = np.dot(triangle_s[(i + 2) % 3] - edge_p, vec_distance)
+                b = np.dot(triangle_t[(j + 2) % 3] - edge_q, vec_distance)
+                if a <= 0 and b >= 0:
+                    return np.sqrt(min_dist), min_p, min_q
+                p = np.dot(vec_distance, vec_distance)
                 if a < 0:
                     a = 0
                 if b > 0:
                     b = 0
                 if (p - a + b) > 0:
                     shown_disjoint = True
-    # .....
-    # # print("Sv[0] : ", Sv[0])
-    # # print("Sv[1] : ", Sv[1])
-    Sn = np.cross(Sv[0], Sv[1])
-    # # print("Sn : ", Sn)
-    Snl = np.dot(Sn, Sn)
 
-    if Snl > 1e-15:
-        # V = S[0] - T[0]
-        Tp = [np.dot(Sn, S[0] - T[0]), np.dot(Sn, S[0] - T[1]), np.dot(Sn, S[0] - T[2])]
+    s_triangle_normal = np.cross(s_triangle_edges[0], s_triangle_edges[1])
+    s_triangle_norm_length = np.dot(s_triangle_normal, s_triangle_normal)
+
+    if s_triangle_norm_length > 1e-15:
+        t_triangle_project_onto_s = np.dot(s_triangle_normal, triangle_s - triangle_t)
         point = -1
-        if (Tp[0] > 0) and (Tp[1] > 0) and (Tp[2] > 0):
-            if Tp[0] < Tp[1]:
+        if np.all(t_triangle_project_onto_s > 0):
+            if t_triangle_project_onto_s[0] < t_triangle_project_onto_s[1]:
                 point = 0
             else:
                 point = 1
-            if Tp[2] < Tp[point]:
+            if t_triangle_project_onto_s[2] < t_triangle_project_onto_s[point]:
                 point = 2
-        elif (Tp[0] < 0) and (Tp[1] < 0) and (Tp[2] < 0):
-            if Tp[0] > Tp[1]:
+        elif np.all(t_triangle_project_onto_s < 0):
+            if t_triangle_project_onto_s[0] > t_triangle_project_onto_s[1]:
                 point = 0
             else:
                 point = 1
-            if Tp[2] > Tp[point]:
+            if t_triangle_project_onto_s[2] > t_triangle_project_onto_s[point]:
                 point = 2
         if point >= 0:
             shown_disjoint = True
-            V = T[point] - S[0]
-            Z = np.cross(Sn, Sv[0])
-            if np.dot(V, Z) > 0:
-                V = T[point] - S[1]
-                Z = np.cross(Sn, Sv[1])
-                if np.dot(V, Z) > 0:
-                    V = T[point] - S[2]
-                    Z = np.cross(Sn, Sv[2])
-                    if np.dot(V, Z) > 0:
-                        # # print("T[point] : ", T[point])
-                        # # print("Tp[point] : ", Tp[point])
-                        # # print("Sn : ", Sn)
-                        # # print("Snl : ", Snl)
-                        P = T[point] + Sn * (Tp[point]) / Snl
-                        Q = T[point].copy()
-                        # print("Here1")
-                        return np.sqrt(np.dot(P - Q, P - Q)), P, Q
+            t_edge = triangle_t[point] - triangle_s[0]
+            s_edge_norm = np.cross(s_triangle_normal, s_triangle_edges[0])
+            if np.dot(t_edge, s_edge_norm) > 0:
+                t_edge = triangle_t[point] - triangle_s[1]
+                s_edge_norm = np.cross(s_triangle_normal, s_triangle_edges[1])
+                if np.dot(t_edge, s_edge_norm) > 0:
+                    t_edge = triangle_t[point] - triangle_s[2]
+                    s_edge_norm = np.cross(s_triangle_normal, s_triangle_edges[2])
+                    if np.dot(t_edge, s_edge_norm) > 0:
+                        edge_p = (
+                            triangle_t[point]
+                            + s_triangle_normal
+                            * (t_triangle_project_onto_s[point])
+                            / s_triangle_norm_length
+                        )
+                        edge_q = triangle_t[point].copy()
+                        vec_distance = edge_p - edge_q
+                        return (
+                            np.sqrt(np.dot(vec_distance, vec_distance)),
+                            edge_p,
+                            edge_q,
+                        )
 
-    Tn = np.cross(Tv[0], Tv[1])
-    Tnl = np.dot(Tn, Tn)
+    t_triangle_normal = np.cross(t_triangle_edges[0], t_triangle_edges[1])
+    t_triangle_normal_length = np.dot(t_triangle_normal, t_triangle_normal)
 
-    if Tnl > 1e-15:
-        # V = T[0] - S[0]
-        # Sp = [T[0] - S[0], T[0] - S[1], T[0] - S[2]]
-        Sp = [np.dot(Tn, T[0] - S[0]), np.dot(Tn, T[0] - S[1]), np.dot(Tn, T[0] - S[2])]
+    if t_triangle_normal_length > 1e-15:
+        s_triangle_project_onto_t = np.dot(t_triangle_normal, triangle_t - triangle_s)
         point = -1
-        if (Sp[0] > 0) and (Sp[1] > 0) and (Sp[2] > 0):
-            if Sp[0] < Sp[1]:
+        if np.all(s_triangle_project_onto_t > 0):
+            if s_triangle_project_onto_t[0] < s_triangle_project_onto_t[1]:
                 point = 0
             else:
                 point = 1
-            if Sp[2] < Sp[point]:
+            if s_triangle_project_onto_t[2] < s_triangle_project_onto_t[point]:
                 point = 2
-        elif (Sp[0] < 0) and (Sp[1] < 0) and (Sp[2] < 0):
-            if Sp[0] > Sp[1]:
+        elif np.all(s_triangle_project_onto_t < 0):
+            if s_triangle_project_onto_t[0] > s_triangle_project_onto_t[1]:
                 point = 0
             else:
                 point = 1
-            if Sp[2] > Sp[point]:
+            if s_triangle_project_onto_t[2] > s_triangle_project_onto_t[point]:
                 point = 2
+
         if point >= 0:
             shown_disjoint = True
-            V = S[point] - T[0]
-            Z = np.cross(Tn, Tv[0])
-            if np.dot(V, Z) > 0:
-                V = S[point] - T[1]
-                Z = np.cross(Tn, Tv[1])
-                if np.dot(V, Z) > 0:
-                    V = S[point] - T[2]
-                    Z = np.cross(Tn, Tv[2])
-                    if np.dot(V, Z) > 0:
-                        Q = S[point] + Tn * (Sp[point]) / Tnl
-                        P = S[point].copy()
-                        # print("Here2")
-                        return np.sqrt(np.dot(P - Q, P - Q)), P, Q
+            t_edge = triangle_s[point] - triangle_t[0]
+            s_edge_norm = np.cross(t_triangle_normal, t_triangle_edges[0])
+            if np.dot(t_edge, s_edge_norm) > 0:
+                t_edge = triangle_s[point] - triangle_t[1]
+                s_edge_norm = np.cross(t_triangle_normal, t_triangle_edges[1])
+                if np.dot(t_edge, s_edge_norm) > 0:
+                    t_edge = triangle_s[point] - triangle_t[2]
+                    s_edge_norm = np.cross(t_triangle_normal, t_triangle_edges[2])
+                    if np.dot(t_edge, s_edge_norm) > 0:
+                        edge_q = (
+                            triangle_s[point]
+                            + t_triangle_normal
+                            * (s_triangle_project_onto_t[point])
+                            / t_triangle_normal_length
+                        )
+                        edge_p = triangle_s[point].copy()
+                        return (
+                            np.sqrt(np.dot(vec_distance, vec_distance)),
+                            edge_p,
+                            edge_q,
+                        )
 
     if shown_disjoint:
-        # print("Here3")
-        return np.sqrt(mindd), minP, minQ
+        return np.sqrt(min_dist), min_p, min_q
     else:
-        # print("Here4")
-        return 0.0, minP, minQ
+        return 0.0, min_p, min_q
 
 
-def minimum_distance(v1, f1, v2, f2):
+class AABBTree(NamedTuple):
+    centres: np.ndarray
+    widths: np.ndarray
+    children: np.ndarray
+    parents: np.ndarray
+    depths: np.ndarray
+    tri_indices: np.ndarray
+    split_dir: np.ndarray
+
+
+class Mesh(NamedTuple):
+    vertices: np.ndarray
+    faces: np.ndarray
+
+
+def minimum_distance(mesh_1: Mesh, mesh_2: Mesh):
     """
     Compute the minimum distance between two triangle meshes in 3D.
 
@@ -315,74 +329,59 @@ def minimum_distance(v1, f1, v2, f2):
     ```
     """
 
-    dim = v1.shape[1]
     # Initialize AABB tree for mesh 1
-    C1, W1, CH1, PAR1, D1, tri_ind1, _ = gpytoolbox.initialize_aabbtree(v1, f1)
+    tree_1 = AABBTree(*gpytoolbox.initialize_aabbtree(*mesh_1))
     # Initialize AABB tree for mesh 2
-    C2, W2, CH2, PAR2, D2, tri_ind2, _ = gpytoolbox.initialize_aabbtree(v2, f2)
+    tree_2 = AABBTree(*gpytoolbox.initialize_aabbtree(*mesh_2))
 
     first_queue_pair = [0, 0]
     queue = [first_queue_pair]
     current_best_guess = np.inf, None, None
     while len(queue) > 0:
         q1, q2 = queue.pop()
-        # print("-----------")
-        # print("Queue length : {}".format(len(queue)))
-        # print("q1: ",q1)
-        # print("q2: ",q2)
-        # print("CH1[q1,]: ",CH1[q1,:])
-        # print("CH2[q2,]: ",CH2[q2,:])
-        # print("current_best_guess: ",current_best_guess)
-        is_leaf1 = CH1[q1, 1] == -1
-        is_leaf2 = CH2[q2, 1] == -1
+        is_leaf1 = tree_1.children[q1, 1] == -1
+        is_leaf2 = tree_2.children[q2, 1] == -1
         if is_leaf1 and is_leaf2:
-            # Compute distance between triangles
-            t1 = tri_ind1[q1].item()
-            t2 = tri_ind2[q2].item()
-            # print("t1: ",t1)
-            # print("t2: ",t2)
+            t1 = tree_1.tri_indices[q1].item()
+            t2 = tree_2.tri_indices[q2].item()
             d, p, q = triangle_triangle_distance(
-                v1[f1[t1, 0], :],
-                v1[f1[t1, 1], :],
-                v1[f1[t1, 2], :],
-                v2[f2[t2, 0], :],
-                v2[f2[t2, 1], :],
-                v2[f2[t2, 2], :],
+                mesh_1.vertices[mesh_1.faces[t1, 0], :],
+                mesh_1.vertices[mesh_1.faces[t1, 1], :],
+                mesh_1.vertices[mesh_1.faces[t1, 2], :],
+                mesh_2.vertices[mesh_2.faces[t2, 0], :],
+                mesh_2.vertices[mesh_2.faces[t2, 1], :],
+                mesh_2.vertices[mesh_2.faces[t2, 2], :],
             )
-            # print("d: ",d)
             if d < current_best_guess[0]:
                 current_best_guess = d, p, q
         else:
-            # Find distance between boxes
-            d = np.max(np.abs(C1[q1, :] - C2[q2, :]) - (W1[q1, :] + W2[q2, :]) / 2)
-            # print("d: ",d)
+            d = np.max(
+                np.abs(tree_1.centres[q1, :] - tree_2.centres[q2, :])
+                - (tree_1.widths[q1, :] + tree_2.widths[q2, :]) / 2
+            )
             if d < current_best_guess[0]:
-                # Add children to queue
-
-                if (not is_leaf1) and (is_leaf2):
-                    queue.append([CH1[q1, 0], q2])
-                    queue.append([CH1[q1, 1], q2])
-                    # queue.append([CH1[q1,2],q2])
-                    # queue.append([CH1[q1,3],q2])
-                    # if dim==3:
-                    #     queue.append([CH1[q1,4],q2])
-                    #     queue.append([CH1[q1,5],q2])
-                    #     queue.append([CH1[q1,6],q2])
-                    #     queue.append([CH1[q1,7],q2])
-                if (not is_leaf2) and (is_leaf1):
-                    queue.append([q1, CH2[q2, 0]])
-                    queue.append([q1, CH2[q2, 1]])
-                    # queue.append([q1,CH2[q2,2]])
-                    # queue.append([q1,CH2[q2,3]])
-                    # if dim==3:
-                    #     queue.append([q1,CH2[q2,4]])
-                    #     queue.append([q1,CH2[q2,5]])
-                    #     queue.append([q1,CH2[q2,6]])
-                    #     queue.append([q1,CH2[q2,7]])
-                if (not is_leaf1) and (not is_leaf2):
-                    queue.append([CH1[q1, 0], CH2[q2, 0]])
-                    queue.append([CH1[q1, 1], CH2[q2, 0]])
-                    queue.append([CH1[q1, 0], CH2[q2, 1]])
-                    queue.append([CH1[q1, 1], CH2[q2, 1]])
+                if not is_leaf1 and is_leaf2:
+                    queue.extend(
+                        [
+                            [tree_1.children[q1, 0], q2],
+                            [tree_1.children[q1, 1], q2],
+                        ]
+                    )
+                elif not is_leaf2 and is_leaf1:
+                    queue.extend(
+                        [
+                            [q1, tree_2.children[q2, 0]],
+                            [q1, tree_2.children[q2, 1]],
+                        ]
+                    )
+                elif not is_leaf1 and not is_leaf2:
+                    queue.extend(
+                        [
+                            [tree_1.children[q1, 0], tree_2.children[q2, 0]],
+                            [tree_1.children[q1, 1], tree_2.children[q2, 0]],
+                            [tree_1.children[q1, 0], tree_2.children[q2, 1]],
+                            [tree_1.children[q1, 1], tree_2.children[q2, 1]],
+                        ]
+                    )
 
     return current_best_guess

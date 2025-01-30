@@ -1137,10 +1137,8 @@ def closest_point_between_sources(
         dtype=np.int64,
     ).reshape((-1, 3))  # faces of the source
     d, p, q = triangle_dist.minimum_distance(
-        source_a_vertices,
-        source_a_faces,
-        source_b_vertices,
-        source_b_faces,
+        triangle_dist.Mesh(source_a_vertices, source_a_faces),
+        triangle_dist.Mesh(source_b_vertices, source_b_faces),
     )
     source_a_coordinates = source_a.wgs_depth_coordinates_to_fault_coordinates(
         coordinates.nztm_to_wgs_depth(p)
