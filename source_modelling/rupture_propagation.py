@@ -430,11 +430,7 @@ def sample_rupture_propagation(
         )
     distance_graph = {
         source_a_name: {
-            source_b_name: distance_between(
-                source_a,
-                source_b,
-                *sources.closest_point_between_sources(source_a, source_b),
-            )
+            source_b_name: sources.closest_point_between_sources(source_a, source_b)[0]
             for source_b_name, source_b in sources_map.items()
             if source_a_name != source_b_name
         }
@@ -492,7 +488,7 @@ def jump_points_from_rupture_tree(
     for source, parent in rupture_causality_tree.items():
         if parent is None:
             continue
-        source_point, parent_point = sources.closest_point_between_sources(
+        _, source_point, parent_point = sources.closest_point_between_sources(
             source_map[source], source_map[parent]
         )
         jump_points[source] = JumpPair(parent_point, source_point)

@@ -25,6 +25,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy as sp
 import shapely
+from source_modelling import triangle_dist
 
 from qcore import coordinates, geo, grid
 
@@ -1006,8 +1007,12 @@ class Fault:
                 plane_coordinates = plane.wgs_depth_coordinates_to_fault_coordinates(
                     global_coordinates
                 )
-                return np.array([left_edges[i], 0]) + plane_coordinates * np.array(
-                    [left_edges[i + 1] - left_edges[i], 1]
+                return np.clip(
+                    np.array([left_edges[i], 0])
+                    + plane_coordinates
+                    * np.array([left_edges[i + 1] - left_edges[i], 1]),
+                    0,
+                    1,
                 )
             except ValueError:
                 continue
@@ -1093,7 +1098,7 @@ IsSource = Plane | Fault | Point
 
 def closest_point_between_sources(
     source_a: IsSource, source_b: IsSource
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[float, np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 
     Parameters
@@ -1115,29 +1120,32 @@ def closest_point_between_sources(
     source_b_coordinates : np.ndarray
         The source-local coordinates of the closest point on source b.
     """
-
-    def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
-        source_a_global_coordinates = (
-            source_a.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates[:2])
-        )
-        source_b_global_coordinates = (
-            source_b.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates[2:])
-        )
-        return coordinates.wgs_depth_to_nztm(
-            source_a_global_coordinates
-        ) - coordinates.wgs_depth_to_nztm(source_b_global_coordinates)
-
-    res = sp.optimize.least_squares(
-        fault_coordinate_distance,
-        np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
-        bounds=([0] * 4, [1] * 4),
-        gtol=1e-5,
-        ftol=1e-5,
-        xtol=1e-5,
+    source_a_vertices = source_a.bounds.reshape((-1, 3))
+    source_b_vertices = source_b.bounds.reshape((-1, 3))
+    source_a_faces = np.array(
+        [
+            np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64) + i * 4
+            for i in range(len(source_a.planes))
+        ],
+        dtype=np.int64,
+    ).reshape((-1, 3))  # faces of the source
+    source_b_faces = np.array(
+        [
+            np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64) + i * 4
+            for i in range(len(source_b.planes))
+        ],
+        dtype=np.int64,
+    ).reshape((-1, 3))  # faces of the source
+    d, p, q = triangle_dist.minimum_distance(
+        source_a_vertices,
+        source_a_faces,
+        source_b_vertices,
+        source_b_faces,
     )
-
-    if not res.success and res.status != 0:
-        raise ValueError(
-            f"Optimisation failed to converge for provided sources: {res.message} with x = {res.x}"
-        )
-    return res.x[:2], res.x[2:]
+    source_a_coordinates = source_a.wgs_depth_coordinates_to_fault_coordinates(
+        coordinates.nztm_to_wgs_depth(p)
+    )
+    source_b_coordinates = source_b.wgs_depth_coordinates_to_fault_coordinates(
+        coordinates.nztm_to_wgs_depth(q)
+    )
+    return d, source_a_coordinates, source_b_coordinates
