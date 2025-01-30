@@ -374,6 +374,9 @@ class Plane:
     @property
     def dip_dir(self) -> float:
         """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
+        if self.dip_dir_nztm == 0.0:
+            return 0.0
+
         return coordinates.nztm_bearing_to_great_circle_bearing(
             self.corners[0, :2], self.width, self.dip_dir_nztm
         )
@@ -408,7 +411,8 @@ class Plane:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir_nztm: float,
+        dip_dir: Optional[float] = None,
+        dip_dir_nztm: Optional[float] = None,
     ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
@@ -428,14 +432,36 @@ class Plane:
             The bottom depth of the plane (in km).
         dip: float
             The dip of the fault plane (degrees).
-        dip_dir_nztm: float
-            The dip direction of the fault plane (degrees) as an NZTM bearing.
+        dip_dir: float, optional
+            Plane dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+
+            Note: If combining multiple planes into a fault using the great
+            circle bearing dip direction will cause issues, as the NZTM dip
+            direction across the Planes will not be consistent.
+        dip_dir_nztm: float, optional
+            Plane NZTM dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
 
         Returns
         -------
         Plane
             The fault plane with the given parameters.
         """
+        if dip_dir is not None and dip_dir_nztm is not None:
+            raise ValueError("Must supply at most one of dip_dir or dip_dir_nztm.")
+
+        if dip_dir_nztm is None and dip_dir is None:
+            raise ValueError("Must supply at least one of dip_dir or dip_dir_nztm.")
+
+        if dip_dir_nztm is None and dip_dir is not None:
+            if np.isclose(dip, 90):
+                dip_dir_nztm = 0
+            else:
+                dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
+                    coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), 1, dip_dir
+                )
+
         if trace_points_nztm.shape != (2, 2):
             raise ValueError("Trace points must be a 2x2 array.")
 

@@ -331,19 +331,20 @@ def valid_trace_definition(draw: st.DrawFn):
     trace_point_1_nztm = draw(
         st.builds(
             nztm_coordinate,
-            y=st.floats(4715500, 6221500),
-            x=st.floats(1073000, 2154000),
+            y=st.floats(1, 100_000),
+            x=st.floats(1, 100_000),
         )
     )
     trace_point_2_nztm = draw(
         st.builds(
             nztm_coordinate,
-            y=st.floats(4715500, 6221500),
-            x=st.floats(1073000, 2154000),
+            y=st.floats(1, 100_000),
+            x=st.floats(1, 100_000),
         )
     )
     assume(not np.allclose(trace_point_1_nztm, trace_point_2_nztm))
     trace_points_nztm = np.stack((trace_point_1_nztm, trace_point_2_nztm), axis=0)
+    assume(np.linalg.matrix_rank(trace_points_nztm) == 2)
 
     # Compute strike
     north_direction = np.array([1, 0, 0])
@@ -358,15 +359,19 @@ def valid_trace_definition(draw: st.DrawFn):
     dip = draw(st.floats(1, 90))
 
     if np.isclose(dip, 90):
-        dip_dir_nztm = 0
+        dip_dir_nztm, dip_dir = 0, 0
     else:
         dip_dir_nztm = (strike_nztm + draw(st.floats(1, 179))) % 360
+        dip_dir = coordinates.nztm_bearing_to_great_circle_bearing(
+            coordinates.nztm_to_wgs_depth(trace_point_1_nztm), 1, dip_dir_nztm
+        ) 
 
     return (
         trace_points_nztm,
         dtop,
         depth,
         dip,
+        dip_dir,
         dip_dir_nztm,
         strike_nztm,
     )
@@ -379,6 +384,7 @@ def test_plane_from_trace(data: tuple):
         dtop,
         depth,
         dip,
+        dip_dir,
         dip_dir_nztm,
         strike_nztm,
     ) = data
@@ -394,18 +400,28 @@ def test_plane_from_trace(data: tuple):
     assert pytest.approx(plane.width, abs=1e-6) == plane.projected_width / np.cos(
         np.radians(plane.dip)
     )
-
     assert shapely.get_coordinates(plane.geometry, include_z=True)[
         :-1
     ] == pytest.approx(plane.bounds)
 
+    # Generate plane using dip_dir
+    plane = Plane.from_nztm_trace(trace_points_nztm, dtop, dtop + depth, dip, dip_dir=dip_dir)
+    assert plane.top_m == pytest.approx(dtop * 1000, abs=1e-3)
+    assert plane.bottom_m == pytest.approx((dtop + depth) * 1000, abs=1e-3)
+    assert plane.dip == pytest.approx(dip, abs=1e-6)
+    assert plane.dip_dir == pytest.approx(dip_dir, abs=10)
+    assert plane.dip_dir_nztm == pytest.approx(dip_dir_nztm, abs=1)
+    assert plane.strike_nztm == pytest.approx(strike_nztm, abs=1e-6)
+    assert plane.width == pytest.approx(plane.projected_width / np.cos(np.radians(plane.dip)), abs=1e-6)
+    assert shapely.get_coordinates(plane.geometry, include_z=True)[
+        :-1
+    ] == pytest.approx(plane.bounds)
 
 def test_invalid_trace_points():
     """Test that constructing a Plane with invalid trace points raises a ValueError."""
     trace_points = np.array([[0, 0], [1, 1], [2, 2]])  # 3 points
     with pytest.raises(ValueError, match="Trace points must be a 2x2 array."):
         Plane.from_nztm_trace(trace_points, 0, 1, 45, 45)
-
 
 def test_invalid_dip_dir_90_dip():
     """Test that constructing a Plane with an invalid dip direction raises a ValueError."""
@@ -419,7 +435,19 @@ def test_invalid_dip_dir_90_dip():
         ValueError,
         match="Dip direction must be 0 for vertical faults.",
     ):
-        Plane.from_nztm_trace(trace_points_nztm, 0, 1, 90, 20)
+        Plane.from_nztm_trace(trace_points_nztm, 0, 1, 90, dip_dir_nztm=20)
+
+def test_missing_dip_dir():
+    """Test that constructing a Plane without dip_dir or dip_dir_nztm raises a ValueError."""
+    trace_points = np.array([[0, 0], [1, 1]])
+    with pytest.raises(ValueError, match="Must supply at least one of dip_dir or dip_dir_nztm."):
+        Plane.from_nztm_trace(trace_points, 0, 1, 45)
+
+def test_both_dip_dir_provided():
+    """Test that constructing a Plane with both dip_dir and dip_dir_nztm raises a ValueError."""
+    trace_points = np.array([[0, 0], [1, 1]])
+    with pytest.raises(ValueError, match="Must supply at most one of dip_dir or dip_dir_nztm."):
+        Plane.from_nztm_trace(trace_points, 0, 1, 45, dip_dir=90, dip_dir_nztm=90)
 
 
 @pytest.mark.parametrize(
