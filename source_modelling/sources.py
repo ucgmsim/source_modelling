@@ -965,7 +965,7 @@ class Fault:
             dip_dir = self.planes[i].bounds[-1] - self.planes[i].bounds[0]
             dip_dir_prev = self.planes[i - 1].bounds[-1] - self.planes[i - 1].bounds[0]
             diff = sp.spatial.distance.cosine(dip_dir, dip_dir_prev)
-            if not np.isclose(diff, 0, atol=1e-5):
+            if not np.isclose(diff, 0, atol=1e-4):
                 raise ValueError(
                     f"Fault must have a constant dip direction, plane {i} has dip direction {dip_dir}, but plane {i - 1} hase dip direction {dip_dir_prev}"
                 )
