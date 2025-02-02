@@ -332,42 +332,39 @@ def trace(
 
 @st.composite
 def valid_trace_definition(draw: st.DrawFn):
-    trace_point_1_nztm = draw(
+    trace_point_1 = draw(
         st.builds(
-            nztm_coordinate,
-            y=st.floats(1, 100_000),
-            x=st.floats(1, 100_000),
+            coordinate,
+            lat=st.floats(-50, -31),
+            lon=st.floats(160, 180),
         )
     )
-    trace_point_2_nztm = draw(
-        st.builds(
-            nztm_coordinate,
-            y=st.floats(1, 100_000),
-            x=st.floats(1, 100_000),
-        )
-    )
-    assume(not np.allclose(trace_point_1_nztm, trace_point_2_nztm))
+    assume(valid_coordinates(trace_point_1))
+    trace_point_1_nztm = coordinates.wgs_depth_to_nztm(trace_point_1)
+    
+    strike_nztm = draw(st.floats(0, 359))
+    strike_vec = np.array([np.cos(np.radians(strike_nztm)), np.sin(np.radians(strike_nztm))])
+    length = draw(st.floats(0.1, 100)) * 1000
+    trace_point_2_nztm = trace_point_1_nztm + strike_vec * length
+
     trace_points_nztm = np.stack((trace_point_1_nztm, trace_point_2_nztm), axis=0)
     assume(np.linalg.matrix_rank(trace_points_nztm) == 2)
-
-    # Compute strike
-    north_direction = np.array([1, 0, 0])
-    up_direction = np.array([0, 0, 1])
-    strike_vec = np.concatenate((trace_point_2_nztm - trace_point_1_nztm, [0]))
-    strike_nztm = geo.oriented_bearing_wrt_normal(
-        north_direction, strike_vec, up_direction
-    )
 
     dtop = draw(st.floats(0, 100))
     depth = draw(st.floats(1, 100))
     dip = draw(st.floats(1, 90))
+    width = depth / np.sin(np.radians(dip))
+    assume(width < 100)
 
+    dip_dir_nztm = (strike_nztm + draw(st.floats(1, 179))) % 360
+    assume(dip_dir_nztm <= 359)
     if np.isclose(dip, 90):
         dip_dir_nztm, dip_dir = 0, 0
+    elif dip_dir_nztm == 0.0:
+        dip_dir = 0.0
     else:
-        dip_dir_nztm = (strike_nztm + draw(st.floats(1, 179))) % 360
         dip_dir = coordinates.nztm_bearing_to_great_circle_bearing(
-            coordinates.nztm_to_wgs_depth(trace_point_1_nztm), 1, dip_dir_nztm
+            trace_point_1, width, dip_dir_nztm
         )
 
     return (
@@ -378,6 +375,8 @@ def valid_trace_definition(draw: st.DrawFn):
         dip_dir,
         dip_dir_nztm,
         strike_nztm,
+        length,
+        width
     )
 
 
@@ -391,6 +390,8 @@ def test_plane_from_trace(data: tuple):
         dip_dir,
         dip_dir_nztm,
         strike_nztm,
+        length,
+        width
     ) = data
 
     plane = Plane.from_nztm_trace(
@@ -399,11 +400,12 @@ def test_plane_from_trace(data: tuple):
     assert pytest.approx(plane.top_m, abs=1e-3) == dtop * 1000
     assert pytest.approx(plane.bottom_m, abs=1e-3) == (dtop + depth) * 1000
     assert pytest.approx(plane.dip, abs=1e-6) == dip
+    assert pytest.approx(plane.dip_dir, abs=1e-1) == dip_dir
     assert pytest.approx(plane.dip_dir_nztm, abs=1e-3) == dip_dir_nztm
     assert pytest.approx(plane.strike_nztm, abs=1e-6) == strike_nztm
-    assert pytest.approx(plane.width, abs=1e-6) == plane.projected_width / np.cos(
-        np.radians(plane.dip)
-    )
+    assert pytest.approx(plane.width, abs=1e-3) == width
+    assert pytest.approx(plane.length_m, abs=1e-3) == length
+    assert pytest.approx(plane.projected_width, abs=1e-3) == width * np.cos(np.radians(dip))
     assert shapely.get_coordinates(plane.geometry, include_z=True)[
         :-1
     ] == pytest.approx(plane.bounds)
@@ -421,6 +423,7 @@ def test_plane_from_trace(data: tuple):
     assert plane.width == pytest.approx(
         plane.projected_width / np.cos(np.radians(plane.dip)), abs=1e-6
     )
+    assert pytest.approx(plane.length_m, abs=1e-3) == length
     assert shapely.get_coordinates(plane.geometry, include_z=True)[
         :-1
     ] == pytest.approx(plane.bounds)

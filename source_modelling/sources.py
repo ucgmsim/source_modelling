@@ -455,11 +455,12 @@ class Plane:
             raise ValueError("Must supply at least one of dip_dir or dip_dir_nztm.")
 
         if dip_dir_nztm is None and dip_dir is not None:
-            if np.isclose(dip, 90):
+            if np.isclose(dip, 90) or dip_dir == 0.0:
                 dip_dir_nztm = 0
             else:
+                width = (dbottom - dtop) / np.sin(np.deg2rad(dip))
                 dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
-                    coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), 1, dip_dir
+                    coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), width, dip_dir
                 )
 
         if trace_points_nztm.shape != (2, 2):
@@ -492,6 +493,9 @@ class Plane:
 
             # Apply displacement to trace points to get c3 and c4
             corners_bottom = corners_top + displacement
+
+        # Flip the order of the bottom corners
+        corners_bottom = corners_bottom[::-1]
 
         return cls(np.vstack((corners_top, corners_bottom)))
 
