@@ -31,6 +31,8 @@ def plot_srf_moment(
             help="Path to realisation, used to plot individual fault contribution."
         ),
     ] = None,
+    height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
 ) -> None:
     """Plot released moment for an SRF over time.
 
@@ -44,6 +46,10 @@ def plot_srf_moment(
         Plot image pixel density (higher = better).
     realisation_ffp : Optional[Path], default None
         Path to realisation, used to plot individual fault contribution.
+    width : float
+        Width of plot (in cm).
+    height : float
+        Height of plot (in cm).
     """
     srf_data = srf.read_srf(srf_ffp)
 
@@ -57,6 +63,8 @@ def plot_srf_moment(
         srf_data.points["area"], srf_data.slip, dt, srf_data.nt
     )
     fig, ax = plt.subplots()
+    cm = 1 / 2.54
+    fig.set_size_inches(width * cm, height * cm)
     ax.plot(
         overall_moment_rate.index.values,
         overall_moment_rate["moment_rate"],

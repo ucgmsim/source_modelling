@@ -44,6 +44,8 @@ def plot_srf(
         float, typer.Option(help="longitude padding to apply (degrees)")
     ] = 0,
     annotations: Annotated[bool, typer.Option(help="Label contours")] = True,
+    height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
 ) -> None:
     """Plot multi-segment rupture with slip.
 
@@ -67,6 +69,10 @@ def plot_srf(
         Longitude padding to apply (degrees).
     annotations : bool
         Label contours.
+    width : float
+        Width of plot (in cm).
+    height : float
+        Height of plot (in cm).
     """
     srf_data = srf.read_srf(srf_ffp)
 
@@ -83,6 +89,9 @@ def plot_srf(
     cmap_limits = (0, slip_cb_max, slip_cb_max / 10)
 
     fig = plotting.gen_region_fig(title, region=region, map_data=None)
+
+    cm = 1 / 2.54
+    fig.set_size_inches(width * cm, height * cm)
 
     for (_, segment), segment_points in zip(
         srf_data.header.iterrows(), srf_data.segments

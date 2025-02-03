@@ -38,6 +38,8 @@ def plot_srf_cumulative_moment(
     max_shade_cutoff: Annotated[
         float, typer.Option(help="Maximum shading cutoff", min=0, max=1)
     ] = 0.95,
+    height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
 ):
     """Plot cumulative moment for an SRF over time.
 
@@ -56,6 +58,10 @@ def plot_srf_cumulative_moment(
         Minimum shading cutoff.
     max_shade_cutoff : Annotated[ float, typer.Option(help
         Maximum shading cutoff.
+    width : float
+        Width of plot (in cm).
+    height : float
+        Height of plot (in cm).
     """
     srf_data = srf.read_srf(srf_ffp)
 
@@ -74,6 +80,8 @@ def plot_srf_cumulative_moment(
         & (overall_moment["moment"] <= total_moment * max_shade_cutoff)
     ]
     fig, ax = plt.subplots()
+    cm = 1 / 2.54
+    fig.set_size_inches(width * cm, height * cm)
     ax.fill_between(shaded_moments.index.values, shaded_moments["moment"], alpha=0.2)
     ax.plot(
         overall_moment.index.values, overall_moment["moment"], label="Overall Moment"

@@ -30,6 +30,8 @@ def plot_mw_contributions(
     dpi: Annotated[
         float, typer.Option(help="Output plot DPI (higher is better).")
     ] = 300,
+    height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
 ) -> None:
     """Plot segment magnitudes against the Leonard scaling relation.
 
@@ -43,6 +45,10 @@ def plot_mw_contributions(
         Output plot path.
     dpi : float, default 300
         Output plot DPI (higher is better).
+    width : float
+        Width of plot (in cm).
+    height : float
+        Height of plot (in cm).
     """
     source_config = SourceConfig.read_from_realisation(realisation_ffp)
     rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
@@ -55,6 +61,8 @@ def plot_mw_contributions(
     )
     area = np.linspace(smallest_area, total_area)
     fig, ax = plt.subplots()
+    cm = 1 / 2.54
+    fig.set_size_inches(width * cm, height * cm)
     # Mw = log(area) + 3.995 is the Leonard2014 magnitude scaling relation
     # for average rake.
     ax.plot(
