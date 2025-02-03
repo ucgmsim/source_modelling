@@ -33,8 +33,7 @@ def plot_rakes(
     seed: Annotated[
         Optional[int], typer.Option(help="Random seed to sample rakes with")
     ] = None,
-    height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
-    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot width (cm)", min=0)] = 17,
 ) -> None:
     """Plot an SRF file and output a PNG file.
 
@@ -54,8 +53,6 @@ def plot_rakes(
         Length of rake vectors (cm).
     width : float
         Width of plot (in cm).
-    height : float
-        Height of plot (in cm).
     """
     srf_data = srf.read_srf(srf_ffp)
     region = (
@@ -65,9 +62,9 @@ def plot_rakes(
         srf_data.points["lat"].max() + 0.25,
     )
 
-    fig = plotting.gen_region_fig(title, region=region, map_data=None)
-    cm = 1 / 2.54
-    fig.set_size_inches(width * cm, height * cm)
+    fig = plotting.gen_region_fig(
+        title, projection=f"M{width}c", region=region, map_data=None
+    )
     i = 0
 
     np.random.seed(seed)

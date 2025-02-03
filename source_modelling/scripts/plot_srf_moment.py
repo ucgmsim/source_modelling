@@ -32,7 +32,7 @@ def plot_srf_moment(
         ),
     ] = None,
     height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
-    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot width (cm)", min=0)] = 10,
 ) -> None:
     """Plot released moment for an SRF over time.
 

@@ -39,7 +39,7 @@ def plot_srf_cumulative_moment(
         float, typer.Option(help="Maximum shading cutoff", min=0, max=1)
     ] = 0.95,
     height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
-    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot width (cm)", min=0)] = 10,
 ):
     """Plot cumulative moment for an SRF over time.
 

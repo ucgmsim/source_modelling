@@ -31,7 +31,7 @@ def plot_mw_contributions(
         float, typer.Option(help="Output plot DPI (higher is better).")
     ] = 300,
     height: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
-    width: Annotated[float, typer.Option(help="Plot height (cm)", min=0)] = 10,
+    width: Annotated[float, typer.Option(help="Plot width (cm)", min=0)] = 10,
 ) -> None:
     """Plot segment magnitudes against the Leonard scaling relation.
 
