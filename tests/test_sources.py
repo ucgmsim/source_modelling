@@ -358,10 +358,9 @@ def valid_trace_definition(draw: st.DrawFn):
 
     dip_dir_nztm = (strike_nztm + draw(st.floats(1, 179))) % 360
     assume(dip_dir_nztm <= 359)
+    assume(dip_dir_nztm >= 1)
     if np.isclose(dip, 90):
         dip_dir_nztm, dip_dir = 0, 0
-    elif dip_dir_nztm == 0.0:
-        dip_dir = 0.0
     else:
         dip_dir = coordinates.nztm_bearing_to_great_circle_bearing(
             trace_point_1, width, dip_dir_nztm

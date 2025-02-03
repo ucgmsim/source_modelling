@@ -374,7 +374,7 @@ class Plane:
     @property
     def dip_dir(self) -> float:
         """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
-        if self.dip_dir_nztm == 0.0:
+        if np.isclose(self.dip, 90):
             return 0.0
 
         return coordinates.nztm_bearing_to_great_circle_bearing(
