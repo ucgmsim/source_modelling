@@ -25,13 +25,6 @@ def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndar
     return np.array([lat, lon])
 
 
-def nztm_coordinate(y: float, x: float, depth: Optional[float] = None) -> np.ndarray:
-    """Create a coordinate array from NZTM coordinates and optional depth."""
-    if depth is not None:
-        return np.array([y, x, depth])
-    return np.array([y, x])
-
-
 def valid_coordinates(point_coordinates: np.ndarray) -> bool:
     """Check if the given coordinates are valid."""
     return bool(np.all(np.isfinite(coordinates.wgs_depth_to_nztm(point_coordinates))))
@@ -341,9 +334,11 @@ def valid_trace_definition(draw: st.DrawFn):
     )
     assume(valid_coordinates(trace_point_1))
     trace_point_1_nztm = coordinates.wgs_depth_to_nztm(trace_point_1)
-    
+
     strike_nztm = draw(st.floats(0, 359))
-    strike_vec = np.array([np.cos(np.radians(strike_nztm)), np.sin(np.radians(strike_nztm))])
+    strike_vec = np.array(
+        [np.cos(np.radians(strike_nztm)), np.sin(np.radians(strike_nztm))]
+    )
     length = draw(st.floats(0.1, 100)) * 1000
     trace_point_2_nztm = trace_point_1_nztm + strike_vec * length
 
@@ -375,7 +370,7 @@ def valid_trace_definition(draw: st.DrawFn):
         dip_dir_nztm,
         strike_nztm,
         length,
-        width
+        width,
     )
 
 
@@ -390,7 +385,7 @@ def test_plane_from_trace(data: tuple):
         dip_dir_nztm,
         strike_nztm,
         length,
-        width
+        width,
     ) = data
 
     plane = Plane.from_nztm_trace(
@@ -404,7 +399,9 @@ def test_plane_from_trace(data: tuple):
     assert pytest.approx(plane.strike_nztm, abs=1e-6) == strike_nztm
     assert pytest.approx(plane.width, abs=1e-3) == width
     assert pytest.approx(plane.length_m, abs=1e-3) == length
-    assert pytest.approx(plane.projected_width, abs=1e-3) == width * np.cos(np.radians(dip))
+    assert pytest.approx(plane.projected_width, abs=1e-3) == width * np.cos(
+        np.radians(dip)
+    )
     assert shapely.get_coordinates(plane.geometry, include_z=True)[
         :-1
     ] == pytest.approx(plane.bounds)
