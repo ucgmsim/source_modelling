@@ -66,7 +66,15 @@ POINT_COUNT_RE = r"POINTS (\d+)"
 
 
 class Segments(Sequence):
-    """A read-only view for SRF segments."""
+    """A read-only view for SRF segments.
+
+    Parameters
+    ----------
+    header : pd.DataFrame
+        The header of the SRF file.
+    points : pd.DataFrame
+        The points of the SRF file.
+    """
 
     def __init__(self, header: pd.DataFrame, points: pd.DataFrame) -> None:
         """Initialise the Segments object.
@@ -108,7 +116,12 @@ class Segments(Sequence):
         ]
 
     def __len__(self) -> int:
-        """int: The number of segments in the SRF."""
+        """
+        Returns
+        -------
+        int
+            The number of segments in the SRF.
+        """
         return len(self._header)
 
 
@@ -176,7 +189,7 @@ class SrfFile:
     slipt3_array: sp.sparse.csr_array
 
     @property
-    def slip(self):
+    def slip(self):  # numpydoc ignore=RT01
         """csr_array: sparse array representing slip in all components."""
         slip_array = self.slipt1_array.power(2)
         if self.slipt2_array:
@@ -186,7 +199,7 @@ class SrfFile:
         return slip_array.sqrt()
 
     @property
-    def geometry(self) -> shapely.Geometry:
+    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
         """shapely.Geometry: The shapely geometry of all segments in the SRF."""
         polygons = []
         for i, segment in enumerate(self.segments):
@@ -211,22 +224,22 @@ class SrfFile:
         return shapely.union_all(polygons).normalize()
 
     @property
-    def nt(self):
+    def nt(self):  # numpydoc ignore=RT01
         """int: The number of timeslices in the SRF."""
         return self.slipt1_array.shape[1]
 
     @property
-    def dt(self):
+    def dt(self):  # numpydoc ignore=RT01
         """float: time resolution of SRF."""
         return self.points["dt"].iloc[0]
 
     @property
-    def segments(self) -> Segments:
+    def segments(self) -> Segments:  # numpydoc ignore=RT01
         """Segments: A sequence of segments in the SRF."""
         return Segments(self.header, self.points)
 
     @property
-    def planes(self) -> list[Plane]:
+    def planes(self) -> list[Plane]:  # numpydoc ignore=RT01
         """list[Plane]: The list of planes in the SRF."""
         # The following method relies as little as possible on the SRF header
         # values. This is because they frequently lie! See the darfield SRF
@@ -323,6 +336,9 @@ def read_int(srf_file: TextIO, label: Optional[str] = None) -> int:
     ----------
     srf_file : TextIO
         The SRF file to read from.
+    label : str
+        Human readable string label for identifying the value in an error
+        message.
 
     Raises
     ------

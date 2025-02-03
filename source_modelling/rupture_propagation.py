@@ -520,7 +520,7 @@ def tree_nodes_in_order(tree: Tree) -> Generator[str, None, None]:
 
     def in_order_traversal(
         node: str,
-    ) -> Generator[str, None, None]:
+    ) -> Generator[str, None, None]:  # numpydoc ignore=GL08
         yield node
         for child in tree_child_map[node]:
             yield from in_order_traversal(child)

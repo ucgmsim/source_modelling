@@ -67,8 +67,8 @@ class Point:
         ----------
         point_coordinates : np.ndarray
             The coordinates of the point in lat, lon, depth format.
-        kwargs
-            The remaining point source arguments (see the class-level docstring)
+        **kwargs : dict
+            The remaining point source arguments (see the class-level docstring).
 
         Returns
         -------
@@ -79,32 +79,32 @@ class Point:
         return cls(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
 
     @property
-    def coordinates(self) -> np.ndarray:
+    def coordinates(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray: The coordinates of the point in (lat, lon, depth) format. Depth is in metres."""
         return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
-    def length(self) -> float:
+    def length(self) -> float:  # numpydoc ignore=RT01
         """float: The length of the approximating planar patch (in kilometres)."""
         return self.length_m / _KM_TO_M
 
     @property
-    def width_m(self) -> float:
+    def width_m(self) -> float:  # numpydoc ignore=RT01
         """float: The width of the approximating planar patch (in metres)."""
         return self.length_m
 
     @property
-    def width(self) -> float:
+    def width(self) -> float:  # numpydoc ignore=RT01
         """float: The width of the approximating planar patch (in kilometres)."""
         return self.width_m / _KM_TO_M
 
     @property
-    def centroid(self) -> np.ndarray:
+    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray: The centroid of the point source (which is just the point's coordinates)."""
         return self.coordinates
 
     @property
-    def geometry(self) -> shapely.Point:
+    def geometry(self) -> shapely.Point:  # numpydoc ignore=RT01
         """shapely.Point: A shapely geometry for the point (projected onto the surface)."""
         return shapely.Point(self.bounds)
 
@@ -305,64 +305,64 @@ class Plane:
         return cls(coordinates.wgs_depth_to_nztm(corners))
 
     @property
-    def corners(self) -> np.ndarray:
+    def corners(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray: The corners of the fault plane in (lat, lon, depth) format. The corners are the same as in corners_nztm."""
         return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
-    def length_m(self) -> float:
+    def length_m(self) -> float:  # numpydoc ignore=RT01
         """float: The length of the fault plane (in metres)."""
         return float(np.linalg.norm(self.bounds[1] - self.bounds[0]))
 
     @property
-    def width_m(self) -> float:
+    def width_m(self) -> float:  # numpydoc ignore=RT01
         """float: The width of the fault plane (in metres)."""
         return float(np.linalg.norm(self.bounds[-1] - self.bounds[0]))
 
     @property
-    def bottom_m(self) -> float:
+    def bottom_m(self) -> float:  # numpydoc ignore=RT01
         """float: The bottom depth (in metres)."""
         return self.bounds[-1, -1]
 
     @property
-    def top_m(self) -> float:
+    def top_m(self) -> float:  # numpydoc ignore=RT01
         """float: The top depth of the fault."""
         return self.bounds[0, -1]
 
     @property
-    def width(self) -> float:
+    def width(self) -> float:  # numpydoc ignore=RT01
         """float: The width of the fault plane (in kilometres)."""
         return self.width_m / _KM_TO_M
 
     @property
-    def length(self) -> float:
+    def length(self) -> float:  # numpydoc ignore=RT01
         """float: The length of the fault plane (in kilometres)."""
         return self.length_m / _KM_TO_M
 
     @property
-    def area(self) -> float:
+    def area(self) -> float:  # numpydoc ignore=RT01
         """float: The area of the plane (in km^2)."""
         return self.length * self.width
 
     @property
-    def projected_width_m(self) -> float:
+    def projected_width_m(self) -> float:  # numpydoc ignore=RT01
         """float: The projected width of the fault plane (in metres)."""
         return self.width_m * np.cos(np.radians(self.dip))
 
     @property
-    def projected_width(self) -> float:
+    def projected_width(self) -> float:  # numpydoc ignore=RT01
         """float: The projected width of the fault plane (in kilometres)."""
         return self.projected_width_m / _KM_TO_M
 
     @property
-    def strike(self) -> float:
+    def strike(self) -> float:  # numpydoc ignore=RT01
         """float: The WGS84 bearing of the strike direction of the fault (from north; in degrees)."""
         return coordinates.nztm_bearing_to_great_circle_bearing(
             self.corners[0, :2], self.length, self.strike_nztm
         )
 
     @property
-    def strike_nztm(self) -> float:
+    def strike_nztm(self) -> float:  # numpydoc ignore=RT01
         """float: The bearing of the strike direction of the fault (from north; in degrees)."""
         north_direction = np.array([1, 0, 0])
         up_direction = np.array([0, 0, 1])
@@ -372,14 +372,14 @@ class Plane:
         )
 
     @property
-    def dip_dir(self) -> float:
+    def dip_dir(self) -> float:  # numpydoc ignore=RT01
         """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
         return coordinates.nztm_bearing_to_great_circle_bearing(
             self.corners[0, :2], self.width, self.dip_dir_nztm
         )
 
     @property
-    def dip_dir_nztm(self) -> float:
+    def dip_dir_nztm(self) -> float:  # numpydoc ignore=RT01
         """float: The bearing of the dip direction (from north; in degrees)."""
         if np.isclose(self.dip, 90):
             return 0  # TODO: Is this right for this case?
@@ -392,12 +392,12 @@ class Plane:
         )
 
     @property
-    def dip(self) -> float:
+    def dip(self) -> float:  # numpydoc ignore=RT01
         """float: The dip angle of the fault."""
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
     @property
-    def geometry(self) -> shapely.Polygon:
+    def geometry(self) -> shapely.Polygon:  # numpydoc ignore=RT01
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
 
@@ -551,7 +551,7 @@ class Plane:
         return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
-    def centroid(self) -> np.ndarray:
+    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray: The center of the fault plane."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
@@ -873,17 +873,17 @@ class Fault:
         ]
 
     @property
-    def dip(self) -> float:
+    def dip(self) -> float:  # numpydoc ignore=RT01
         """float: The dip angle of the fault."""
         return self.planes[0].dip
 
     @property
-    def dip_dir(self) -> float:
+    def dip_dir(self) -> float:  # numpydoc ignore=RT01
         """float: The dip direction of the fault."""
         return self.planes[0].dip_dir
 
     @property
-    def dip_dir_nztm(self) -> float:
+    def dip_dir_nztm(self) -> float:  # numpydoc ignore=RT01
         """float: The dip direction of the fault."""
         return self.planes[0].dip_dir_nztm
 
@@ -893,7 +893,7 @@ class Fault:
 
         Parameters
         ----------
-        corners : np.ndarray
+        fault_corners : np.ndarray
             The corners of the plane in lat, lon, depth format. Has shape (n x 4 x 3).
 
         Returns
@@ -914,17 +914,17 @@ class Fault:
         return self.width * np.sum(self.lengths)
 
     @property
-    def lengths(self) -> np.ndarray:
+    def lengths(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray: A numpy array of each plane length (in km)."""
         return np.array([fault.length for fault in self.planes])
 
     @property
-    def length(self) -> float:
+    def length(self) -> float:  # numpydoc ignore=RT01
         """float: The total length of each fault plane."""
         return self.lengths.sum()
 
     @property
-    def width(self) -> float:
+    def width(self) -> float:  # numpydoc ignore=RT01
         """The width of the fault.
 
         Returns
@@ -936,22 +936,22 @@ class Fault:
         return self.planes[0].width
 
     @property
-    def corners(self) -> np.ndarray:
+    def corners(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray of shape (4n x 3): The corners in (lat, lon, depth) format of each fault plane in the fault, stacked vertically."""
         return np.vstack([plane.corners for plane in self.planes])
 
     @property
-    def bounds(self) -> np.ndarray:
+    def bounds(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray of shape (4n x 3): The corners in NZTM format of each fault plane in the fault, stacked vertically."""
         return np.vstack([plane.bounds for plane in self.planes])
 
     @property
-    def centroid(self) -> np.ndarray:
+    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray: The center of the fault."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Polygon:
+    def geometry(self) -> shapely.Polygon:  # numpydoc ignore=RT01
         """shapely.Polygon: A shapely geometry for the fault (projected onto the surface)."""
         return shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
@@ -1116,7 +1116,9 @@ def closest_point_between_sources(
         The source-local coordinates of the closest point on source b.
     """
 
-    def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
+    def fault_coordinate_distance(
+        fault_coordinates: np.ndarray,
+    ) -> float:  # numpydoc ignore=GL08
         source_a_global_coordinates = (
             source_a.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates[:2])
         )

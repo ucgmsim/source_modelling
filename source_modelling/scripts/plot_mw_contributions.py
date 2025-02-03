@@ -1,3 +1,5 @@
+"""Plot magnitude contributions of each segment in a rupture against the Leonard scaling relation."""
+
 from pathlib import Path
 from typing import Annotated
 
