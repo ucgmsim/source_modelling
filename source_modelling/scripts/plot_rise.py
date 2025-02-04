@@ -23,6 +23,7 @@ def plot_rise(
         float, typer.Option(help="Plot output DPI (higher is better)")
     ] = 300,
     title: Annotated[Optional[str], typer.Option(help="Plot title to use")] = None,
+    width: Annotated[float, typer.Option(help="Plot width (cm)", min=0)] = 17,
 ) -> None:
     """Plot multi-segment drupture with rise.
 
@@ -36,6 +37,8 @@ def plot_rise(
         Plot output DPI (higher is better).
     title : Optional[str], default None
         Plot title to use.
+    width : float
+        Width of plot (in cm).
     """
     srf_data = srf.read_srf(srf_ffp)
     region = (
@@ -52,7 +55,10 @@ def plot_rise(
     trise_cb_max = srf_data.points["trise"].max()
     cmap_limits = (0, trise_cb_max, trise_cb_max / 10)
 
-    fig = plotting.gen_region_fig(title, region=region, map_data=None)
+    fig = plotting.gen_region_fig(
+        title, projection=f"M{width}c", region=region, map_data=None
+    )
+
     for i, segment_points in enumerate(srf_data.segments):
         cur_grid = plotting.create_grid(
             segment_points,
