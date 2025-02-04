@@ -21,6 +21,7 @@ Example
 
 import dataclasses
 import re
+import io
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -154,8 +155,8 @@ class FSPFile:
     # Model subfault sizes
     nx: Optional[int]
     nz: Optional[int]
-    dx: float
-    dz: float
+    dx: Optional[float]
+    dz: Optional[float]
 
     # Inversion parameters
     fmin: Optional[float]
@@ -213,23 +214,45 @@ class FSPFile:
             metadata = parse_result.named
 
             # now sniff ahead for the columns
-            for line in fsp_file_handle:
-                if re.match(r"%\s+LAT\s+LON", line):
-                    break
-            else:
-                raise FSPParseError("Cannot find columns for FSP file!")
-            columns = line.lower().lstrip("% ").split()
 
-            data = pd.read_csv(
-                fsp_file_handle,
-                delimiter=r"\s+",
-                header=None,
-                names=columns,
-                comment="%",
-            )
-            data = data.rename(
-                columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
-            )
+            segments: list[pd.DataFrame] = []
+            for i in range(metadata["segment_count"]):
+                subfaults = None
+                for line in fsp_file_handle:
+                    if match := re.search(r"%\s+Nsbfs\s*=\s*(\d+)", line):
+                        subfaults = match.group(1)
+                    if re.match(r"%\s+LAT\s+LON", line):
+                        break
+                else:
+                    raise FSPParseError(
+                        f"Cannot find columns for FSP file on segment {i + 1}."
+                    )
+
+                if subfaults is None:
+                    raise FSPParseError(
+                        f"Cannot find number of subfaults for FSP file on segment {i + 1}."
+                    )
+
+                subfaults = int(subfaults)
+                columns = line.lower().lstrip("% ").split()
+                _ = next(fsp_file_handle)  # Skip header decoration
+                # read subfaults lines into StringIO buffer
+                lines = io.StringIO(
+                    "\n".join([next(fsp_file_handle) for _ in range(subfaults)])
+                )
+                data = pd.read_csv(
+                    lines,
+                    delimiter=r"\s+",
+                    header=None,
+                    names=columns,
+                )
+                data = data.rename(
+                    columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
+                )
+                data["segment"] = i
+                segments.append(data)
+
+            data = pd.concat(segments)
             fsp_file = cls(data=data, **metadata)
 
             # A lot of parameters can be 999 or -999 to indicate "no known
@@ -244,6 +267,9 @@ class FSPFile:
 
             fsp_file.nx = _normalise_value(fsp_file.nx)
             fsp_file.nz = _normalise_value(fsp_file.nz)
+
+            fsp_file.dx = _normalise_value(fsp_file.dx)
+            fsp_file.dz = _normalise_value(fsp_file.dz)
 
             fsp_file.fmin = _normalise_value(fsp_file.fmin)
             fsp_file.fmax = _normalise_value(fsp_file.fmax)

@@ -40,6 +40,7 @@ def test_darfield_fsp():
     assert fsp_file.segment_count == 8
     assert len(fsp_file.data) == 886
     assert fsp_file.data.iloc[0].to_dict() == {
+        "segment": 0,
         "lat": -43.5965,
         "lon": 172.0673,
         "x": -10.6899,
@@ -127,8 +128,11 @@ def test_loads_srcmod_fsp(fsp_path: Path):
         assert fsp_file.nx > 0, f"nx should be positive, got {fsp_file.nx}"
     if fsp_file.nz is not None:
         assert fsp_file.nz > 0, f"nz should be positive, got {fsp_file.nz}"
-    assert fsp_file.dx > 0, f"dx should be positive, got {fsp_file.dx}"
-    assert fsp_file.dz > 0, f"dz should be positive, got {fsp_file.dz}"
+
+    if fsp_file.dx is not None:
+        assert fsp_file.dx > 0, f"dx should be positive, got {fsp_file.dx}"
+    if fsp_file.dz is not None:
+        assert fsp_file.dz > 0, f"dz should be positive, got {fsp_file.dz}"
 
     # Inversion parameters bounds
     if fsp_file.fmin is not None:
@@ -166,6 +170,7 @@ def test_loads_srcmod_fsp(fsp_path: Path):
 
     # Check that there is at least one row in the data
     assert fsp_file.data.shape[0] > 0, "data DataFrame should have at least one row"
+    assert fsp_file.data["segment"].max() == fsp_file.segment_count - 1
 
 
 @pytest.mark.parametrize(
