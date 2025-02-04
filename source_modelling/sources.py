@@ -283,7 +283,7 @@ class Plane:
         # If the orientation is not close to 0 and is negative, then dip
         # direction is to the left of the strike direction, so we reverse
         # the order of the top and bottom corners.
-        if not np.isclose(orientation, 0) and orientation < 0:
+        if not np.isclose(orientation, 0, atol=1e-3) and orientation < 0:
             top = top[::-1]
             bottom = bottom[::-1]
         self.bounds = np.array([top[0], top[1], bottom[0], bottom[1]])
@@ -374,6 +374,9 @@ class Plane:
     @property
     def dip_dir(self) -> float:  # numpydoc ignore=RT01
         """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
+        if np.isclose(self.dip, 90):
+            return 0.0
+
         return coordinates.nztm_bearing_to_great_circle_bearing(
             self.corners[0, :2], self.width, self.dip_dir_nztm
         )
@@ -400,6 +403,101 @@ class Plane:
     def geometry(self) -> shapely.Polygon:  # numpydoc ignore=RT01
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
         return shapely.Polygon(self.bounds)
+
+    @classmethod
+    def from_nztm_trace(
+        cls,
+        trace_points_nztm: np.ndarray[float],
+        dtop: float,
+        dbottom: float,
+        dip: float,
+        dip_dir: Optional[float] = None,
+        dip_dir_nztm: Optional[float] = None,
+    ) -> Self:
+        """Create a fault plane from the surface trace, depth parameters,
+        dip and dip direction.
+
+        Note: Strike is defined by the dip direction, not the order of the trace points!
+
+        Parameters
+        ----------
+        trace_points: np.ndarray
+            The surface trace of the fault in NZTM (y, x) format.
+            The order of the points is not important, as
+            strike, and therefore the correct order, is determined
+            from dip direction.
+        dtop: float
+            The top depth of the plane (in km).
+        dbottom: float
+            The bottom depth of the plane (in km).
+        dip: float
+            The dip of the fault plane (degrees).
+        dip_dir: float, optional
+            Plane dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+
+            Note: If combining multiple planes into a fault using the great
+            circle bearing dip direction will cause issues, as the NZTM dip
+            direction across the Planes will not be consistent.
+        dip_dir_nztm: float, optional
+            Plane NZTM dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+
+        Returns
+        -------
+        Plane
+            The fault plane with the given parameters.
+        """
+        if dip_dir is not None and dip_dir_nztm is not None:
+            raise ValueError("Must supply at most one of dip_dir or dip_dir_nztm.")
+
+        if dip_dir_nztm is None and dip_dir is None:
+            raise ValueError("Must supply at least one of dip_dir or dip_dir_nztm.")
+
+        if dip_dir_nztm is None and dip_dir is not None:
+            if np.isclose(dip, 90) or dip_dir == 0.0:
+                dip_dir_nztm = 0
+            else:
+                width = (dbottom - dtop) / np.sin(np.deg2rad(dip))
+                dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
+                    coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), width, dip_dir
+                )
+
+        if trace_points_nztm.shape != (2, 2):
+            raise ValueError("Trace points must be a 2x2 array.")
+
+        if np.isclose(dip, 90) and dip_dir_nztm != 0:
+            raise ValueError("Dip direction must be 0 for vertical faults.")
+
+        dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
+
+        # Define the trace corners in NZTM coordinates (y, x, depth)
+        corners_top = np.column_stack((trace_points_nztm, np.array([dtop, dtop])))
+
+        # Compute remaining corners
+        if np.isclose(dip, 90):
+            corners_bottom = np.column_stack(
+                (trace_points_nztm, np.array([dbottom, dbottom]))
+            )
+        else:
+            dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
+            proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
+
+            displacement = np.array(
+                [
+                    np.cos(dip_dir_nztm_rad) * proj_width,
+                    np.sin(dip_dir_nztm_rad) * proj_width,
+                    dbottom - dtop,
+                ]
+            )
+
+            # Apply displacement to trace points to get c3 and c4
+            corners_bottom = corners_top + displacement
+
+        # Flip the order of the bottom corners
+        corners_bottom = corners_bottom[::-1]
+
+        return cls(np.vstack((corners_top, corners_bottom)))
 
     @classmethod
     def from_centroid_strike_dip(
@@ -730,29 +828,20 @@ class Fault:
     planes: list[Plane]
 
     def _basic_consistency_checks(self):
-        """Check that the planes are consistent in dip direction and width.
+        """Check that the planes are consistent in dip and width.
 
         Raises
         ------
         ValueError
-            If the planes are not consistent in dip direction or width."""
+            If the planes are not consistent in dip or width."""
         # Planes can only have one dip, dip direction, and width.
-        for plane in self.planes:
-            if not (
-                np.isclose(plane.dip_dir_nztm, self.planes[0].dip_dir_nztm, atol=0.1)
-            ):
-                raise ValueError(
-                    f"Fault must have a constant dip direction (plane dip dir = {plane.dip_dir}, fault dip dir is {self.planes[0].dip_dir})."
-                )
+        for plane in self.planes[1:]:
+            if not (np.isclose(plane.width, self.planes[0].width)):
+                raise ValueError("Fault must have constant width.")
             if not (np.isclose(plane.dip, self.planes[0].dip, atol=0.1)):
                 raise ValueError(
                     f"Fault must have a constant dip (plane dip = {plane.dip}, fault dip is {self.planes[0].dip})."
                 )
-
-        if not all(
-            np.isclose(plane.width, self.planes[0].width) for plane in self.planes
-        ):
-            raise ValueError("Fault must have constant width.")
 
     def _validate_fault_plane_connectivity(self, connection_graph: nx.DiGraph):
         """Validate that the fault planes are connected in a line.
@@ -871,6 +960,15 @@ class Fault:
             self.planes[i]
             for i in reversed(list(nx.topological_sort(points_into_graph)))
         ]
+        # Now check that the plane edges line up.
+        for i in range(1, len(self.planes)):
+            dip_dir = self.planes[i].bounds[-1] - self.planes[i].bounds[0]
+            dip_dir_prev = self.planes[i - 1].bounds[-1] - self.planes[i - 1].bounds[0]
+            diff = sp.spatial.distance.cosine(dip_dir, dip_dir_prev)
+            if not np.isclose(diff, 0, atol=1e-4):
+                raise ValueError(
+                    f"Fault must have a constant dip direction, plane {i} has dip direction {dip_dir}, but plane {i - 1} hase dip direction {dip_dir_prev}"
+                )
 
     @property
     def dip(self) -> float:  # numpydoc ignore=RT01
