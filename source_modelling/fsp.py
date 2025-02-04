@@ -28,7 +28,6 @@ from typing import Callable, Optional
 import pandas as pd
 import parse
 
-# Adapted from regex: https://stackoverflow.com/a/4703508
 HEADER_PATTERN = """EventTAG: {event_tag}
 Loc : LAT = {latitude:g} LON = {longitude:g} DEP = {depth:g}
 Size : LEN = {length:g} km WID = {width:g} km Mw = {magnitude:g} Mo = {moment:g} Nm
