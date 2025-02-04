@@ -57,7 +57,7 @@ import pandas as pd
 import scipy as sp
 import shapely
 
-from qcore import coordinates, geo
+from qcore import coordinates
 from source_modelling import srf_reader
 from source_modelling.sources import Plane
 
