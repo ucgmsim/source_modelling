@@ -1,8 +1,13 @@
 import tempfile
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
+import scipy as sp
+import shapely
 
+from qcore import coordinates
 from source_modelling import srf
 
 SRF_DIR = Path(__file__).parent / "srfs"
@@ -210,6 +215,141 @@ def test_darfield_srf():
         # assert header["dip"] == pytest.approx(plane.dip, abs=0.1)
         # assert header["stk"] == pytest.approx(plane.strike, abs=0.1)
         assert header["dtop"] == pytest.approx(plane.corners[0, -1] / 1000, abs=0.1)
+
+
+def test_srf_geometry():
+    """Test the geometry property of the SrfFile class."""
+    # Mocking SRF header data
+    header_data = {
+        "elon": [172.6966],
+        "elat": [-43.5446],
+        "nstk": [2],
+        "ndip": [2],
+        "len": [16.00],
+        "wid": [9.00],
+        "stk": [59],
+        "dip": [69],
+        "dtop": [0.63],
+        "shyp": [-2.00],
+        "dhyp": [6.00],
+    }
+    header = pd.DataFrame(header_data)
+
+    # Mocking points data
+    points_data = {
+        "lon": [172.6127, 172.6130, 172.6140, 172.6150],
+        "lat": [-43.5821, -43.5825, -43.5830, -43.5835],
+        "dep": [0.6767, 0.6767, 0.8000, 0.8000],
+        "stk": [59, 59, 59, 59],
+        "dip": [69, 69, 69, 69],
+        "area": [1.0e08] * 4,
+        "tinit": [5.7029, 5.8000, 5.9000, 6.0000],
+        "dt": [0.025] * 4,
+        "rake": [102] * 4,
+        "slip1": [17.49, 18.00, 19.00, 20.00],
+        "slip2": [0.0] * 4,
+        "slip3": [0.0] * 4,
+        "slip": [17.49, 18.00, 19.00, 20.00],
+    }
+    points = pd.DataFrame(points_data)
+
+    # Mocking sparse arrays
+    slipt1_array = sp.sparse.csr_array(np.random.rand(4, 10))
+    slipt2_array = None
+    slipt3_array = None
+
+    # Create SrfFile instance
+    srf_file = srf.SrfFile(
+        version="1.0",
+        header=header,
+        points=points,
+        slipt1_array=slipt1_array,
+        slipt2_array=slipt2_array,
+        slipt3_array=slipt3_array,
+    )
+
+    # Get geometry
+    geometry = srf_file.geometry
+
+    # Check that the geometry is a valid shapely object
+    assert isinstance(geometry, shapely.Polygon)
+    assert not geometry.is_empty, "Geometry should not be empty"
+    assert geometry.is_valid, "Geometry should be valid"
+
+    # Check that geometry roughly matches expected bounds
+    nztm_points = coordinates.wgs_depth_to_nztm(points[["lat", "lon"]].values)
+    (min_x, min_y, max_x, max_y) = shapely.bounds(geometry)
+    assert min_x == nztm_points[:, 0].min()
+    assert min_y == nztm_points[:, 1].min()
+    assert max_x == nztm_points[:, 0].max()
+    assert max_y == nztm_points[:, 1].max()
+
+
+def test_srf_dip_90_geometry():
+    """Test the geometry property of the SrfFile class."""
+    # Mocking SRF header data
+    header_data = {
+        "elon": [172.6966],
+        "elat": [-43.5446],
+        "nstk": [2],
+        "ndip": [2],
+        "len": [16.00],
+        "wid": [9.00],
+        "stk": [59],
+        "dip": [90],
+        "dtop": [0.63],
+        "shyp": [-2.00],
+        "dhyp": [6.00],
+    }
+    header = pd.DataFrame(header_data)
+
+    # Mocking points data
+    points_data = {
+        "lon": [172.6127, 172.6130, 172.6127, 172.6130],
+        "lat": [-43.5821, -43.5825, -43.5821, -43.5825],
+        "dep": [0.6767, 0.7000, 0.7500, 0.8000],
+        "stk": [59, 59, 59, 59],
+        "dip": [90, 90, 90, 90],
+        "area": [1.0e08] * 4,
+        "tinit": [5.7029, 5.8000, 5.9000, 6.0000],
+        "dt": [0.025] * 4,
+        "rake": [102] * 4,
+        "slip1": [17.49, 18.00, 19.00, 20.00],
+        "slip2": [0.0] * 4,
+        "slip3": [0.0] * 4,
+        "slip": [17.49, 18.00, 19.00, 20.00],
+    }
+    points = pd.DataFrame(points_data)
+
+    # Mocking sparse arrays
+    slipt1_array = sp.sparse.csr_array(np.random.rand(4, 10))
+    slipt2_array = None
+    slipt3_array = None
+
+    # Create SrfFile instance
+    srf_file = srf.SrfFile(
+        version="1.0",
+        header=header,
+        points=points,
+        slipt1_array=slipt1_array,
+        slipt2_array=slipt2_array,
+        slipt3_array=slipt3_array,
+    )
+
+    # Get geometry
+    geometry = srf_file.geometry
+
+    # For dip = 90, shapely geometry should be a line string rather than a polygon because shapely is 2d.
+    assert isinstance(geometry, shapely.LineString)
+    assert not geometry.is_empty, "Geometry should not be empty"
+    assert geometry.is_valid, "Geometry should be valid"
+
+    # Check that geometry roughly matches expected bounds
+    nztm_points = coordinates.wgs_depth_to_nztm(points[["lat", "lon"]].values)
+    for point in nztm_points:
+        assert shapely.contains(geometry, shapely.Point(point)) or shapely.contains(
+            shapely.boundary(geometry), shapely.Point(point)
+        )
 
 
 def test_junk_srfs():
