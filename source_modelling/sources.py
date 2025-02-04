@@ -421,25 +421,25 @@ class Plane:
 
         Parameters
         ----------
-        trace_points: np.ndarray
+        trace_points_nztm : np.ndarray
             The surface trace of the fault in NZTM (y, x) format.
             The order of the points is not important, as
             strike, and therefore the correct order, is determined
             from dip direction.
-        dtop: float
+        dtop : float
             The top depth of the plane (in km).
-        dbottom: float
+        dbottom : float
             The bottom depth of the plane (in km).
-        dip: float
+        dip : float
             The dip of the fault plane (degrees).
-        dip_dir: float, optional
+        dip_dir : float, optional
             Plane dip direction (degrees).
             One of `dip_dir` or `dip_dir_nztm` must be provided.
 
             Note: If combining multiple planes into a fault using the great
             circle bearing dip direction will cause issues, as the NZTM dip
             direction across the Planes will not be consistent.
-        dip_dir_nztm: float, optional
+        dip_dir_nztm : float, optional
             Plane NZTM dip direction (degrees).
             One of `dip_dir` or `dip_dir_nztm` must be provided.
 
