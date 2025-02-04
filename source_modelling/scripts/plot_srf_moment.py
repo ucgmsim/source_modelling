@@ -46,10 +46,10 @@ def plot_srf_moment(
         Plot image pixel density (higher = better).
     realisation_ffp : Optional[Path], default None
         Path to realisation, used to plot individual fault contribution.
-    width : float
-        Width of plot (in cm).
     height : float
         Height of plot (in cm).
+    width : float
+        Width of plot (in cm).
     """
     srf_data = srf.read_srf(srf_ffp)
 

@@ -47,10 +47,10 @@ def plot_mw_contributions(
         Output plot path.
     dpi : float, default 300
         Output plot DPI (higher is better).
-    width : float
-        Width of plot (in cm).
     height : float
         Height of plot (in cm).
+    width : float
+        Width of plot (in cm).
     """
     source_config = SourceConfig.read_from_realisation(realisation_ffp)
     rupture_propogation_config = RupturePropagationConfig.read_from_realisation(
