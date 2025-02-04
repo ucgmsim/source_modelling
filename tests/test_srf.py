@@ -1,6 +1,8 @@
 import tempfile
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from source_modelling import srf
@@ -236,3 +238,98 @@ def test_writing_christchurch():
         assert christchurch_srf.header.equals(christchurch_srf_tmp.header)
         assert christchurch_srf.points.equals(christchurch_srf_tmp.points)
         assert (christchurch_srf.slip != christchurch_srf_tmp.slip).nnz == 0
+
+
+def test_planes_nstk_1_ndip_gt_1():
+    """Test plane recovery when nstk == 1 and ndip > 1."""
+    header = pd.DataFrame(
+        [
+            {
+                "elon": 172.5,
+                "elat": -43.5,
+                "nstk": 1,
+                "ndip": 5,
+                "len": 10.0,
+                "wid": 21.235,
+                "stk": 45,
+                "dip": 60,
+            }
+        ]
+    )
+
+    points = pd.DataFrame(
+        {
+            "lon": np.linspace(172.5, 172.6, 5),
+            "lat": np.linspace(-43.5, -43.6, 5),
+            "dep": np.linspace(5, 15, 5),
+        }
+    )
+
+    mock_srf = srf.SrfFile(
+        version="1.0",
+        header=header,
+        points=points,
+        slipt1_array=None,
+        slipt2_array=None,
+        slipt3_array=None,
+    )
+
+    planes = mock_srf.planes
+
+    assert len(planes) == 1
+    plane = planes[0]
+
+    assert plane.strike == pytest.approx(45, abs=1)
+    assert plane.length == pytest.approx(10.0, abs=1e-3)
+    assert plane.width == pytest.approx(21.235, abs=1e-3)
+
+
+def test_planes_nstk_1_ndip_1():
+    """Test plane recovery when nstk == ndip == 1."""
+    header = pd.DataFrame(
+        [
+            {
+                "elon": 172.5,
+                "elat": -43.5,
+                "nstk": 1,
+                "ndip": 1,
+                "len": 10.0,
+                "wid": 15.0,
+                "dtop": 0.0,
+                "stk": 45,
+                "dip": 60,
+            }
+        ]
+    )
+
+    points = pd.DataFrame(
+        {
+            "lon": [172.5],
+            "lat": [-43.5],
+            "dep": [6.49519052838],
+        }
+    )  # One point in the centre of the patch.
+
+    mock_srf = srf.SrfFile(
+        version="1.0",
+        header=header,
+        points=points,
+        slipt1_array=None,
+        slipt2_array=None,
+        slipt3_array=None,
+    )
+
+    planes = mock_srf.planes
+
+    assert len(planes) == 1
+    plane = planes[0]
+    assert plane.centroid[:2] == pytest.approx(
+        [header["elat"].iloc[0], header["elon"].iloc[0]], abs=0.1
+    )
+    assert plane.strike == pytest.approx(45, abs=1)
+    assert plane.dip == pytest.approx(60, abs=1)
+    assert plane.length == pytest.approx(10.0, abs=1e-3)
+    assert plane.width == pytest.approx(15.0, abs=1e-3)
+    assert plane.wgs_depth_coordinates_to_fault_coordinates(
+        points[["lat", "lon", "dep"]].iloc[0].values * np.array([1, 1, 1000])
+    ) == pytest.approx(np.array([0.5, 0.5]), abs=1e-3)

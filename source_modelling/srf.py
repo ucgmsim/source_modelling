@@ -57,7 +57,7 @@ import pandas as pd
 import scipy as sp
 import shapely
 
-from qcore import coordinates
+from qcore import coordinates, geo
 from source_modelling import srf_reader
 from source_modelling.sources import Plane
 
@@ -235,43 +235,98 @@ class SrfFile:
         for (_, segment_header), segment in zip(self.header.iterrows(), self.segments):
             nstk = segment_header["nstk"]
             ndip = segment_header["ndip"]
-            # These points are the outer-most points and centres of the
-            # corner patches in the SRF (* in the diagram below).
-            corners = coordinates.wgs_depth_to_nztm(
-                segment[["lat", "lon", "dep"]]
-                .iloc[[0, nstk - 1, nstk * (ndip - 1), nstk * ndip - 1]]
-                .values
-            ) * np.array([1, 1, 1000])
-            # These points are the next step inside the SRF from the corners
-            # (marked . in the diagram below).
-            interior = coordinates.wgs_depth_to_nztm(
-                segment[["lat", "lon", "dep"]]
-                .iloc[
-                    [
-                        nstk + 1,
-                        2 * (nstk - 1),
-                        (ndip - 2) * nstk + 1,
-                        nstk * (ndip - 1) - 2,
+            if nstk == 1 and ndip > 1:
+                # If the number of strike points is 1, we have to rely on the segment header for strike.
+                centroid = segment_header[["elat", "elon"]]
+                strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
+                    centroid,
+                    segment_header["len"],
+                    segment_header["stk"],
+                )
+                strike_direction = (
+                    segment_header["len"]
+                    * 1000
+                    / 2
+                    * np.array([np.cos(strike_nztm), np.sin(strike_nztm), 0])
+                )
+                top = coordinates.wgs_depth_to_nztm(
+                    segment[["lat", "lon", "dep"]].iloc[0].values
+                    * np.array([1, 1, 1000])
+                )
+                next = coordinates.wgs_depth_to_nztm(
+                    segment[["lat", "lon", "dep"]].iloc[1].values
+                    * np.array([1, 1, 1000])
+                )
+                bottom = coordinates.wgs_depth_to_nztm(
+                    segment[["lat", "lon", "dep"]].iloc[-1].values
+                    * np.array([1, 1, 1000])
+                )
+                dip_direction = (next - top) / 2
+                planes.append(
+                    Plane(
+                        np.array(
+                            [
+                                top - strike_direction - dip_direction,
+                                top + strike_direction - dip_direction,
+                                bottom - strike_direction + dip_direction,
+                                bottom + strike_direction + dip_direction,
+                            ]
+                        )
+                    )
+                )
+            elif ndip == 1:
+                # If the number of dip points is 1, we have to rely on the
+                # segment header for dip direction. We will assume that dip
+                # direction = strike + 90.
+                centroid = segment_header[["elat", "elon"]]
+                planes.append(
+                    Plane.from_centroid_strike_dip(
+                        centroid,
+                        segment_header["dip"],
+                        segment_header["len"],
+                        segment_header["wid"],
+                        dtop=segment_header["dtop"],
+                        strike=segment_header["stk"],
+                    )
+                )
+            else:
+                # These points are the outer-most points and centres of the
+                # corner patches in the SRF (* in the diagram below).
+                corners = coordinates.wgs_depth_to_nztm(
+                    segment[["lat", "lon", "dep"]]
+                    .iloc[[0, nstk - 1, nstk * (ndip - 1), nstk * ndip - 1]]
+                    .values
+                ) * np.array([1, 1, 1000])
+                # These points are the next step inside the SRF from the corners
+                # (marked . in the diagram below).
+                interior = coordinates.wgs_depth_to_nztm(
+                    segment[["lat", "lon", "dep"]]
+                    .iloc[
+                        [
+                            nstk + 1,
+                            2 * (nstk - 1),
+                            (ndip - 2) * nstk + 1,
+                            nstk * (ndip - 1) - 2,
+                        ]
                     ]
-                ]
-                .values
-            ) * np.array([1, 1, 1000])
-            #
-            # ┌─────────────────┐
-            # │*               *│             * - corner patch centres
-            # │                 │             . - interior patch centres
-            # │  .           .  │             | - actual geometry
-            # │                 │
-            # │                 │
-            # │                 │
-            # │                 │
-            # │  .           .  │
-            # │                 │
-            # │*               *│
-            # └─────────────────┘
-            # the difference (corners - interior) / 2 is half the distance
-            # between patch centres, distance between patch centre and patch corners.
-            planes.append(Plane(corners + (corners - interior) / 2))
+                    .values
+                ) * np.array([1, 1, 1000])
+                #
+                # ┌─────────────────┐
+                # │*               *│             * - corner patch centres
+                # │                 │             . - interior patch centres
+                # │  .           .  │             | - actual geometry
+                # │                 │
+                # │                 │
+                # │                 │
+                # │                 │
+                # │  .           .  │
+                # │                 │
+                # │*               *│
+                # └─────────────────┘
+                # the difference (corners - interior) / 2 is half the distance
+                # between patch centres, distance between patch centre and patch corners.
+                planes.append(Plane(corners + (corners - interior) / 2))
         return planes
 
 
