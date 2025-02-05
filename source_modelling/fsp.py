@@ -23,7 +23,7 @@ import dataclasses
 import io
 import re
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, IO
 
 import pandas as pd
 import parse
@@ -136,6 +136,8 @@ class FSPFile:
     hypx: Optional[float]
     hypz: Optional[float]
 
+    velocity_model: Optional[pd.DataFrame | float]
+
     # Fault and parameters
     length: float
     width: float
@@ -212,47 +214,16 @@ class FSPFile:
                 raise FSPParseError("Failed to parse FSP file header")
             metadata = parse_result.named
 
+            # now search for the velocity model structure
+            for line in fsp_file_handle:
+                if line.startswith("% VELOCITY-DENSITY STRUCTURE"):
+                    break
+            velocity_model = _parse_velocity_density_structure(fsp_file_handle)
+
             # now sniff ahead for the columns
+            data = _parse_segment_slip(fsp_file_handle, metadata["segment_count"])
 
-            segments: list[pd.DataFrame] = []
-            for i in range(metadata["segment_count"]):
-                subfaults = None
-                for line in fsp_file_handle:
-                    if match := re.search(r"%\s+Nsbfs\s*=\s*(\d+)", line):
-                        subfaults = match.group(1)
-                    if re.match(r"%\s+LAT\s+LON", line):
-                        break
-                else:
-                    raise FSPParseError(
-                        f"Cannot find columns for FSP file on segment {i + 1}."
-                    )
-
-                if subfaults is None:
-                    raise FSPParseError(
-                        f"Cannot find number of subfaults for FSP file on segment {i + 1}."
-                    )
-
-                subfaults = int(subfaults)
-                columns = line.lower().lstrip("% ").split()
-                _ = next(fsp_file_handle)  # Skip header decoration
-                # read subfaults lines into StringIO buffer
-                lines = io.StringIO(
-                    "\n".join([next(fsp_file_handle) for _ in range(subfaults)])
-                )
-                data = pd.read_csv(
-                    lines,
-                    delimiter=r"\s+",
-                    header=None,
-                    names=columns,
-                )
-                data = data.rename(
-                    columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
-                )
-                data["segment"] = i
-                segments.append(data)
-
-            data = pd.concat(segments)
-            fsp_file = cls(data=data, **metadata)
+            fsp_file = cls(data=data, velocity_model=velocity_model, **metadata)
 
             # A lot of parameters can be 999 or -999 to indicate "no known
             # value", so we can detect that and set to None
@@ -277,3 +248,135 @@ class FSPFile:
             fsp_file.time_window_length = _normalise_value(fsp_file.time_window_length)
             fsp_file.time_shift = _normalise_value(fsp_file.time_shift)
             return fsp_file
+
+
+def _parse_segment_slip(fsp_file_handle: IO[str], segment_count: int) -> pd.DataFrame:
+    """
+    Parse segment slip data from an FSP file.
+
+    This function extracts slip information for multiple segments from an FSP file.
+    Each segment contains a specified number of subfaults, and the function reads
+    their respective latitude, longitude, slip values, and other associated data.
+
+    Parameters
+    ----------
+    fsp_file_handle : IO[str]
+        A file-like object containing the FSP file contents.
+    segment_count : int
+        The number of segments to parse.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing parsed subfault data for all segments.
+        The DataFrame includes a "segment" column identifying the segment index.
+
+    Raises
+    ------
+    FSPParseError
+        If the column headers for a segment cannot be found or the number of
+        subfaults for a segment is missing.
+    """
+    segments: list[pd.DataFrame] = []
+    for i in range(segment_count):
+        subfaults = None
+        for line in fsp_file_handle:
+            # hunt for the line % Nsbfs = x, where x is the number of subfaults.
+            if match := re.search(r"%\s+Nsbfs\s*=\s*(\d+)", line):
+                subfaults = match.group(1)
+            if re.match(r"%\s+LAT\s+LON", line):
+                break
+        else:
+            raise FSPParseError(f"Cannot find columns for FSP file on segment {i + 1}.")
+
+        if subfaults is None:
+            raise FSPParseError(
+                f"Cannot find number of subfaults for FSP file on segment {i + 1}."
+            )
+
+        subfaults = int(subfaults)
+        columns = line.lower().lstrip("% ").split()
+        _ = next(fsp_file_handle)  # Skip header decoration
+        # read subfaults lines into StringIO buffer
+        lines = io.StringIO(
+            "\n".join([next(fsp_file_handle) for _ in range(subfaults)])
+        )
+        data = pd.read_csv(
+            lines,
+            delimiter=r"\s+",
+            header=None,
+            names=columns,
+        )
+        data = data.rename(
+            columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
+        )
+        data["segment"] = i
+        segments.append(data)
+
+    return pd.concat(segments)
+
+
+def _parse_velocity_density_structure(
+    fsp_file_handle: IO[str],
+) -> Optional[pd.DataFrame | float]:
+    """Parse the velocity-density structure from an FSP file.
+
+    Parameters
+    ----------
+    fsp_file_handle : IO[str]
+        A file-like object containing the FSP file contents.
+
+    Returns
+    -------
+    Optional[pd.DataFrame | float]
+        - If a velocity model table is found, returns a DataFrame with columns:
+          ["DEPTH", "P-VEL", "S-VEL", "QP", "QS"].
+        - If a shear modulus value is found, returns it as a float.
+        - If the structure cannot be determined, returns None.
+    """
+    # Matches % No. of layers = x, where x is the number of layers in the velocity model.
+    number_of_layers_re = re.match(
+        r"% No\. of layers\s*=\s*(\d+)", next(fsp_file_handle)
+    )
+    layer_count = 0
+    if number_of_layers_re:
+        layer_count = int(number_of_layers_re.group(1))
+    else:
+        return None
+
+    columns = ["DEPTH", "P-VEL", "S-VEL", "QP", "QS"]
+    uses_velocity_model_table = False
+    while line := next(fsp_file_handle):
+        if re.match(r"%\s+DEPTH\s+P-VEL", line):
+            uses_velocity_model_table = True
+            break
+        elif "shear modulus" in line.lower():
+            # This is the case for an assumed constant mu value for the whole
+            # geology.
+            break
+        elif "crustal model unknown" in line.lower():
+            # This case is an edge-case when the crustal model is unknown.
+            return None
+
+    if uses_velocity_model_table:
+        _ = next(fsp_file_handle)  # Skip units
+
+        lines = io.StringIO(
+            "\n".join([next(fsp_file_handle).strip("% ") for _ in range(layer_count)])
+        )
+        return pd.read_csv(lines, delimiter=r"\s+", header=None, names=columns)
+
+    # Parse out the assumed shear modulus
+    # It is split over two lines, a scale which looks like % [10**10 N/m^2]
+    # typically...
+    scale = re.match(r"%\s+\[(\d+)\*\*(\d+) N/m\^2\]", next(fsp_file_handle))
+    if not scale:
+        return None
+    scale = float(scale.group(1)) ** float(scale.group(2))
+    # ...and a significand which is just a floating point on a line of its own.
+    # Typically: % 3.30.
+    significand = re.match(r"%\s+(\d+(\.\d+)?)", next(fsp_file_handle))
+    if not significand:
+        return None
+    significand = float(significand.group(1))
+    return significand * scale
