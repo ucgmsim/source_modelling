@@ -336,7 +336,7 @@ def _parse_velocity_density_structure(
     """
     # Matches % No. of layers = x, where x is the number of layers in the velocity model.
     number_of_layers_re = re.match(
-        r"% No\. of layers\s*=\s*(\d+)", next(fsp_file_handle)
+        r"%\s+No\.\s+of\s+layers\s*=\s*(\d+)", next(fsp_file_handle)
     )
     layer_count = 0
     if number_of_layers_re:
@@ -349,7 +349,9 @@ def _parse_velocity_density_structure(
     while line := next(fsp_file_handle):
         if re.match(r"%\s+DEPTH\s+P-VEL", line):
             uses_velocity_model_table = True
-            columns = re.split(r"\s+", line.strip("% "))
+            columns = [
+                column for column in re.split(r"\s+", line.strip("% ")) if column
+            ]
             break
         elif "shear modulus" in line.lower():
             # This is the case for an assumed constant mu value for the whole
