@@ -124,7 +124,11 @@ class FSPFile:
     segment_count : int
         Number of segments (subfaults).
     data : pd.DataFrame
-        The data frame of info on each subfault.
+        The data frame of info on each subfault. Columns vary for this
+        dataframe, but each comes with 'segment', 'length', and 'width' which
+        are the segement index, length and width respectively. To perform
+        operations over multi-segment data, group by 'segment' and apply the
+        operation to each group.
     """
 
     event_tag: str
@@ -280,10 +284,18 @@ def _parse_segment_slip(fsp_file_handle: IO[str], segment_count: int) -> pd.Data
     segments: list[pd.DataFrame] = []
     for i in range(segment_count):
         subfaults = None
+        length = width = None
         for line in fsp_file_handle:
             # hunt for the line % Nsbfs = x, where x is the number of subfaults.
             if match := re.search(r"%\s+Nsbfs\s*=\s*(\d+)", line):
                 subfaults = match.group(1)
+            # hunt for the line % LEN = x km WID = y km, where x and y are the
+            # length and width respectively.
+            if dimensions := re.match(
+                r"%\s+LEN\s*=\s*(\d+(\.\d+)?)\s+km\s+WID\s*=\s*(\d+(\.\d+)?)\s+km", line
+            ):
+                length = float(dimensions.group(1))
+                width = float(dimensions.group(1))
             if re.match(r"%\s+LAT\s+LON", line):
                 break
         else:
@@ -311,6 +323,10 @@ def _parse_segment_slip(fsp_file_handle: IO[str], segment_count: int) -> pd.Data
             columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
         )
         data["segment"] = i
+        if length:
+            data["length"] = length
+        if width:
+            data["width"] = width
         segments.append(data)
 
     return pd.concat(segments)
