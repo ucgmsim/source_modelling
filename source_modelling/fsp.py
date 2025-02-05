@@ -344,11 +344,12 @@ def _parse_velocity_density_structure(
     else:
         return None
 
-    columns = ["DEPTH", "P-VEL", "S-VEL", "QP", "QS"]
+    columns = []
     uses_velocity_model_table = False
     while line := next(fsp_file_handle):
         if re.match(r"%\s+DEPTH\s+P-VEL", line):
             uses_velocity_model_table = True
+            columns = re.split(r"\s+", line.strip("% "))
             break
         elif "shear modulus" in line.lower():
             # This is the case for an assumed constant mu value for the whole
