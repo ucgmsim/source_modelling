@@ -383,7 +383,25 @@ def _parse_velocity_density_structure(
         lines = io.StringIO(
             "\n".join([next(fsp_file_handle).strip("% ") for _ in range(layer_count)])
         )
-        return pd.read_csv(lines, delimiter=r"\s+", header=None, names=columns)
+        df = pd.read_csv(lines, delimiter=r"\s+", header=None, names=columns)
+        bad_columns = []
+
+        for column in df.columns:
+            if (df[column].abs() == 999).all() or (df[column].abs() == 9999).all():
+                bad_columns.append(column)
+        if bad_columns:
+            df = df.drop(columns=bad_columns)
+
+        return df.rename(
+            columns={
+                "DEPTH": "depth",
+                "P-VEL": "Vp",
+                "S-VEL": "Vs",
+                "QP": "Qp",
+                "QS": "Qs",
+                "DENS": "density",
+            }
+        )
 
     # Parse out the assumed shear modulus
     # It is split over two lines, a scale which looks like % [10**10 N/m^2]
