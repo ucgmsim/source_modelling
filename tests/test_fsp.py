@@ -40,13 +40,110 @@ def test_darfield_fsp():
     assert fsp_file.segment_count == 8
     assert len(fsp_file.data) == 886
     assert fsp_file.data.iloc[0].to_dict() == {
+        "segment": 0,
         "lat": -43.5965,
         "lon": 172.0673,
         "x": -10.6899,
         "y": -5.1682,
         "z": 0.0000,
         "slip": 4.8065,
+        "length": 10.0,
+        "width": 10.0,
     }
+    assert fsp_file.velocity_model is None
+
+
+def test_kanto_fsp():
+    """Check that the Kanto FSP file is parsed with the correct values extracted."""
+    fsp_file = fsp.FSPFile.read_from_file(FSP_PATH / "s1923KANTOJkoba.fsp")
+    assert fsp_file.event_tag == "s1923KANTOJkoba"
+    assert fsp_file.latitude == 35.400
+    assert fsp_file.longitude == 139.200
+    assert fsp_file.depth == 14.60
+    assert fsp_file.hypx == 110.50
+    assert fsp_file.hypz == 35.00
+    assert fsp_file.length == 130.00
+    assert fsp_file.width == 70.00
+    assert fsp_file.strike == 290
+    assert fsp_file.dip == 25
+    assert fsp_file.rake == 140
+    assert fsp_file.htop == 2.00
+    assert fsp_file.magnitude == 8.08
+    assert fsp_file.moment == 1.46e21
+    assert fsp_file.average_rise_time == 10.5
+    assert fsp_file.average_rupture_speed == 2.6
+    assert fsp_file.slip_velocity_function == "triang"
+    assert fsp_file.nx == 10
+    assert fsp_file.nz == 7
+    assert fsp_file.dx == 13.00
+    assert fsp_file.dz == 10.00
+    assert fsp_file.fmin == 0.02
+    assert fsp_file.fmax == 0.4
+    assert fsp_file.time_window_count == 1
+    assert fsp_file.time_window_length == 1.50
+    assert fsp_file.time_shift == 0.00
+    assert fsp_file.segment_count == 1
+    assert len(fsp_file.data) == 70
+    assert fsp_file.data.iloc[0].to_dict() == {
+        "segment": 0,
+        "lat": 34.812,
+        "lon": 140.159,
+        "x": 86.879,
+        "y": -65.378,
+        "z": 2.000,
+        "slip": 2.585,
+    }
+    expected_velocity_model = pd.DataFrame(
+        [
+            {"depth": 0.00, "Vp": 5.60, "Vs": 2.90, "density": 2.50},
+            {"depth": 6.10, "Vp": 6.00, "Vs": 3.40, "density": 2.60},
+            {"depth": 19.00, "Vp": 6.80, "Vs": 4.00, "density": 3.00},
+        ]
+    )
+    pd.testing.assert_frame_equal(fsp_file.velocity_model, expected_velocity_model)
+
+
+def test_nankaido_fsp():
+    """Check that the Nankaido FSP file is parsed with the correct values extracted."""
+    fsp_file = fsp.FSPFile.read_from_file(FSP_PATH / "s1946NANKAItani.fsp")
+    assert fsp_file.event_tag == "s1946NANKAItani"
+    assert fsp_file.latitude == 33.030
+    assert fsp_file.longitude == 135.620
+    assert fsp_file.depth == 30.00
+    assert fsp_file.hypx == 90.00
+    assert fsp_file.hypz == 45.00
+    assert fsp_file.length == 360.00
+    assert fsp_file.width == 180.00
+    assert fsp_file.strike == 250
+    assert fsp_file.dip == 13
+    assert fsp_file.rake == 120
+    assert fsp_file.htop == 1.00
+    assert fsp_file.magnitude == 8.40
+    assert fsp_file.moment == 4.51e21
+    assert fsp_file.average_rise_time == 0.0
+    assert fsp_file.average_rupture_speed == 0.0
+    assert fsp_file.slip_velocity_function == "tsunami modeling"
+    assert fsp_file.nx == 8
+    assert fsp_file.nz == 4
+    assert fsp_file.dx == 45.00
+    assert fsp_file.dz == 45.00
+    assert fsp_file.fmin == 0.00
+    assert fsp_file.fmax == 0.0
+    assert fsp_file.time_window_count == 0
+    assert fsp_file.time_window_length == 0.00
+    assert fsp_file.time_shift == 0.00
+    assert fsp_file.segment_count == 1
+    assert len(fsp_file.data) == 32
+    assert fsp_file.data.iloc[0].to_dict() == {
+        "segment": 0,
+        "lat": 32.867,
+        "lon": 136.462,
+        "x": 78.426,
+        "y": -18.116,
+        "z": 1.000,
+        "slip": 0.850,
+    }
+    assert fsp_file.velocity_model == 3.3e10
 
 
 FSPS = list(FSP_PATH.glob("*.fsp"))
@@ -127,8 +224,11 @@ def test_loads_srcmod_fsp(fsp_path: Path):
         assert fsp_file.nx > 0, f"nx should be positive, got {fsp_file.nx}"
     if fsp_file.nz is not None:
         assert fsp_file.nz > 0, f"nz should be positive, got {fsp_file.nz}"
-    assert fsp_file.dx > 0, f"dx should be positive, got {fsp_file.dx}"
-    assert fsp_file.dz > 0, f"dz should be positive, got {fsp_file.dz}"
+
+    if fsp_file.dx is not None:
+        assert fsp_file.dx > 0, f"dx should be positive, got {fsp_file.dx}"
+    if fsp_file.dz is not None:
+        assert fsp_file.dz > 0, f"dz should be positive, got {fsp_file.dz}"
 
     # Inversion parameters bounds
     if fsp_file.fmin is not None:
@@ -166,6 +266,8 @@ def test_loads_srcmod_fsp(fsp_path: Path):
 
     # Check that there is at least one row in the data
     assert fsp_file.data.shape[0] > 0, "data DataFrame should have at least one row"
+    # Check the number of segments matches the reported value in the header.
+    assert fsp_file.data["segment"].max() == fsp_file.segment_count - 1
 
 
 @pytest.mark.parametrize(
