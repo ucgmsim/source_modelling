@@ -51,6 +51,8 @@ def plot_rakes(
         Number of points to sample for rake.
     vector_length : float, default 0.2cm
         Length of rake vectors (cm).
+    seed : int
+        The random seed to sample rakes with.
     width : float
         Width of plot (in cm).
     """

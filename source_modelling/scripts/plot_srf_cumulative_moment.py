@@ -58,10 +58,10 @@ def plot_srf_cumulative_moment(
         Minimum shading cutoff.
     max_shade_cutoff : Annotated[ float, typer.Option(help
         Maximum shading cutoff.
-    width : float
-        Width of plot (in cm).
     height : float
         Height of plot (in cm).
+    width : float
+        Width of plot (in cm).
     """
     srf_data = srf.read_srf(srf_ffp)
 
