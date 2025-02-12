@@ -129,3 +129,37 @@ plot-mw-contributions SRF_FFP REALISATION_FFP OUTPUT_PLOT_FFP
 ```
 
 ![](images/example_mw_contributions.png)
+
+## How Do I Recreate the Slip-Rise-Rake Plots From Old Papers
+To recreate the plots from old papers with new code. Then you want to use `plot-slip-rise-rake` with the `--segment` parameter to specify the segment of the SRF to plot. For single-segment ruptures you can just pass `--segment 1`. It is recommended to set width smaller than height because this is a tall plot.
+
+> [!NOTE]
+> To use this command, you *must* have a realisation along with the SRF.
+
+```bash
+plot-slip-rise-rake realisation.json realisation.srf plot.png --segment 1 --width 15 --height 30
+```
+
+![](images/summary_segment_1.png)
+
+
+## How Do I Plot Statistics for Multi-Segment
+You want to use `plot-slip-rise-rake`. It is recommended to set width larger than height because this is a wide plot. You should make this plot very big.
+
+> [!NOTE]
+> To use this command, you *must* have a realisation along with the SRF.
+
+```bash
+plot-slip-rise-rake realisation.json realisation.srf plot.png --width 200 --height 100 --plot_type PLOT_TYPE
+```
+
+The option `--plot_type PLOT_TYPE` controls what you to plot based on `PLOT_TYPE`.
+
+### Plot type `rise` 
+![](images/summary_rise.png)
+### Plot type `rake` 
+![](images/summary_rake.png)
+### Plot type `dist` 
+![](images/summary_dist.png)
+### Plot type `slip` 
+![](images/summary_slip.png)

@@ -10,10 +10,14 @@ from source_modelling.scripts import (
     plot_srf,
     plot_srf_cumulative_moment,
     plot_srf_moment,
+    plot_srf_distribution,
+    plot_slip_rise_rake,
 )
 
 PLOT_IMAGE_DIRECTORY = Path("wiki/images")
 SRF_FFP = Path(__file__).parent / "srfs" / "rupture_1.srf"
+MULTI_SUMMARY_SRF_FFP = Path(__file__).parent / "srfs" / "nevis.srf"
+REALISATION_FFP = Path(__file__).parent / "srfs" / "realisation.json"
 
 
 @pytest.mark.parametrize(
@@ -27,6 +31,7 @@ SRF_FFP = Path(__file__).parent / "srfs" / "rupture_1.srf"
         ),
         (plot_rise.plot_rise, "rise_example.png"),
         (plot_rakes.plot_rakes, "rakes_example.png"),
+        (plot_srf_distribution.plot_srf_distribution, "srf_distribution_example.png"),
     ],
 )
 def test_plot_functions(
@@ -46,4 +51,39 @@ def test_plot_functions(
     generated = output_image_path
 
     diff = diffimg.diff(original, generated)
+    assert diff <= 0.05
+
+
+@pytest.mark.parametrize("plot_type", list(plot_slip_rise_rake.PlotType))
+def test_plot_slip_rise_rake(tmp_path: Path, plot_type: plot_slip_rise_rake.PlotType):
+    """Check that the slip-rise-rake plots work."""
+    output_image_path = tmp_path / "output.png"
+    original = PLOT_IMAGE_DIRECTORY / f"summary_{plot_type}.png"
+    plot_slip_rise_rake.plot_slip_rise_rake(
+        REALISATION_FFP,
+        MULTI_SUMMARY_SRF_FFP,
+        output_image_path,
+        plot_type=plot_type,
+        width=30,
+        height=15,
+    )
+
+    diff = diffimg.diff(original, output_image_path)
+    assert diff <= 0.05
+
+
+def test_plot_slip_rise_rake_segment(tmp_path: Path):
+    """Check that the slip-rise-rake plots work."""
+    output_image_path = tmp_path / "output.png"
+    original = PLOT_IMAGE_DIRECTORY / "summary_segment_1.png"
+    plot_slip_rise_rake.plot_slip_rise_rake(
+        REALISATION_FFP,
+        MULTI_SUMMARY_SRF_FFP,
+        output_image_path,
+        segment=1,
+        width=15,
+        height=30,
+    )
+
+    diff = diffimg.diff(original, output_image_path)
     assert diff <= 0.05
