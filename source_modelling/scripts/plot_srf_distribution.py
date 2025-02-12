@@ -30,9 +30,7 @@ def format_description(arr: np.ndarray, dp: float = 0) -> str:
     mean = np.mean(arr)
     max = arr.max()
     std = np.std(arr)
-    return (
-        f"min = {min:.{dp}f}\nμ = {mean:.{dp}f} (σ = {std:.{dp}f})\nmax = {max:.{dp}f}"
-    )
+    return f"min = {min:.{dp}f} / μ = {mean:.{dp}f} / σ = {std:.{dp}f} / max = {max:.{dp}f}"
 
 
 @app.command(help="Plot SRF slip distribution as a histogram.")
@@ -72,8 +70,9 @@ def plot_srf_distribution(
 
     ax.hist(srf_data.points["slip"], density=True)
     ax.set_xlabel("Slip (cm)")
-    ax.text(1.0, 1.1, format_description(srf_data.points["slip"]), ha="center")
-    if title:
-        ax.set_title(title)
+    ax.set_title(
+        title
+        or f'Slip PDF for {srf_ffp.stem} ({format_description(srf_data.points["slip"])})'
+    )
 
     plt.savefig(plot_png, dpi=dpi)
