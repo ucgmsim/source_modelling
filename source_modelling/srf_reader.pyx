@@ -147,6 +147,7 @@ cdef void read_srf_points_loop(FILE* srf_file, int point_count, DTYPE_t[:, :] me
     cdef int nt3
     cdef int i
     cdef int start_column_index
+    cdef int max_nt
     for i in range(point_count):
         fscanf(srf_file, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %d %lf %d %lf %d",
                &metadata[i, 0],  # lat
@@ -165,6 +166,12 @@ cdef void read_srf_points_loop(FILE* srf_file, int point_count, DTYPE_t[:, :] me
                &metadata[i, 11], # slip3
                &nt3              # number of slipt3 values for this point
                )
+        max_nt = nt1
+        if nt2 > max_nt:
+           max_nt = nt2
+        if nt3 > max_nt:
+           max_nt = nt3
+        metadata[i, 12] = max_nt * metadata[i, 7] # rise time
         start_column_index = <int> (metadata[i, 6] / metadata[i, 7])
         read_slipt_values(srf_file, start_column_index, nt1, slipt1s)
         read_slipt_values(srf_file, start_column_index, nt2, slipt2s)
@@ -241,7 +248,7 @@ def read_srf_points(
         The sparse matrix of slip values in the third component for each
         point.
     """
-    cdef np.ndarray[DTYPE_t, ndim=2] metadata = pnp.zeros([point_count, 12], dtype=DTYPE)
+    cdef np.ndarray[DTYPE_t, ndim=2] metadata = pnp.zeros([point_count, 13], dtype=DTYPE)
     cdef DTYPE_t[:, :] metadata_view = metadata
     
     cdef sparse_matrix slip1ts
