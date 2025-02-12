@@ -98,6 +98,7 @@ def plot_contour(
     extra_contour_data: np.ndarray = None,
     extra_contour_levels: np.ndarray = None,
     extra_contour_color: str = "black",
+    summary: bool = True,
 ) -> None:
     """Plot a filled contour plot with optional additional contour lines.
 
@@ -134,13 +135,23 @@ def plot_contour(
     ax.set_ylim(width, 0)
     ax.set_title(title)
 
-    if extra_contour_data is not None and extra_contour_levels is not None:
-        ax.contour(
+    if extra_contour_data is not None:
+        extra_contours = ax.contour(
             X,
             Y,
             extra_contour_data,
             levels=extra_contour_levels,
             colors=extra_contour_color,
+        )
+        ax.clabel(extra_contours, extra_contours.levels, fontsize=6)
+
+    if summary:
+        ax.text(
+            1.0,
+            1.1,
+            format_description(data),
+            transform=ax.transAxes,
+            ha="center",
         )
 
     ax.set_xlabel("along strike (km)")
@@ -154,7 +165,7 @@ def plot_slip(
     length: float,
     width: float,
     levels: np.ndarray,
-    t_levels: Optional[np.ndarray | int] = None,
+    t_levels: Optional[np.ndarray | int] = 15,
 ) -> None:
     """Plot slip distribution with optional initial time contours.
 
@@ -354,7 +365,7 @@ class FaultData(NamedTuple):
 
 def extract_fault_data(
     headers: pd.DataFrame,
-    segments: list[pd.Dataframe],
+    segments: list[pd.DataFrame],
     sources: SourceConfig,
     rup_prop: RupturePropagationConfig,
 ) -> FaultData:
@@ -542,10 +553,14 @@ def plot_slip_rise_rake(
             ),
             PlotType.distribution: lambda ax, i: plot_slip_histogram(ax, slip[i]),
         }
+        plot_names = {PlotType.distribution: "Slip distrubition"}
 
         for i, fault in enumerate(faults):
             ax = fig.add_subplot(gs[np.unravel_index(i, (rows, cols))])
             plot_functions[plot_type](ax, i)
+            ax.set_title(
+                f"{plot_names.get(plot_type, plot_type).capitalize()} on segment {i}"
+            )
 
         map_ax = fig.add_subplot(gs[:, cols])
         df = gpd.GeoDataFrame(
