@@ -11,6 +11,7 @@ parse
 hypothesis[pandas, numpy]
 hypothesis-networkx
 shapely
+pooch
 pytest
 pytest-cov
 scipy
