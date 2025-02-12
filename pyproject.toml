@@ -21,6 +21,8 @@ plot-srf = "source_modelling.scripts.plot_srf:app"
 plot-srf-rakes = "source_modelling.scripts.plot_rakes:app"
 plot-srf-rise = "source_modelling.scripts.plot_rise:app"
 plot-mw-contributions = "source_modelling.scripts.plot_mw_contributions:app"
+plot-slip-rise-rake = "source_modelling.scripts.plot_slip_rise_rake:app"
+plot-srf-distribution = "source_modelling.scripts.plot_srf_distribution:app"
 
 [tool.setuptools.package-dir]
 source_modelling = "source_modelling"
