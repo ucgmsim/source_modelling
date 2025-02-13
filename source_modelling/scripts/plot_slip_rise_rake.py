@@ -136,16 +136,16 @@ def plot_contour(
     summary : bool, optional
         If true, attach a statistical summary of `data` to the plot.
     """
-    X, Y = create_grid(data, length, width)
-    contours = ax.contourf(X, Y, data, cmap=cmap, levels=levels)
+    x, y = create_grid(data, length, width)
+    contours = ax.contourf(x, y, data, cmap=cmap, levels=levels)
     plt.colorbar(contours, ax=ax, label=label)
     ax.set_ylim(width, 0)
     ax.set_title(title)
 
     if extra_contour_data is not None:
         extra_contours = ax.contour(
-            X,
-            Y,
+            x,
+            y,
             extra_contour_data,
             levels=extra_contour_levels,
             colors=extra_contour_color,
@@ -276,15 +276,15 @@ def plot_rake(
     stride : int
         Sampling stride of rake array. Higher `stride` implies sparser output.
     """
-    X, Y = create_grid(rake, length, width)
-    U, V = np.cos(np.radians(rake)), np.sin(np.radians(rake))
+    x, y = create_grid(rake, length, width)
+    u, v = np.cos(np.radians(rake)), np.sin(np.radians(rake))
     scale = slip * norm
     ax.set_ylim(width, 0)
     ax.quiver(
-        X[::stride, ::stride],
-        Y[::stride, ::stride],
-        scale[::stride, ::stride] * U[::stride, ::stride],
-        scale[::stride, ::stride] * V[::stride, ::stride],
+        x[::stride, ::stride],
+        y[::stride, ::stride],
+        scale[::stride, ::stride] * u[::stride, ::stride],
+        scale[::stride, ::stride] * v[::stride, ::stride],
         scale=3,
         color="black",
     )

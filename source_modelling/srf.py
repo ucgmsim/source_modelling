@@ -47,7 +47,6 @@ Example
 
 import dataclasses
 import functools
-import itertools
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -56,12 +55,11 @@ from typing import Optional, TextIO
 import numpy as np
 import pandas as pd
 import scipy as sp
-import networkx as nx
 import shapely
 
 from qcore import coordinates
 from source_modelling import srf_reader
-from source_modelling.sources import Plane, Fault
+from source_modelling.sources import Plane
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
