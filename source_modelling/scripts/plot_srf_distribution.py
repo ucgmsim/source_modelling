@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""Plot the slip distribution of an SRF file.
+
+See the Plotting Tools wiki page for more details on how to use this tool, and its output.
+"""
+
 from pathlib import Path
 from typing import Annotated, Optional
 

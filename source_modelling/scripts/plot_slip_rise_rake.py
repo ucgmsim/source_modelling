@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""Plot a slip-rise-rake plot for an individual segment, or for multi-segment ruptures.
+
+See the Plotting Tools wiki page for more details on how to use this tool, and its output.
+"""
+
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NamedTuple, Optional
@@ -128,6 +133,8 @@ def plot_contour(
         Contour levels for the overlay, by default None.
     extra_contour_color : str, optional
         Color for additional contours, by default "black".
+    summary : bool, optional
+        If true, attach a statistical summary of `data` to the plot.
     """
     X, Y = create_grid(data, length, width)
     contours = ax.contourf(X, Y, data, cmap=cmap, levels=levels)
@@ -412,7 +419,7 @@ def extract_fault_data(
         faults.append(fault)
         index += len(fault.planes)
 
-    return faults, slip, tinit, rise, rake
+    return FaultData(faults, slip, tinit, rise, rake)
 
 
 class PlotType(StrEnum):
@@ -457,6 +464,8 @@ def plot_slip_rise_rake(
 
     Parameters
     ----------
+    realisation_ffp : Path
+        Path to the realisation file.
     srf_ffp : Path
         Path to SRF file to plot.
     output_ffp : Path
@@ -464,9 +473,15 @@ def plot_slip_rise_rake(
     dpi : float
         Plot output DPI (higher is better).
     title : Optional[str]
-        Plot title to use
-    width : float
-        Plot width (cm)
+        Plot title to use.
+    width : float, optional
+        Plot width (cm).
+    height : float, optional
+        Plot height (cm).
+    plot_type : PlotType, optional
+        The type of SRF plots to make. Only applies if `segment` is None.
+    segment : int, optional
+        The segment to plot, if not supplied plot every segment.
     """
     srf_data = srf.read_srf(srf_ffp)
     centimeters = 1 / 2.54
