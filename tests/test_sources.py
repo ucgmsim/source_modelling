@@ -425,9 +425,14 @@ def test_plane_from_trace(data: tuple):
         plane.projected_width / np.cos(np.radians(plane.dip)), abs=1e-6
     )
     assert pytest.approx(plane.length_m, abs=1e-3) == length
-    assert shapely.get_coordinates(plane.geometry, include_z=True)[
-        :-1
-    ] == pytest.approx(plane.bounds)
+    if plane.dip == 90:
+        assert shapely.get_coordinates(plane.geometry, include_z=True) == pytest.approx(
+            plane.bounds[:2]
+        )
+    else:
+        assert shapely.get_coordinates(plane.geometry, include_z=True)[
+            :-1
+        ] == pytest.approx(plane.bounds)
 
 
 def test_invalid_trace_points():
