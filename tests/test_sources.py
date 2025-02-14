@@ -402,9 +402,14 @@ def test_plane_from_trace(data: tuple):
     assert pytest.approx(plane.projected_width, abs=1e-3) == width * np.cos(
         np.radians(dip)
     )
-    assert shapely.get_coordinates(plane.geometry, include_z=True)[
-        :-1
-    ] == pytest.approx(plane.bounds)
+    if plane.dip == 90:
+        assert shapely.get_coordinates(plane.geometry, include_z=True) == pytest.approx(
+            plane.bounds[:2]
+        )
+    else:
+        assert shapely.get_coordinates(plane.geometry, include_z=True)[
+            :-1
+        ] == pytest.approx(plane.bounds)
 
     # Generate plane using dip_dir
     plane = Plane.from_nztm_trace(
