@@ -52,22 +52,24 @@ def test_christchurch_srf():
     # regression test for future parsing changes.
     assert christchurch_srf.nt == 361
 
-    assert christchurch_srf.points.iloc[0].to_dict() == {
-        "lon": 172.6127,
-        "lat": -43.5821,
-        "dep": 0.6767,
-        "stk": 59,
-        "dip": 69,
-        "area": 1.0e08,
-        "tinit": 5.7029,
-        "dt": 2.5e-02,
-        "rake": 102,
-        "slip1": 17.49,
-        "slip2": 0.0,
-        "slip3": 0.0,
-        "slip": 17.49,
-        'rise': 0.3
-    }
+    assert christchurch_srf.points.iloc[0].to_dict() == pytest.approx(
+        {
+            "lon": 172.6127,
+            "lat": -43.5821,
+            "dep": 0.6767,
+            "stk": 59,
+            "dip": 69,
+            "area": 1.0e08,
+            "tinit": 5.7029,
+            "dt": 2.5e-02,
+            "rake": 102,
+            "slip1": 17.49,
+            "slip2": 0.0,
+            "slip3": 0.0,
+            "slip": 17.49,
+            "rise": 0.3,
+        }
+    )
     tinit_index = int(christchurch_srf.points["tinit"].iloc[0] // christchurch_srf.dt)
     # have to manually slice because the sparse arrays do not support slicing
     slip_window = [
