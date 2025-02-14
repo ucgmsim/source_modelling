@@ -56,11 +56,10 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 import shapely
-from qcore import coordinates
 
+from qcore import coordinates
 from source_modelling import srf_reader
 from source_modelling.sources import Plane
-
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
