@@ -400,8 +400,10 @@ class Plane:
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
     @property
-    def geometry(self) -> shapely.Polygon:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
         """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
+        if self.dip == 90:
+            return shapely.LineString(self.bounds[:2])
         return shapely.Polygon(self.bounds)
 
     @classmethod
