@@ -66,6 +66,7 @@ def test_christchurch_srf():
         "slip2": 0.0,
         "slip3": 0.0,
         "slip": 17.49,
+        'rise': 0.3
     }
     tinit_index = int(christchurch_srf.points["tinit"].iloc[0] // christchurch_srf.dt)
     # have to manually slice because the sparse arrays do not support slicing
