@@ -490,6 +490,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
                 "slip1",
                 "slip2",
                 "slip3",
+                "rise",
             ],
         )
 
