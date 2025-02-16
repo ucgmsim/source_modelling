@@ -15,7 +15,7 @@ def test_box_car_slip(t0: float, offset: float, total_slip: float):
     For the box car slip function we must have:
 
     1. Slip is always non-negative,
-    3. Slip function integrates to total slip over the interval [t0, t1].
+    2. Slip function integrates to total slip over the interval [t0, t1].
     """
     t1 = t0 + offset
     t = np.linspace(t0, t1, num=100)
