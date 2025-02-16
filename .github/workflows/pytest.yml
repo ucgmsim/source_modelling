@@ -17,8 +17,11 @@ jobs:
       - name: Install GMT
         run: sudo apt-get update && sudo apt-get install -y gmt libgmt-dev ghostscript
 
-      - name: Install uv
+      - name: Define a cache dependency glob
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "requirements**.txt"
 
       - name: Install the project
         run: uv sync --all-extras --dev
