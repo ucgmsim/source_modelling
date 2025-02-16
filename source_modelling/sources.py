@@ -401,7 +401,9 @@ class Plane:
 
     @property
     def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
-        """shapely.Polygon: A shapely geometry for the plane (projected onto the surface)."""
+        """shapely.Polygon or LineString: A shapely geometry for the plane (projected onto the surface).
+
+        Geometry will be a LineString if `dip = 90`."""
         if self.dip == 90:
             return shapely.LineString(self.bounds[:2])
         return shapely.Polygon(self.bounds)
@@ -1051,8 +1053,11 @@ class Fault:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Polygon:  # numpydoc ignore=RT01
-        """shapely.Polygon: A shapely geometry for the fault (projected onto the surface)."""
+    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
+        """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
+
+        Geometry will be LineString if `dip = 90`.
+        """
         return shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
         )
