@@ -76,7 +76,7 @@ def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFr
         A dataframe the same index and a 'moment' column with cumulative rupture moment.
     """
     integrate_f = np.vectorize(
-        lambda i: np.trapz(
+        lambda i: np.trapezoid(
             moment_rate_df["moment_rate"].iloc[: i + 1].to_numpy(),
             moment_rate_df.index.values[: i + 1],
         )
