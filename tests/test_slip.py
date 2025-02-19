@@ -24,7 +24,7 @@ def test_box_car_slip(t0: float, offset: float, total_slip: float):
 
     # Slip should be non-negative
     assert np.all(slip_function >= 0)
-    total_slip_from_function = np.trapz(slip_function, dx=dt)
+    total_slip_from_function = np.trapezoid(slip_function, dx=dt)
     assert np.allclose(total_slip_from_function, total_slip)
 
 
@@ -55,7 +55,7 @@ def test_triangular_slip(
     assert np.all(slip_function >= 0)
     assert slip_function[0] == pytest.approx(0)
     assert slip_function[-1] == pytest.approx(0)
-    total_slip_from_function = np.trapz(slip_function, dx=dt)
+    total_slip_from_function = np.trapezoid(slip_function, dx=dt)
     assert total_slip_from_function == pytest.approx(total_slip, rel=1e-4)
 
 
@@ -82,7 +82,7 @@ def test_isoceles_triangular_slip(t0: float, offset: float, total_slip: float):
     assert np.all(slip_function >= 0)
     assert slip_function[0] == pytest.approx(0)
     assert slip_function[-1] == pytest.approx(0)
-    total_slip_from_function = np.trapz(slip_function, dx=dt)
+    total_slip_from_function = np.trapezoid(slip_function, dx=dt)
     assert total_slip_from_function == pytest.approx(total_slip, rel=1e-4)
 
 
@@ -111,5 +111,5 @@ def test_cosine_slip(t0: float, offset: float, total_slip: float):
     # np.cos approximation errors.
     assert slip_function[0] == pytest.approx(0, abs=1e-6)
     assert slip_function[-1] == pytest.approx(0, abs=1e-6)
-    total_slip_from_function = np.trapz(slip_function, dx=dt)
+    total_slip_from_function = np.trapezoid(slip_function, dx=dt)
     assert total_slip_from_function == pytest.approx(total_slip, rel=1e-4)
