@@ -1,8 +1,6 @@
 diffimg
-matplotlib
 numpy
 fiona
-pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper.git
 qcore @ git+https://github.com/ucgmsim/qcore.git
 geopandas
 networkx
@@ -14,5 +12,4 @@ shapely
 pytest
 pytest-cov
 scipy
-typer
 networkx
