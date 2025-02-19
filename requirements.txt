@@ -1,5 +1,4 @@
 diffimg
-matplotlib
 numpy
 fiona
 qcore @ git+https://github.com/ucgmsim/qcore.git
