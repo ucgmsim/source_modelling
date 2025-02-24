@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
+import shapely
 
 from qcore import coordinates
 from source_modelling import gsf
@@ -56,7 +57,6 @@ def connected_fault(
         [np.cos(np.radians(strike + 90)), np.sin(np.radians(strike + 90)), 0]
     )
     dip_direction = width * 1000 * dip_rotation.apply(dip_direction)
-    breakpoint()
     start = np.append(coordinates.wgs_depth_to_nztm(start_coordinates), 0)
     cumulative_lengths = np.cumsum(np.array(lengths) * 1000)
     leading_edges = np.vstack(
@@ -98,11 +98,19 @@ FINITE_FAULT = st.builds(
 
 
 @given(fault=FINITE_FAULT)
+@settings(deadline=None)
 def test_fault_to_gsf(fault: Fault):
     gsf_df = gsf.source_to_gsf_dataframe(fault, 0.1)
     assert (gsf_df["sub_dx"] * gsf_df["sub_dy"]).sum() == pytest.approx(
         fault.area(), abs=0.1**2
     )
+    if fault.dip != 90:
+        for _, point in gsf_df.iterrows():
+            assert fault.geometry.contains(
+                shapely.Point(
+                    coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
+                )
+            )
 
 
 # Test read_gsf
