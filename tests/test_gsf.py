@@ -7,7 +7,45 @@ import shapely
 
 from qcore import coordinates
 from source_modelling import gsf
-from source_modelling.sources import Fault, Plane
+from source_modelling.sources import Fault, Plane, Point
+
+
+def test_point_gsf():  # Use tmp_path fixture
+    point_source = Point.from_lat_lon_depth(
+        np.array([-43.0, 172.0, 500.0]), strike=45, dip=90, dip_dir=25, length_m=1e4
+    )
+    gsf_df = gsf.source_to_gsf_dataframe(point_source, 1.0)
+    assert len(gsf_df) == 1
+    assert gsf_df["lat"][0] == pytest.approx(-43.0)
+    assert gsf_df["lon"][0] == pytest.approx(172.0)
+    assert gsf_df["dep"][0] == pytest.approx(0.5)
+    assert gsf_df["loc_stk"][0] == pytest.approx(45.0)
+    assert gsf_df["loc_dip"][0] == pytest.approx(90.0)
+    assert gsf_df["sub_dx"][0] == pytest.approx(10.0)
+    assert gsf_df["sub_dy"][0] == pytest.approx(10.0)
+    assert gsf_df["seg_no"][0] == 0
+
+
+def test_plane_gsf():  # Use tmp_path fixture
+    plane = Plane.from_centroid_strike_dip(
+        np.array([-43.0, 172.0, 15e4]), 45, 5, 10, strike=90
+    )
+    gsf_df = gsf.source_to_gsf_dataframe(plane, 1.0)
+    assert (
+        len(gsf_df) == 5 * 10
+    )  # Correct number of points for this setup. Adjust if corners are changed.
+    assert gsf_df["loc_stk"].unique()[0] == pytest.approx(90, abs=0.1)
+    assert gsf_df["loc_dip"].unique()[0] == pytest.approx(45)
+    assert gsf_df["sub_dx"].unique()[0] == pytest.approx(1.0)
+    assert gsf_df["sub_dy"].unique()[0] == pytest.approx(1.0)
+    assert gsf_df["seg_no"].unique()[0] == 0
+
+    for _, point in gsf_df.iterrows():
+        assert plane.geometry.contains(
+            shapely.Point(
+                coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
+            )
+        )
 
 
 def test_write_gsf(tmp_path: Path):

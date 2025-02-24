@@ -58,6 +58,7 @@ def source_to_gsf_dataframe(
                 "sub_dy": [source.width],
                 "loc_stk": [source.strike],
                 "loc_dip": [source.dip],
+                "seg_no": [0],
             }
         )
     elif isinstance(source, sources.Plane):
