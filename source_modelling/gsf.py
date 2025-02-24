@@ -161,6 +161,11 @@ def read_gsf(gsf_filepath: Path) -> pd.DataFrame:
         'init_time', and 'seg_no'.
     """
     with open(gsf_filepath, mode="r", encoding="utf-8") as gsf_file_handle:
+        while next(gsf_file_handle).startswith("#"):
+            pass
+        # Note this skips one past the last '#' comment in the header, which is
+        # ok because that also skips the number of points (which we do not need
+        # to read).
         return pd.read_csv(
             gsf_file_handle,
             comment="#",
