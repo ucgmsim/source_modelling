@@ -2,13 +2,11 @@
 
 Functions
 ---------
-- gridpoint_count_in_length:
-    Calculates the number of gridpoints that fit into a given length.
-- coordinate_meshgrid:
-    Creates a meshgrid of points in a bounded plane region.
-- write_fault_to_gsf_file:
-    Writes geometry data to a GSF file.
-- read_gsf:
+source_to_gsf_dataframe(gsf_filepath, source, resolution)
+    Generates a pandas DataFrame suitable for writing to a GSF file from a source object.
+write_gsf(gsf_df, gsf_filepath)
+    Writes a pandas DataFrame to a GSF file.
+read_gsf(gsf_filepath)
     Parses a GSF file into a pandas DataFrame.
 
 References
@@ -19,103 +17,162 @@ for details on the GSF format.
 """
 
 from pathlib import Path
+from source_modelling import sources
+from qcore import grid
 
-import numpy as np
 import pandas as pd
 
 
-def write_fault_to_gsf_file(
-    gsf_filepath: Path,
-    gsf_df: pd.DataFrame,
-):
-    """Writes geometry data to a GSF file.
+def source_to_gsf_dataframe(
+    source: sources.IsSource, resolution: float
+) -> pd.DataFrame:
+    """Generates a pandas DataFrame suitable for writing to a GSF file from a source object.
 
-    This code assumes that the dip is constant across all faults.
-
-    Parameters
-    ----------
-    gsf_filepath : Path
-        The file path pointing to the GSF file to write to.
-    gsf_df : pd.DataFrame
-        The GSF dataframe to write. This dataframe must have the columns length,
-        width, strike, dip, rake, and meshgrid. Each row corresponds to one
-        fault plane, with the meshgrid column being the discretisation of the
-        fault planes.
-    """
-    with open(gsf_filepath, "w", encoding="utf-8") as gsf_file_handle:
-        gsf_file_handle.write(
-            "# LON  LAT  DEP(km)  SUB_DX  SUB_DY  LOC_STK  LOC_DIP  LOC_RAKE  SLIP(cm)  INIT_TIME  SEG_NO\n"
-        )
-        number_of_points = gsf_df.apply(
-            lambda row: np.prod(row["meshgrid"].shape[:2]), axis=1
-        ).sum()
-
-        # Get the number of dip gridpoints by looking at the first dimension of
-        # the meshgrid of the first fault plane. See coordinate_meshgrid for an
-        # explanation of meshgrid dimensions.
-        n_dip = gsf_df.iloc[0]["meshgrid"].shape[0]
-
-        gsf_file_handle.write(f"{number_of_points}\n")
-        for dip_index in range(n_dip):
-            for plane_index, plane in gsf_df.iterrows():
-                length = plane["length"]
-                width = plane["width"]
-                strike = plane["strike"]
-                dip = plane["dip"]
-                rake = plane["rake"]
-                meshgrid = plane["meshgrid"]
-                strike_step = length / meshgrid.shape[1]
-                dip_step = width / meshgrid.shape[0]
-                for point in meshgrid[dip_index]:
-                    gsf_file_handle.write(
-                        f"{point[1]:11.5f} {point[0]:11.5f} {point[2] / 1000:11.5e} {strike_step:11.5e} {dip_step:11.5e} {strike:6.1f} {dip:6.1f} {rake:6.1f} {-1.0:8.2f} {-1.0:8.2f} {plane_index:3d}\n"
-                    )
-
-
-def read_gsf(gsf_filepath: Path) -> pd.DataFrame:
-    """Parse a GSF file into a pandas DataFrame.
+    This function discretises the source into a grid of points and returns a DataFrame
+    containing the necessary information for a GSF file.  It handles Point, Plane, and
+    Fault source types.
 
     Parameters
     ----------
-    gsf_filepath : Path
-        The file handle pointing to the GSF file to read.
+    source : sources.IsSource
+        The source object (Point, Plane, or Fault) to convert.
+    resolution : float
+        The spacing between grid points in km.
 
     Returns
     -------
     pd.DataFrame
-        A DataFrame containing all the points in the GSF file. The DataFrame's columns are
-        - lon (longitude)
-        - lat (latitude)
-        - depth (Kilometres below ground, i.e. depth = -10 indicates a point 10km underground).
-        - sub_dx (The subdivision size in the strike direction)
-        - sub_dy (The subdivision size in the dip direction)
-        - strike
-        - dip
-        - rake
-        - slip (nearly always -1)
-        - init_time (nearly always -1)
-        - seg_no (the fault segment this point belongs to)
+        A DataFrame containing the grid points and their properties, ready to be
+        written to a GSF file.  The DataFrame contains the following columns:
+        'lat', 'lon', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', 'seg_no'.
+    """
+    segments: list[sources.Plane] = []
+    if isinstance(source, sources.Point):
+        return pd.DataFrame(
+            {
+                "lat": [source.centroid[0]],
+                "lon": [source.centroid[1]],
+                "dep": [source.centroid[2] / 1000],
+                "sub_dx": [source.length],
+                "sub_dy": [source.width],
+                "loc_stk": [source.strike],
+                "loc_dip": [source.dip],
+            }
+        )
+    elif isinstance(source, sources.Plane):
+        segments = [source]
+    elif isinstance(source, sources.Fault):
+        segments = source.planes
+    else:
+        raise TypeError(f"Unsupported source type: {type(source)}")
+
+    meshgrids = [
+        grid.coordinate_patchgrid(
+            plane.corners[0],
+            plane.corners[1],
+            plane.corners[-1],
+            resolution,
+            nx=round(plane.length / resolution),
+            ny=round(plane.width / resolution),
+        )
+        for plane in segments
+    ]
+
+    strike_rows: list[pd.DataFrame] = []
+    dxs = [plane.length / round(plane.length / resolution) for plane in segments]
+    dys = [plane.width / round(plane.width / resolution) for plane in segments]
+    n_dip = meshgrids[0].shape[0]
+
+    for dip_index in range(n_dip):
+        for plane_index, plane in enumerate(segments):
+            points = meshgrids[plane_index][dip_index]
+            strike_rows.append(
+                pd.DataFrame(
+                    {
+                        "lat": points[:, 0],
+                        "lon": points[:, 1],
+                        "dep": points[:, 2],
+                        "sub_dx": dxs[plane_index],
+                        "sub_dy": dys[plane_index],
+                        "loc_stk": plane.strike,
+                        "loc_dip": plane.dip,
+                        "seg_no": plane_index,
+                    }
+                )
+            )
+    return pd.concat(strike_rows)
+
+
+def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
+    """Writes a pandas DataFrame to a GSF file.
+
+    Parameters
+    ----------
+    gsf_df : pd.DataFrame
+        The DataFrame containing the GSF data.  Must contain at least the columns
+        'lon', 'lat', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', and 'loc_rake'.
+    gsf_filepath : Path
+        The path to the GSF file to write.
+    """
+
+    if "init_time" not in gsf_df:
+        gsf_df["init_time"] = -1
+    if "slip" not in gsf_df:
+        gsf_df["slip"] = -1
+    if "loc_rake" not in gsf_df:
+        raise ValueError("The DataFrame must have a 'loc_rake' column.")
+
+    gsf_df.to_csv(
+        gsf_filepath,
+        sep=" ",
+        columns=[
+            "lon",
+            "lat",
+            "dep",
+            "sub_dx",
+            "sub_dy",
+            "loc_stk",
+            "loc_dip",
+            "loc_rake",
+            "slip",
+            "init_time",
+            "seg_no",
+        ],
+        header=False,
+        index=False,
+    )
+
+
+def read_gsf(gsf_filepath: Path) -> pd.DataFrame:
+    """Parses a GSF file into a pandas DataFrame.
+
+    Parameters
+    ----------
+    gsf_filepath : Path
+        The path to the GSF file.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the GSF data.  Columns include:
+        'lon', 'lat', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', 'rake', 'slip',
+        'init_time', and 'seg_no'.
     """
     with open(gsf_filepath, mode="r", encoding="utf-8") as gsf_file_handle:
-        # we could use pd.read_csv with the skiprows argument, but it's not
-        # as versatile as simply skipping the first n rows with '#'
-        while gsf_file_handle.readline()[0] == "#":
-            pass
-        # NOTE: This skips the line after the last line beginning with #.
-        # This is ok as this line is always the number of points in the GSF
-        # file, which we do not need.
         return pd.read_csv(
             gsf_file_handle,
+            comment="#",
             sep=r"\s+",
+            header=None,
             names=[
                 "lon",
                 "lat",
-                "depth",
+                "dep",
                 "sub_dx",
                 "sub_dy",
-                "strike",
-                "dip",
-                "rake",
+                "loc_stk",
+                "loc_dip",
+                "loc_rake",
                 "slip",
                 "init_time",
                 "seg_no",
