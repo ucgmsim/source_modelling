@@ -17,10 +17,11 @@ for details on the GSF format.
 """
 
 from pathlib import Path
-from source_modelling import sources
-from qcore import grid
 
 import pandas as pd
+
+from qcore import grid
+from source_modelling import sources
 
 
 def source_to_gsf_dataframe(

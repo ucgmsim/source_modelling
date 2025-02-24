@@ -3,11 +3,11 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import scipy as sp
 import pytest
+import scipy as sp
+import shapely
 from hypothesis import given, settings
 from hypothesis import strategies as st
-import shapely
 
 from qcore import coordinates
 from source_modelling import gsf
