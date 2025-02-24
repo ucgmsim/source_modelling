@@ -28,7 +28,7 @@ def test_point_gsf():  # Use tmp_path fixture
 
 def test_plane_gsf():  # Use tmp_path fixture
     plane = Plane.from_centroid_strike_dip(
-        np.array([-43.0, 172.0, 15e4]), 45, 5, 10, strike=90
+        np.array([-43.0, 172.0, 15]), 45, 5, 10, strike=90
     )
     gsf_df = gsf.source_to_gsf_dataframe(plane, 1.0)
     assert (
@@ -39,6 +39,7 @@ def test_plane_gsf():  # Use tmp_path fixture
     assert gsf_df["sub_dx"].unique()[0] == pytest.approx(1.0)
     assert gsf_df["sub_dy"].unique()[0] == pytest.approx(1.0)
     assert gsf_df["seg_no"].unique()[0] == 0
+    assert gsf_df["dep"].min() >= 10 and gsf_df["dep"].max() <= 20
 
     for _, point in gsf_df.iterrows():
         assert plane.geometry.contains(

@@ -93,7 +93,7 @@ def source_to_gsf_dataframe(
                     {
                         "lat": points[:, 0],
                         "lon": points[:, 1],
-                        "dep": points[:, 2],
+                        "dep": points[:, 2] / 1000,
                         "sub_dx": dxs[plane_index],
                         "sub_dy": dys[plane_index],
                         "loc_stk": plane.strike,
