@@ -48,6 +48,11 @@ def test_plane_gsf():  # Use tmp_path fixture
         )
 
 
+def test_bad_gsf_type():
+    with pytest.raises(TypeError):
+        gsf.source_to_gsf_dataframe(1, 0.1)
+
+
 def test_write_gsf(tmp_path: Path):
     df = pd.DataFrame(
         {
@@ -70,6 +75,29 @@ def test_write_gsf(tmp_path: Path):
 
     read_df = gsf.read_gsf(filepath)
     pd.testing.assert_frame_equal(read_df, df)
+
+
+def test_write_bad_df():
+
+    df = pd.DataFrame(
+        {
+            "lon": [1, 2, 3],
+            "lat": [4, 5, 6],
+            "dep": [7, 8, 9],
+            "sub_dx": [10, 11, 12],
+            "sub_dy": [13, 14, 15],
+            "loc_stk": [16, 17, 18],
+            "loc_dip": [19, 20, 21],
+            "slip": [-1, -1, -1],
+            "init_time": [-1, -1, -1],
+            "seg_no": [0, 0, 0],
+        }
+    )
+    filepath = "test.gsf"
+    with pytest.raises(
+        ValueError, match="The DataFrame must have a 'loc_rake' column."
+    ):
+        gsf.write_gsf(df, filepath)
 
 
 @pytest.mark.parametrize(
