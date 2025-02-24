@@ -122,26 +122,27 @@ def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
         gsf_df["slip"] = -1
     if "loc_rake" not in gsf_df:
         raise ValueError("The DataFrame must have a 'loc_rake' column.")
-
-    gsf_df.to_csv(
-        gsf_filepath,
-        sep=" ",
-        columns=[
-            "lon",
-            "lat",
-            "dep",
-            "sub_dx",
-            "sub_dy",
-            "loc_stk",
-            "loc_dip",
-            "loc_rake",
-            "slip",
-            "init_time",
-            "seg_no",
-        ],
-        header=False,
-        index=False,
-    )
+    with open(gsf_filepath, "w") as gsf_file:
+        gsf_file.write(f"{len(gsf_df)}\n")
+        gsf_df.to_csv(
+            gsf_file,
+            sep=" ",
+            columns=[
+                "lon",
+                "lat",
+                "dep",
+                "sub_dx",
+                "sub_dy",
+                "loc_stk",
+                "loc_dip",
+                "loc_rake",
+                "slip",
+                "init_time",
+                "seg_no",
+            ],
+            header=False,
+            index=False,
+        )
 
 
 def read_gsf(gsf_filepath: Path) -> pd.DataFrame:
