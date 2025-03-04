@@ -31,7 +31,7 @@ def test_moment_rate_from_slip_properties(slip_function: np.ndarray, dt: float):
     )
     assert (moment_rate["moment_rate"] >= 0).all()
     assert len(moment_rate) == nt
-    avg_displacement = np.mean(np.trapezoid(slip_function, dx=dt, axis=1)) / 1e6
+    avg_displacement = np.mean(sp.integrate.trapezoid(slip_function, dx=dt, axis=1)) / 1e6
     cumulative_moment = moment.moment_over_time_from_moment_rate(moment_rate)
     assert moment.MU * np.sum(patch_areas) * avg_displacement == pytest.approx(
         cumulative_moment["moment"].iloc[-1]
