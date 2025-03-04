@@ -9,7 +9,33 @@ description = "Source modelling library"
 readme = "README.md"
 requires-python = ">=3.9"
 dynamic = ["version", "dependencies"]
+dependencies = [
+   "matplotlib",
+   "numpy",
+   "fiona",
+   "pygmt_helper @ git+https://github.com/ucgmsim/pygmt_helper.git",
+   "qcore @ git+https://github.com/ucgmsim/qcore.git",
+   "geopandas",
+   "networkx",
+   "pandas",
+   "parse",
+   "hypothesis[pandas, numpy]",
+   "hypothesis-networkx",
+   "shapely",
+   "pytest",
+   "pytest-cov",
+   "scipy",
+   "typer",
+   "networkx"
+]
 
+[project.optional-dependencies]
+test = [
+     "diffimg",
+     "pytest",
+     "pytest-cov",
+     "nshmdb @ git+https://github.com/ucgmsim/NSHM2022DB.git"
+]
 
 [tool.setuptools.package-data]
 source_modelling = ['NZ_CFM/*']
