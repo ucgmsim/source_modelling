@@ -16,6 +16,7 @@ Fault:
     A representation of a fault, consisting of one or more Planes.
 """
 
+import copy
 import dataclasses
 import itertools
 from typing import Optional, Self
@@ -1248,3 +1249,83 @@ def closest_point_between_sources(
             f"Optimisation failed to converge for provided sources: {res.message} with x = {res.x}"
         )
     return res.x[:2], res.x[2:]
+
+
+def absorb_planes(plane: Plane, other: Plane) -> Plane:
+    """Return a plane containing the left-most and right-most corners of two planes.
+
+    Parameters
+    ----------
+    plane : Plane
+        The first plane.
+    other : Plane
+        The second plane.
+
+    Returns
+    -------
+    Plane
+        A plane containing the left-most and right-most corners of the two planes.
+    """
+    return Plane(np.vstack((plane.bounds[[0, -1]], other.bounds[[1, 2]])))
+
+
+def simplify_fault(fault: Fault, length_tolerance: float) -> Fault:
+    """Simplify a fault geometry to remove all segments with length less than a tolerance.
+
+    Parameters
+    ----------
+    fault : Fault
+        The fault to simplify
+    length_tolerance : float
+        The tolerated length (in km). The returned fault will have no
+        segments with length less than this value.
+
+
+    Returns
+    -------
+    Fault
+        The simplified fault geometry.
+    """
+    planes = copy.deepcopy(fault.planes)
+    if len(planes) == 1:
+        return Fault(planes)
+
+    while len(planes) > 1:
+        lengths = [plane.length for plane in planes]
+        if all(length >= length_tolerance for length in lengths):
+            break
+
+        min_length_index = np.argmin(lengths)
+        if min_length_index == len(planes) - 1:
+            plane = planes.pop()
+            other = planes.pop()
+            planes.append(absorb_planes(other, plane))
+        elif min_length_index == 0:
+            other = planes.pop(1)
+            plane = planes.pop(0)
+            planes.insert(0, absorb_planes(plane, other))
+        else:
+            left = planes[min_length_index - 1]
+            right = planes[min_length_index + 1]
+            plane = planes[min_length_index]
+            # Test which plane to absorb into by total devation.
+            # Calculated by finding the perpendicular distance between
+            # the two new edges.
+            if geo.point_to_segment_distance(
+                plane.bounds[0], left.bounds[0], right.bounds[0]
+            ) < geo.point_to_segment_distance(
+                plane.bounds[-1], left.bounds[-1], right.bounds[-1]
+            ):
+                planes = (
+                    planes[: min_length_index - 1]
+                    + [absorb_planes(left, plane)]
+                    + planes[min_length_index + 1 :]
+                )
+            else:
+                planes = (
+                    planes[:min_length_index]
+                    + [absorb_planes(plane, right)]
+                    + planes[min_length_index + 2 :]
+                )
+
+    return Fault(planes)
