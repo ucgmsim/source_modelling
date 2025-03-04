@@ -1,9 +1,11 @@
 import itertools
 import json
+import random
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import pooch
 import pytest
 import scipy as sp
 import shapely
@@ -11,11 +13,13 @@ from hypothesis import assume, given, seed, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
+from nshmdb.nshmdb import NSHMDB
 from qcore import coordinates, geo
 from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
 DATA_PATH = Path("tests") / "data"
+np.random.seed(0)
 
 
 def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndarray:
@@ -1066,3 +1070,36 @@ def test_load_fault(fault_name: str):
     fault = Fault(planes=[Plane.from_corners(c) for c in corners])
     assert fault.dip == pytest.approx(dip, abs=0.5)
     assert fault.dip_dir == pytest.approx(dip_dir, abs=1)
+
+
+DB = NSHMDB(
+    # QuakeCoRE/Public/nshmdb.db
+    pooch.retrieve(
+        "https://www.dropbox.com/s/mx7drz30rw08wzk/nshmdb.db?st=mpb5y19y&dl=1",
+        "sha256:d5e3f2e0bc9b44a27aeff8c65b8a7ea7b6d519a240ccfe616e79cffc21cd5cdc",
+    )
+)
+
+
+@pytest.mark.parametrize("fault_id", np.random.randint(0, 2324, size=100))
+def test_simplify_fault(fault_id: int):
+    fault = DB.get_fault(int(fault_id))
+
+    tolerance = 0.4
+    simplified_fault = sources.simplify_fault(fault, tolerance)
+    for plane in simplified_fault.planes:
+        assert plane.length > tolerance or plane.length == pytest.approx(tolerance)
+
+    consecutive_small_planes = False
+    for plane, next in itertools.pairwise(fault.planes):
+        if plane.length < tolerance and next.length < tolerance:
+            consecutive_small_planes = True
+            break
+
+    if not consecutive_small_planes:
+        assert len(simplified_fault.planes) == sum(
+            1 for plane in fault.planes if plane.length > tolerance
+        )
+
+    # Check that the simplified fault is similar to the original fault
+    assert simplified_fault.area() / fault.area() == pytest.approx(1, abs=0.03)
