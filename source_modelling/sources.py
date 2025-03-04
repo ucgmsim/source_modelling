@@ -113,8 +113,8 @@ class Point:
     def geojson(self) -> dict:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
-            self.geometry.transform(
-                lambda coords: coordinates.nztm_to_wgs_depth(coords)
+            shapely.transform(
+                self.geometry, lambda coords: coordinates.nztm_to_wgs_depth(coords)
             )
         )
 
@@ -422,8 +422,8 @@ class Plane:
     def geojson(self) -> dict:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
-            self.geometry.transform(
-                lambda coords: coordinates.nztm_to_wgs_depth(coords)
+            shapely.transform(
+                self.geometry, lambda coords: coordinates.nztm_to_wgs_depth(coords)
             )
         )
 
@@ -1141,8 +1141,8 @@ class Fault:
     def geojson(self) -> dict:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
-            self.geometry.transform(
-                lambda coords: coordinates.nztm_to_wgs_depth(coords)
+            shapely.transform(
+                self.geometry, lambda coords: coordinates.nztm_to_wgs_depth(coords)
             )
         )
 
