@@ -109,6 +109,15 @@ class Point:
         """shapely.Point: A shapely geometry for the point (projected onto the surface)."""
         return shapely.Point(self.bounds)
 
+    @property
+    def geojson(self) -> dict:  # numpydoc ignore=RT01
+        """dict: A GeoJSON representation of the fault."""
+        return shapely.to_geojson(
+            self.geometry.transform(
+                lambda coords: coordinates.nztm_to_wgs_depth(coords)
+            )
+        )
+
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
     ) -> np.ndarray:
@@ -408,6 +417,15 @@ class Plane:
         if self.dip == 90:
             return shapely.LineString(self.bounds[:2])
         return shapely.Polygon(self.bounds)
+
+    @property
+    def geojson(self) -> dict:  # numpydoc ignore=RT01
+        """dict: A GeoJSON representation of the fault."""
+        return shapely.to_geojson(
+            self.geometry.transform(
+                lambda coords: coordinates.nztm_to_wgs_depth(coords)
+            )
+        )
 
     @classmethod
     def from_nztm_trace(
@@ -1118,6 +1136,15 @@ class Fault:
             except ValueError:
                 continue
         raise ValueError("Given coordinates are not on fault.")
+
+    @property
+    def geojson(self) -> dict:  # numpydoc ignore=RT01
+        """dict: A GeoJSON representation of the fault."""
+        return shapely.to_geojson(
+            self.geometry.transform(
+                lambda coords: coordinates.nztm_to_wgs_depth(coords)
+            )
+        )
 
     def rrup_distance(self, point: np.ndarray) -> float:
         """Compute RRup Distance between a fault and a point.
