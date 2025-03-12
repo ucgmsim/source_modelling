@@ -1119,6 +1119,56 @@ def generate_sheared_fault_with_lengths(
     )
 
 
+def generate_sheared_fault_with_lengths(
+    lengths: np.ndarray,
+    shears: np.ndarray,
+    width: float,
+    dip: float,
+    strike: float,
+    start_coordinates: np.ndarray,
+) -> Fault:
+    dip_rotvec = sp.spatial.transform.Rotation.from_rotvec(
+        np.array([dip, 0, 0]), degrees=True
+    )
+    strike_rotvec = sp.spatial.transform.Rotation.from_rotvec(
+        np.array([0, 0, strike]), degrees=True
+    )
+    trace_lengths = np.sqrt(lengths**2 - shears**2)
+    trace = np.zeros((len(lengths) + 1, 3))
+    trace[1:, 0] = np.cumsum(trace_lengths)
+
+    bottom_trace = trace.copy()
+    bottom_trace[:, 1] = width
+
+    trace = dip_rotvec.apply(trace)
+    bottom_trace = dip_rotvec.apply(bottom_trace)
+
+    trace[1:, 1] += shears.cumsum()
+    bottom_trace[1:, 1] += shears.cumsum()
+
+    trace = strike_rotvec.apply(trace)
+    bottom_trace = strike_rotvec.apply(bottom_trace)
+
+    trace += start_coordinates
+    bottom_trace += start_coordinates
+
+    return Fault(
+        [
+            Plane(
+                np.array(
+                    [
+                        trace[i],
+                        trace[i + 1],
+                        bottom_trace[i + 1],
+                        bottom_trace[i],
+                    ]
+                )
+            )
+            for i in range(len(lengths))
+        ]
+    )
+
+
 @st.composite
 def fault(
     draw: st.DrawFn,
@@ -1134,11 +1184,7 @@ def fault(
             max_size=max_segments,
         )
     )
-    # Don't shear by more than half the length because then the fault
-    # planes will get too close together and the fault will be
-    # "invalid" (i.e. the fault constructor cannot figure out how to
-    # connect the planes).
-    shears = [draw(st.floats(-length / 2, length / 2)) for length in lengths]
+    shears = [draw(st.floats(0, length)) for length in lengths]
     width = draw(st.floats(0.1, 100)) * 1000
     dip = draw(st.floats(1, 90))
     strike = draw(st.floats(0, 360))
