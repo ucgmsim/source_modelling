@@ -969,7 +969,7 @@ class Fault:
                 continue
             # A plane i points into a plane j if the right-edge (by strike)
             # of plane i is close to the left-edge (by strike) of plane j.
-            if np.allclose(self.planes[i].bounds[1], self.planes[j].bounds[0]):
+            if np.linalg.norm(self.planes[i].bounds[1] - self.planes[j].bounds[0]) < 10:
                 points_into_relation[j].append(i)  # Plane i points into plane j
 
         # This relation can now be used to identify if the list of planes given is a line.
