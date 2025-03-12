@@ -1176,6 +1176,8 @@ def fault(
     max_segments: int = 10,
     min_length: float = 0.1,
     max_length: float = 100,
+    max_dip: float = 90,
+    max_width: float = 100,
 ) -> Fault:
     lengths = draw(
         st.lists(
@@ -1184,16 +1186,16 @@ def fault(
             max_size=max_segments,
         )
     )
-    shears = [draw(st.floats(0, length)) for length in lengths]
-    width = draw(st.floats(0.1, 100)) * 1000
-    dip = draw(st.floats(1, 90))
+    shears = [draw(st.floats(0.95 * -length, 0.95 * length)) for length in lengths]
+    width = draw(st.floats(0.1, max_width)) * 1000
+    dip = draw(st.floats(1, max_dip))
     strike = draw(st.floats(0, 360))
     start_coordinates = coordinates.wgs_depth_to_nztm(
         draw(
             st.builds(
                 coordinate,
-                lat=st.floats(-50, -31),
-                lon=st.floats(160, 180),
+                lat=st.floats(-47, -34),
+                lon=st.floats(165, 178),
                 depth=st.just(0),
             )
         )
