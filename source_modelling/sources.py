@@ -19,6 +19,7 @@ Fault:
 import copy
 import dataclasses
 import itertools
+import json
 from typing import Optional, Self
 
 import networkx as nx
@@ -1225,6 +1226,35 @@ class Fault:
 
 
 IsSource = Plane | Fault | Point
+
+
+def sources_as_geojson_features(sources: list[IsSource]) -> str:
+    """Convert a list of sources to a GeoJSON FeatureCollection.
+
+    Parameters
+    ----------
+    sources : list[IsSource]
+            The sources to convert.
+
+    Returns
+    -------
+    str
+            The GeoJSON FeatureCollection representation of the sources.
+    """
+    geometries = [json.loads(source.geojson) for source in sources]
+    return json.dumps(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": geometry,
+                    "properties": {"id": i},
+                }
+                for i, geometry in enumerate(geometries)
+            ],
+        }
+    )
 
 
 def closest_point_between_sources(
