@@ -27,7 +27,6 @@ test = [
      "diffimg",
      "pytest",
      "pytest-cov",
-     "nshmdb @ git+https://github.com/ucgmsim/NSHM2022DB.git",
      "hypothesis[pandas, numpy]",
      "hypothesis-networkx",
 ]
