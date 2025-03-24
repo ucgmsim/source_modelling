@@ -4,6 +4,8 @@ from typing import Optional, TextIO
 
 
 class ParseError(Exception):
+    """Error for parsing files in source modelling."""
+
     pass
 
 

@@ -27,69 +27,47 @@ CoordinateArray: TypeAlias = NDArray[np.float64]  # Array for coordinates
 class StochHeader(NamedTuple):
     """
     Named tuple containing header information for stochastic plane models.
-
-    Parameters
-    ----------
-    longitude : float
-        Longitude coordinate of the plane's reference point.
-    latitude : float
-        Latitude coordinate of the plane's reference point.
-    nx : int
-        Number of grid points in the x-direction.
-    ny : int
-        Number of grid points in the y-direction.
-    dx : float
-        Grid spacing in the x-direction (km).
-    dy : float
-        Grid spacing in the y-direction (km).
-    strike : int
-        Strike angle of the fault plane (degrees).
-    dip : int
-        Dip angle of the fault plane (degrees).
-    average_rake : int
-        Average rake angle for the slip on the fault plane (degrees).
-    dtop : float
-        Depth to the top of the fault plane (km).
-    shypo : float
-        Along-strike distance to the hypocentre (km).
-    dhypo : float
-        Down-dip distance to the hypocentre (km).
     """
 
     longitude: float
+    """Longitude coordinate of the plane's centre point."""
     latitude: float
+    """Latitude coordinate of the plane's centre point."""
     nx: int
+    """Number of grid points in the x-direction."""
     ny: int
+    """Number of grid points in the y-direction."""
     dx: float
+    """Grid spacing in the strike-direction (km)."""
     dy: float
+    """Grid spacing in the dip-direction (km)."""
     strike: int
+    """Strike angle of the fault plane (degrees)."""
     dip: int
+    """Dip angle of the fault plane (degrees)."""
     average_rake: int
+    """Average rake angle for the slip on the fault plane (degrees)."""
     dtop: float
+    """Depth to the top of the fault plane (km)."""
     shypo: float
+    """Along-strike distance to the hypocentre (km) from top centre."""
     dhypo: float
+    """Down-dip distance to the hypocentre (km)."""
 
 
 class StochPlane(NamedTuple):
     """
     Named tuple representing a stochastic slip plane with its properties.
-
-    Parameters
-    ----------
-    header : StochHeader
-        Metadata for the stochastic plane.
-    slip : numpy.ndarray
-        2D array of slip values with shape (ny, nx).
-    rise : numpy.ndarray
-        2D array of rise time values with shape (ny, nx).
-    trup : numpy.ndarray
-        2D array of rupture time values with shape (ny, nx).
     """
 
     header: StochHeader
+    """Metadata for the stochastic plane."""
     slip: FloatArray2D
+    """2D array of slip values with shape (ny, nx)."""
     rise: FloatArray2D
+    """2D array of rise time values with shape (ny, nx)."""
     trup: FloatArray2D
+    """2D array of rupture time values with shape (ny, nx)."""
 
 
 def _read_stoch_header(handle: TextIO) -> StochHeader:
