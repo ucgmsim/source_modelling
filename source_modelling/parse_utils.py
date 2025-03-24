@@ -7,6 +7,21 @@ class ParseError(Exception):
     pass
 
 
+def _is_seperator(char: str) -> bool:
+    """Check if a character is a space or end of file.
+
+    Parameters
+    ----------
+    char : str
+        The character to check.
+
+    Returns
+    -------
+    bool
+        True if the character is a space or end of file, False otherwise."""
+    return char.isspace() or not char
+
+
 def read_float(handle: TextIO, label: Optional[str] = None) -> float:
     """Read a float from an file.
 
@@ -28,10 +43,10 @@ def read_float(handle: TextIO, label: Optional[str] = None) -> float:
     float
         The float read from the file.
     """
-    while (cur := handle.read(1)).isspace():
+    while _is_seperator(cur := handle.read(1)):
         pass
     float_str = cur
-    while not (cur := handle.read(1)).isspace():
+    while not _is_seperator(cur := handle.read(1)):
         float_str += cur
     try:
         return float(float_str)
@@ -63,10 +78,10 @@ def read_int(handle: TextIO, label: Optional[str] = None) -> int:
     int
         The int read from the file.
     """
-    while (cur := handle.read(1)).isspace():
+    while _is_seperator(cur := handle.read(1)):
         pass
     int_str = cur
-    while not (cur := handle.read(1)).isspace():
+    while not _is_seperator(cur := handle.read(1)):
         int_str += cur
     try:
         return int(int_str)
