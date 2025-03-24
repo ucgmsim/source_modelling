@@ -13,11 +13,10 @@ References
 """
 
 from pathlib import Path
-from typing import NamedTuple, TextIO, cast
+from typing import NamedTuple, TextIO, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
-from typing_extensions import TypeAlias
 
 from qcore import grid
 from source_modelling import parse_utils
