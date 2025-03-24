@@ -130,10 +130,10 @@ def test_stoch_file_initialization(sample_stoch_file: Path):
     stoch_file = StochFile(sample_stoch_file)
 
     # Verify the file was read correctly
-    assert len(stoch_file._planes) == 1
+    assert len(stoch_file.data) == 1
 
     # Check the plane header
-    plane = stoch_file._planes[0]
+    plane = stoch_file.data[0]
     assert plane.header.longitude == 174.5
     assert plane.header.latitude == -41.3
     assert plane.header.nx == 3
@@ -188,17 +188,17 @@ def test_multiple_planes(sample_stoch_file_multi_plane):
     stoch_file = StochFile(sample_stoch_file_multi_plane)
 
     # Verify the file was read correctly
-    assert len(stoch_file._planes) == 2
+    assert len(stoch_file.data) == 2
 
     # Check the first plane
-    plane1 = stoch_file._planes[0]
+    plane1 = stoch_file.data[0]
     assert plane1.header.longitude == 174.5
     assert plane1.header.latitude == -41.3
     assert plane1.header.nx == 2
     assert plane1.header.ny == 2
 
     # Check the second plane
-    plane2 = stoch_file._planes[1]
+    plane2 = stoch_file.data[1]
     assert plane2.header.longitude == 175.0
     assert plane2.header.latitude == -42.0
     assert plane2.header.nx == 2
@@ -218,7 +218,7 @@ def test_real_world_stoch():
     stoch_file = StochFile(STOCH_PATH)
 
     # Check the plane headers
-    headers = [plane.header for plane in stoch_file._planes]
+    headers = [plane.header for plane in stoch_file.data]
     assert headers == [
         StochHeader(
             172.1811, -43.5095, 4, 4, 2.00, 2.00, 150, 54, 255, 1.40, 1.83, 5.77
@@ -245,7 +245,7 @@ def test_real_world_stoch():
 
     # Check the arrays
     for slip, trise, trup, plane_data in zip(
-        stoch_file.slip, stoch_file.rise, stoch_file.trup, stoch_file._planes
+        stoch_file.slip, stoch_file.rise, stoch_file.trup, stoch_file.data
     ):
         assert slip.shape == (plane_data.header.ny, plane_data.header.nx)
         assert trise.shape == (plane_data.header.ny, plane_data.header.nx)
@@ -263,7 +263,7 @@ def test_real_world_stoch():
             dtype=np.float32,
         )
     )
-    for patches, plane_data in zip(stoch_file.patch_centres, stoch_file._planes):
+    for patches, plane_data in zip(stoch_file.patch_centres, stoch_file.data):
         assert patches.shape == (plane_data.header.ny, plane_data.header.nx, 3)
         nztm_patches = coordinates.wgs_depth_to_nztm(patches)
         dip_diff = np.linalg.norm(np.diff(nztm_patches, axis=0), axis=2)

@@ -166,6 +166,19 @@ class StochFile:
     -----
     Stochastic slip model files contain information about fault planes and their
     properties such as slip, rise time, and rupture time.
+
+    Examples
+    --------
+    >>> # Assuming 'stoch_model.stoch' exists with valid stochastic slip model data
+    >>> stoch_file = StochFile('stoch_model.stoch')
+    >>> planes = stoch_file.planes
+    >>> slips = stoch_file.slip
+    >>> rise_times = stoch_file.rise
+    >>> rupture_times = stoch_file.trup
+    >>> patch_centers = stoch_file.patch_centres
+    >>> print(f"Number of planes: {len(planes)}")
+    >>> if len(slips) > 0:
+    ...     print(f"Slip array shape for the first plane: {slips[0].shape}")
     """
 
     def __init__(self, filename: Path):
@@ -182,7 +195,7 @@ class StochFile:
         ValueError
             If the number of planes specified in the file is not a positive integer.
         """
-        self.filename = filename
+        filename = Path(filename)
         with open(filename, "r") as handle:
             n_planes = parse_utils.read_int(handle, "n_planes")
             if n_planes <= 0:
@@ -190,7 +203,7 @@ class StochFile:
                     f"Expected non-negative integer number of planes, received: {n_planes}."
                 )
             planes = [_read_stoch_plane(handle) for _ in range(n_planes)]
-            self._planes: list[StochPlane] = planes
+            self.data: list[StochPlane] = planes
 
     @property
     def planes(self) -> list[Plane]:
@@ -201,6 +214,12 @@ class StochFile:
         -------
         list[Plane]
             List of Plane objects representing the fault planes in the stochastic model.
+
+        Examples
+        --------
+        >>> stoch_file = StochFile('stoch_model.stoch')
+        >>> planes = stoch_file.planes
+        >>> print(f"Number of planes: {len(planes)}")
         """
         return [
             Plane.from_centroid_strike_dip(
@@ -214,7 +233,7 @@ class StochFile:
                 strike=plane.header.strike,
                 dtop=plane.header.dtop,
             )
-            for plane in self._planes
+            for plane in self.data
         ]
 
     @property
@@ -226,8 +245,15 @@ class StochFile:
         -------
         list[FloatArray2D]
             List of 2D numpy arrays containing slip values for each plane.
+
+        Examples
+        --------
+        >>> stoch_file = StochFile('stoch_model.stoch')
+        >>> slips = stoch_file.slip
+        >>> if len(slips) > 0:
+        ...     print(f"Slip array shape for the first plane: {slips[0].shape}")
         """
-        return [plane.slip for plane in self._planes]
+        return [plane.slip for plane in self.data]
 
     @property
     def patch_centres(self) -> list[CoordinateArray]:
@@ -237,9 +263,16 @@ class StochFile:
         -------
         list[CoordinateArray]
             List of 2D numpy arrays containing the patch centres for each plane.
+
+        Examples
+        --------
+        >>> stoch_file = StochFile('stoch_model.stoch')
+        >>> patch_centers = stoch_file.patch_centres
+        >>> if len(patch_centers) > 0:
+        ...     print(f"Patch centers array shape for the first plane: {patch_centers[0].shape}")
         """
         result: list[CoordinateArray] = []
-        for plane_description, plane in zip(self._planes, self.planes):
+        for plane_description, plane in zip(self.data, self.planes):
             centers = grid.coordinate_patchgrid(
                 plane.corners[0],
                 plane.corners[1],
@@ -259,8 +292,15 @@ class StochFile:
         -------
         list[FloatArray2D]
             List of 2D numpy arrays containing rise time values for each plane.
+
+        Examples
+        --------
+        >>> stoch_file = StochFile('stoch_model.stoch')
+        >>> rise_times = stoch_file.rise
+        >>> if len(rise_times) > 0:
+        ...     print(f"Rise time array shape for the first plane: {rise_times[0].shape}")
         """
-        return [plane.rise for plane in self._planes]
+        return [plane.rise for plane in self.data]
 
     @property
     def trup(self) -> list[FloatArray2D]:
@@ -271,5 +311,12 @@ class StochFile:
         -------
         list[FloatArray2D]
             List of 2D numpy arrays containing rupture time values for each plane.
+
+        Examples
+        --------
+        >>> stoch_file = StochFile('stoch_model.stoch')
+        >>> rupture_times = stoch_file.trup
+        >>> if len(rupture_times) > 0:
+        ...     print(f"Rupture time array shape for the first plane: {rupture_times[0].shape}")
         """
-        return [plane.trup for plane in self._planes]
+        return [plane.trup for plane in self.data]
