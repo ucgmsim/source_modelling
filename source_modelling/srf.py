@@ -46,7 +46,7 @@ import functools
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, TextIO
+from typing import TextIO
 
 import numpy as np
 import pandas as pd

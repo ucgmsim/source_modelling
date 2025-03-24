@@ -12,7 +12,6 @@ References
 .. [0] https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+In+Ground+Motion+Simulation#FileFormatsUsedInGroundMotionSimulation-Stochformat
 """
 
-import re
 from pathlib import Path
 from typing import NamedTuple, TextIO, cast
 

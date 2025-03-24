@@ -1,8 +1,5 @@
 import io
-import os
-import tempfile
 from pathlib import Path
-from random import sample
 
 import numpy as np
 import pytest
@@ -149,7 +146,7 @@ def test_stoch_file_initialization(sample_stoch_file: Path):
     plane.slip == pytest.approx(expected_slip)
 
 
-def test_stoch_file_properties(sample_stoch_file):
+def test_stoch_file_properties(sample_stoch_file: Path):
     """Test the properties of a StochFile."""
     # Initialize the StochFile with the sample file
     stoch_file = StochFile(sample_stoch_file)
@@ -182,7 +179,7 @@ def test_stoch_file_properties(sample_stoch_file):
     assert planes[0].strike == pytest.approx(45, abs=0.1)
 
 
-def test_multiple_planes(sample_stoch_file_multi_plane):
+def test_multiple_planes(sample_stoch_file_multi_plane: Path):
     """Test reading a file with multiple planes."""
     # Initialize the StochFile with the multi-plane sample file
     stoch_file = StochFile(sample_stoch_file_multi_plane)
