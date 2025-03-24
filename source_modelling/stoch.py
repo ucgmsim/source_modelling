@@ -157,6 +157,11 @@ class StochFile:
     filename : Path
         Path to the stochastic slip model file.
 
+    Attributes
+    ----------
+    data : list[StochPlane]
+        Structured raw data read from the stoch file.
+
     Raises
     ------
     ValueError
