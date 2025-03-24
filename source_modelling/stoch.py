@@ -1,9 +1,15 @@
 """
 Stoch file handling module.
 
-This module provides functionality for reading and working with stochastic slip models,
-which are down-sampled slip models used for high frequency inputs in seismic modelling.
-It includes classes for representing stochastic planes and associated metadata.
+This module provides functionality for reading and working with
+stochastic slip models, which are down-sampled slip models used for
+high frequency inputs in seismic modelling. It includes classes for
+representing stochastic planes and associated metadata. See the
+wiki[0]_ for a description of the stoch file format.
+
+References
+----------
+.. [0] https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+In+Ground+Motion+Simulation#FileFormatsUsedInGroundMotionSimulation-Stochformat
 """
 
 import re
