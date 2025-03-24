@@ -339,12 +339,6 @@ class SrfFile:
         return planes
 
 
-class ParseError(Exception):
-    """Exception raised for errors in parsing SRF files."""
-
-    pass
-
-
 def read_srf(srf_ffp: Path) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
@@ -364,7 +358,9 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         plane_count_line = srf_file_handle.readline().strip()
         plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
         if not plane_count_match:
-            raise ParseError(f'Expecting PLANE header line, got: "{plane_count_line}"')
+            raise parse_utils.ParseError(
+                f'Expecting PLANE header line, got: "{plane_count_line}"'
+            )
         plane_count = int(plane_count_match.group(1))
         segments = []
 
@@ -391,7 +387,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         points_count_line = srf_file_handle.readline().strip()
         points_count_match = re.match(POINT_COUNT_RE, points_count_line)
         if not points_count_match:
-            raise ParseError(
+            raise parse_utils.ParseError(
                 f'Expecting POINTS header line, got: "{points_count_line}"'
             )
         point_count = int(points_count_match.group(1))
