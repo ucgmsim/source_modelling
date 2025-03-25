@@ -83,7 +83,7 @@ def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) ->
     -----
     If the rake is not strike-slip, the uncertainties are assymetric.
     Hence, setting `random = False` is not equivalent to using the
-    mean value for the parameters for all faults. Paremeter values are
+    mean value for the parameters for all faults. Parameter values are
     found in Table 4 of [0]_.
 
     References
