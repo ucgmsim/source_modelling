@@ -259,6 +259,13 @@ def leonard_magnitude_to_length_width(
     length = leonard_magnitude_to_length(magnitude, rake, random)
     width = leonard_magnitude_to_width(magnitude, rake, random)
     aspect_ratio = max(length / width, 1)
+    return area_aspect_ratio_to_length_width(area, aspect_ratio)
+
+
+def area_aspect_ratio_to_length_width(
+    area: float, aspect_ratio: float
+) -> tuple[float, float]:
+    """Convert area and aspect ratio to length and width."""
     width = np.sqrt(area / aspect_ratio)
     length = area / width
     return length, width
@@ -418,9 +425,7 @@ def contreras_interface_magnitude_to_length_width(
     """
     area = contreras_interface_magnitude_to_area(magnitude, random)
     aspect_ratio = contreras_interface_magnitude_to_aspect_ratio(magnitude, random)
-    width = np.sqrt(area / aspect_ratio)
-    length = area / width
-    return length, width
+    return area_aspect_ratio_to_length_width(area, aspect_ratio)
 
 
 def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
@@ -561,9 +566,7 @@ def contreras_slab_magnitude_to_length_width(
     """
     area = strasser_slab_magnitude_to_area(magnitude, random)
     aspect_ratio = contreras_slab_magnitude_to_aspect_ratio(magnitude, random)
-    width = np.sqrt(area / aspect_ratio)
-    length = area / width
-    return length, width
+    return area_aspect_ratio_to_length_width(area, aspect_ratio)
 
 
 def magnitude_to_length_width(
