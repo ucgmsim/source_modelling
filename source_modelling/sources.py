@@ -1368,7 +1368,7 @@ def simplify_fault(fault: Fault, length_tolerance: float) -> Fault:
             left = planes[min_length_index - 1]
             right = planes[min_length_index + 1]
             plane = planes[min_length_index]
-            # Test which plane to absorb into by total devation.
+            # Test which plane to absorb into by total deviation.
             # Calculated by finding the perpendicular distance between
             # the two new edges.
             if geo.point_to_segment_distance(
