@@ -260,7 +260,7 @@ def leonard_magnitude_to_length_width(
     width = leonard_magnitude_to_width(magnitude, rake, random)
     aspect_ratio = max(length / width, 1)
     width = np.sqrt(area / aspect_ratio)
-    length = width * aspect_ratio
+    length = area / width
     return length, width
 
 
@@ -419,7 +419,7 @@ def contreras_interface_magnitude_to_length_width(
     area = contreras_interface_magnitude_to_area(magnitude, random)
     aspect_ratio = contreras_interface_magnitude_to_aspect_ratio(magnitude, random)
     width = np.sqrt(area / aspect_ratio)
-    length = width * aspect_ratio
+    length = area / width
     return length, width
 
 
@@ -562,7 +562,7 @@ def contreras_slab_magnitude_to_length_width(
     area = strasser_slab_magnitude_to_area(magnitude, random)
     aspect_ratio = contreras_slab_magnitude_to_aspect_ratio(magnitude, random)
     width = np.sqrt(area / aspect_ratio)
-    length = width * aspect_ratio
+    length = area / width
     return length, width
 
 
