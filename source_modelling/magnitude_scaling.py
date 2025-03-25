@@ -2,7 +2,6 @@
 
 import functools
 from enum import Enum, StrEnum, auto
-from typing import cast
 
 import numpy as np
 import scipy as sp
@@ -408,14 +407,14 @@ def contreras_interface_magnitude_to_aspect_ratio(
             "Magnitude out of range for Contreras model, minimum magnitude is 6"
         )
     a_3 = 0.6248
-    M_1 = 7.25
+    m_1 = 7.25
     sigma_1 = 0.32
     sigma_2 = 0.47
-    if magnitude < M_1:
+    if magnitude < m_1:
         return np.exp(sp.stats.norm(loc=0, scale=sigma_1).rvs() if random else 0)
 
     return np.exp(
-        a_3 * (magnitude - M_1)
+        a_3 * (magnitude - m_1)
         + (sp.stats.norm(loc=0, scale=sigma_2).rvs() if random else 0)
     )
 
@@ -549,14 +548,14 @@ def contreras_slab_magnitude_to_aspect_ratio(
             "Magnitude out of range for Contreras model, minimum magnitude is 6"
         )
     a_3 = 0.216
-    M_1 = 6.5
+    m_1 = 6.5
     sigma_1 = 0.24
     sigma_2 = 0.38
-    if magnitude < M_1:
+    if magnitude < m_1:
         return np.exp(sp.stats.norm(loc=0, scale=sigma_1).rvs() if random else 0)
 
     return np.exp(
-        a_3 * (magnitude - M_1)
+        a_3 * (magnitude - m_1)
         + (sp.stats.norm(loc=0, scale=sigma_2).rvs() if random else 0)
     )
 

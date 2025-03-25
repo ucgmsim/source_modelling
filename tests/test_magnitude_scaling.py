@@ -8,7 +8,7 @@ import hypothesis.strategies as st
 import numpy as np
 import pytest
 import scipy as sp
-from hypothesis import assume, given
+from hypothesis import given
 
 from source_modelling import magnitude_scaling
 
@@ -36,6 +36,37 @@ def seed(seed: int):
         return wrapper
 
     return decorator
+
+
+@pytest.mark.parametrize(
+    "rake, expected",
+    [
+        (-30, magnitude_scaling.RakeType.STRIKE_SLIP),
+        (0, magnitude_scaling.RakeType.STRIKE_SLIP),
+        (30, magnitude_scaling.RakeType.STRIKE_SLIP),
+        (150, magnitude_scaling.RakeType.STRIKE_SLIP),
+        (210, magnitude_scaling.RakeType.STRIKE_SLIP),
+        (60, magnitude_scaling.RakeType.REVERSE),
+        (90, magnitude_scaling.RakeType.REVERSE),
+        (120, magnitude_scaling.RakeType.REVERSE),
+        (-120, magnitude_scaling.RakeType.NORMAL),
+        (-90, magnitude_scaling.RakeType.NORMAL),
+        (-60, magnitude_scaling.RakeType.NORMAL),
+        (-149, magnitude_scaling.RakeType.NORMAL_OBLIQUE),
+        (-121, magnitude_scaling.RakeType.NORMAL_OBLIQUE),
+        (-59, magnitude_scaling.RakeType.NORMAL_OBLIQUE),
+        (-31, magnitude_scaling.RakeType.NORMAL_OBLIQUE),
+        (31, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
+        (59, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
+        (121, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
+        (149, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
+        (-200, magnitude_scaling.RakeType.UNDEFINED),
+        (250, magnitude_scaling.RakeType.UNDEFINED),
+        (999, magnitude_scaling.RakeType.UNDEFINED),
+    ],
+)
+def test_rake_type(rake: float, expected: magnitude_scaling.RakeType):
+    assert magnitude_scaling.rake_type(rake) == expected
 
 
 def relation_with_magnitude(
@@ -192,7 +223,7 @@ def test_strasser_slab_expected_area(mw: float, expected_area: float):
 
 
 @given(st.floats(min_value=6.0, max_value=9.5))
-def test_strasser_monotonicity(mag1):
+def test_strasser_monotonicity(mag1: float):
     mag2 = mag1 + 0.1  # Slightly higher magnitude
     assert magnitude_scaling.strasser_slab_magnitude_to_area(
         mag2
@@ -494,7 +525,9 @@ def test_length_width(area: float, aspect_ratio: float):
     ],
 )
 def test_magnitude_to_length_width_calls_correct_function(
-    scaling_relation, func_name, rake_required
+    scaling_relation: magnitude_scaling.ScalingRelation,
+    func_name: str,
+    rake_required: bool,
 ):
     magnitude = 7.0
     rake = 90.0 if rake_required else None
@@ -531,7 +564,9 @@ def test_magnitude_to_length_width_calls_correct_function(
     ],
 )
 def test_magnitude_to_area_calls_correct_function(
-    scaling_relation, func_name, rake_required
+    scaling_relation: magnitude_scaling.ScalingRelation,
+    func_name: str,
+    rake_required: bool,
 ):
     magnitude = 7.0
     rake = 90.0 if rake_required else None
