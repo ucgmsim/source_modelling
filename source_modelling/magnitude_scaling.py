@@ -1,3 +1,5 @@
+"""Magnitude scaling relationships for fault dimensions."""
+
 import functools
 from enum import Enum, StrEnum, auto
 from typing import cast
@@ -265,7 +267,20 @@ def leonard_magnitude_to_length_width(
 def area_aspect_ratio_to_length_width(
     area: float, aspect_ratio: float
 ) -> tuple[float, float]:
-    """Convert area and aspect ratio to length and width."""
+    """Convert area and aspect ratio to length and width.
+
+    Parameters
+    ----------
+    area : float
+        Area of the fault (km^2).
+    aspect_ratio : float
+        Aspect ratio of the fault (length / width).
+
+    Returns
+    -------
+    tuple[float, float]
+        Length and width of the fault.
+    """
     width = np.sqrt(area / aspect_ratio)
     length = area / width
     return length, width
