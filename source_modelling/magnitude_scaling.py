@@ -25,6 +25,13 @@ class ScalingRelation(StrEnum):
     CONTRERAS_SLAB2020 = auto()
 
 
+MAGNITUDE_BOUNDS = {
+    ScalingRelation.LEONARD2014: (4.0, 9.0),
+    ScalingRelation.CONTRERAS_INTERFACE2017: (6.0, 9.0),
+    ScalingRelation.CONTRERAS_SLAB2020: (5.0, 9.0),
+}
+
+
 def rake_type(rake: float) -> RakeType:
     """Determine the rake type of a fault given its rake.
 
@@ -85,13 +92,15 @@ def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) ->
            (2014): 2953-2965.
     """
 
-    if rake_type(rake) == RakeType.STRIKE_SLIP:
+    if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
         return np.log10(area) + (
-            sp.stats.norm.rvs(loc=3.99, scale=0.26) if random else 3.99
+            sp.stats.norm(loc=3.99, scale=0.26).rvs() if random else 3.99
         )
 
     # Leonard quotes assymetric uncertainties for the other rake types.
-    return np.log10(area) + (sp.stats.norm.rvs(loc=4.03, scale=0.3) if random else 4.0)
+    return np.log10(area) + (
+        sp.stats.norm(loc=4.03, scale=0.3).rvs() if random else 4.0
+    )
 
 
 def leonard_magnitude_to_area(
@@ -127,14 +136,14 @@ def leonard_magnitude_to_area(
            faults." Bulletin of the Seismological Society of America 104.6
            (2014): 2953-2965.
     """
-    if rake_type(rake) == RakeType.STRIKE_SLIP:
+    if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
         return 10 ** (
-            magnitude - (sp.stats.norm.rvs(loc=3.99, scale=0.26) if random else 3.99)
+            magnitude - (sp.stats.norm(loc=3.99, scale=0.26).rvs() if random else 3.99)
         )
 
     # Leonard quotes assymetric uncertainties for the other rake types.
     return 10 ** (
-        magnitude - (sp.stats.norm.rvs(loc=4.03, scale=0.3) if random else 4.0)
+        magnitude - (sp.stats.norm(loc=4.03, scale=0.3).rvs() if random else 4.0)
     )
 
 
@@ -160,7 +169,7 @@ def leonard_magnitude_to_length(
     float
             Length of the fault. (km)
     """
-    a_strike_slip_small = sp.stats.norm.rvs(loc=4.16, scale=0.39) if random else 4.17
+    a_strike_slip_small = sp.stats.norm(loc=4.16, scale=0.39).rvs() if random else 4.17
     b_strike_slip_small = 1.667
     a_strike_slip_large = 5.27
     b_strike_slip_large = 1.0
@@ -205,7 +214,9 @@ def leonard_magnitude_to_width(
     float
             Width of the fault. (km)
     """
-    a_strike_slip_small = sp.stats.norm.rvs(loc=3.885, scale=0.065) if random else 3.88
+    a_strike_slip_small = (
+        sp.stats.norm(loc=3.885, scale=0.065).rvs() if random else 3.88
+    )
     b_strike_slip_small = 2.5
     width: float
     if rake_type(rake) == RakeType.STRIKE_SLIP:
@@ -213,7 +224,7 @@ def leonard_magnitude_to_width(
         if width > 19.0 or width < 3.4:
             raise ValueError("Width out of range for Leonard model.")
     else:
-        a_dip_slip_small = sp.stats.norm.rvs(loc=3.67, scale=0.06) if random else 3.63
+        a_dip_slip_small = sp.stats.norm(loc=3.67, scale=0.06).rvs() if random else 3.63
         b_dip_slip_small = 2.5
         width = 10 ** ((magnitude - a_dip_slip_small) / b_dip_slip_small)
         if width <= 5.4:
@@ -287,11 +298,11 @@ def contreras_interface_area_to_magnitude(area: float, random: bool = False) -> 
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
     """
-    if area < 137.76:
+    if area < 137:
         raise ValueError(
             "Area out of range for Contreras model, minimum area is 137.76 km^2"
         )
-    sigma_a = 0 if random else sp.stats.norm.rvs(loc=0, scale=0.73)
+    sigma_a = sp.stats.norm(loc=0, scale=0.73).rvs() if random else 0
     a_1 = -8.890
     a_2 = np.log(10)
     return 1 / a_2 * (np.log(area) - a_1 - sigma_a)
@@ -337,7 +348,7 @@ def contreras_interface_magnitude_to_area(
         raise ValueError(
             "Magnitude out of range for Contreras model, minimum magnitude is 6"
         )
-    sigma_a = 0 if random else sp.stats.norm.rvs(loc=0, scale=0.73)
+    sigma_a = sp.stats.norm(loc=0, scale=0.73).rvs() if random else 0
     a_1 = -8.890
     a_2 = np.log(10)
     return np.exp(a_1 + a_2 * magnitude + sigma_a)
@@ -379,11 +390,11 @@ def contreras_interface_magnitude_to_aspect_ratio(
     sigma_1 = 0.32
     sigma_2 = 0.47
     if magnitude < M_1:
-        return np.exp(sp.stats.norm.rvs(loc=0, scale=sigma_1) if random else 0)
+        return np.exp(sp.stats.norm(loc=0, scale=sigma_1).rvs() if random else 0)
 
     return np.exp(
         a_3 * (magnitude - M_1)
-        + (sp.stats.norm.rvs(loc=0, scale=sigma_2) if random else 0)
+        + (sp.stats.norm(loc=0, scale=sigma_2).rvs() if random else 0)
     )
 
 
@@ -442,8 +453,8 @@ def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
     """
     a = 4.054
     b = 0.981
-    sigma_a = sp.stats.norm(loc=0, scale=0.288) if random else 0
-    sigma_b = sp.stats.norm(loc=0, scale=0.093) if random else 0
+    sigma_a = sp.stats.norm(loc=0, scale=0.288).rvs() if random else 0
+    sigma_b = sp.stats.norm(loc=0, scale=0.093).rvs() if random else 0
 
     return a + sigma_a + (b + sigma_b) * np.log10(area)
 
@@ -477,9 +488,9 @@ def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> f
            Research Letters 81.6 (2010): 941-950.
     """
     a = -3.225
-    sigma_a = sp.stats.norm(loc=0, scale=0.598) if random else 0
+    sigma_a = sp.stats.norm(loc=0, scale=0.598).rvs() if random else 0
     b = 0.890
-    sigma_b = sp.stats.norm(loc=0, scale=0.085) if random else 0
+    sigma_b = sp.stats.norm(loc=0, scale=0.085).rvs() if random else 0
     return 10 ** (a + sigma_a + (b + sigma_b) * magnitude)
 
 
@@ -522,11 +533,11 @@ def contreras_slab_magnitude_to_aspect_ratio(
     sigma_1 = 0.24
     sigma_2 = 0.38
     if magnitude < M_1:
-        return np.exp(sp.stats.norm.rvs(loc=0, scale=sigma_1) if random else 0)
+        return np.exp(sp.stats.norm(loc=0, scale=sigma_1).rvs() if random else 0)
 
     return np.exp(
         a_3 * (magnitude - M_1)
-        + (sp.stats.norm.rvs(loc=0, scale=sigma_2) if random else 0)
+        + (sp.stats.norm(loc=0, scale=sigma_2).rvs() if random else 0)
     )
 
 
@@ -538,15 +549,15 @@ def contreras_slab_magnitude_to_length_width(
     Parameters
     ----------
     magnitude : float
-            Moment magnitude of the fault.
+        Moment magnitude of the fault.
     random : bool, optional
-            If True, sample parameters according to uncertainties in the
-            paper, otherwise use the mean values. Default is False.
+        If True, sample parameters according to uncertainties in the
+        paper, otherwise use the mean values. Default is False.
 
     Returns
     -------
     tuple[float, float]
-            Length and width of the fault.
+        Length and width of the fault.
     """
     area = strasser_slab_magnitude_to_area(magnitude, random)
     aspect_ratio = contreras_slab_magnitude_to_aspect_ratio(magnitude, random)
@@ -559,7 +570,7 @@ def magnitude_to_length_width(
     scaling_relation: ScalingRelation,
     magnitude: float,
     rake: float | None = None,
-    random: bool = True,
+    random: bool = False,
 ) -> tuple[float, float]:
     """Convert magnitude to length and width using a scaling relationship.
 
@@ -596,11 +607,52 @@ def magnitude_to_length_width(
     return scaling_relations_map[scaling_relation](magnitude)
 
 
+def magnitude_to_area(
+    scaling_relation: ScalingRelation,
+    magnitude: float,
+    rake: float | None = None,
+    random: bool = False,
+) -> float:
+    """Convert magnitude to area using a scaling relationship.
+
+    Parameters
+    ----------
+    scaling_relation : ScalingRelation
+        Scaling relation to use.
+    magnitude : float
+        Moment magnitude of the fault.
+    rake : float, optional
+        Rake of the fault (degrees). Required for Leonard scaling.
+    random : bool, optional
+        If True, sample parameters according to uncertainties in the
+        paper, otherwise use the mean values. Default is False.
+
+    Returns
+    -------
+    tuple[float, float]
+        Area of the fault estimated by the scaling relation.
+    """
+    if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
+        raise ValueError("Rake must be specified for Leonard scaling.")
+    scaling_relations_map = {
+        ScalingRelation.LEONARD2014: functools.partial(
+            leonard_magnitude_to_area, rake=rake, random=random
+        ),
+        ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
+            contreras_interface_magnitude_to_area, random=random
+        ),
+        ScalingRelation.CONTRERAS_SLAB2020: functools.partial(
+            strasser_slab_magnitude_to_area, random=random
+        ),
+    }
+    return scaling_relations_map[scaling_relation](magnitude)
+
+
 def area_to_magnitude(
     scaling_relation: ScalingRelation,
     area: float,
     rake: float | None = None,
-    random: bool = True,
+    random: bool = False,
 ) -> float:
     """Convert area to magnitude using a scaling relationship.
 
