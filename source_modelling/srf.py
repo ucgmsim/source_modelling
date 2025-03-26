@@ -25,10 +25,6 @@ Classes
 -------
 - SrfFile: Representation of an SRF file.
 
-Exceptions
-----------
-- SrfParseError: Exception raised for errors in parsing SRF files.
-
 Functions
 ---------
 - read_srf: Read an SRF file into memory.
@@ -50,7 +46,7 @@ import functools
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, TextIO
+from typing import TextIO
 
 import numpy as np
 import pandas as pd
@@ -58,7 +54,7 @@ import scipy as sp
 import shapely
 
 from qcore import coordinates
-from source_modelling import srf_reader
+from source_modelling import parse_utils, srf_reader
 from source_modelling.sources import Plane
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
@@ -343,82 +339,6 @@ class SrfFile:
         return planes
 
 
-class SrfParseError(Exception):
-    """Exception raised for errors in parsing SRF files."""
-
-    pass
-
-
-def read_float(srf_file: TextIO, label: Optional[str] = None) -> float:
-    """Read a float from an SRF file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to read from.
-    label : Optional[str]
-        A human friendly label for the floating point (for debugging
-        purposes), or None for no label. Defaults to None.
-
-    Raises
-    ------
-    SrfParseError
-        If there is an error reading the float value from the SRF file.
-
-    Returns
-    -------
-    float
-        The float read from the SRF file.
-    """
-    while (cur := srf_file.read(1)).isspace():
-        pass
-    float_str = cur
-    while not (cur := srf_file.read(1)).isspace():
-        float_str += cur
-    try:
-        return float(float_str)
-    except ValueError:
-        if label:
-            raise SrfParseError(f'Expecting float ({label}), got: "{float_str}"')
-        else:
-            raise SrfParseError(f'Expecting float, got: "{float_str}"')
-
-
-def read_int(srf_file: TextIO, label: Optional[str] = None) -> int:
-    """Read a int from an SRF file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to read from.
-    label : str
-        Human readable string label for identifying the value in an error
-        message.
-
-    Raises
-    ------
-    SrfParseError
-        If there is an error reading the int value from the SRF file.
-
-    Returns
-    -------
-    int
-        The int read from the SRF file.
-    """
-    while (cur := srf_file.read(1)).isspace():
-        pass
-    int_str = cur
-    while not (cur := srf_file.read(1)).isspace():
-        int_str += cur
-    try:
-        return int(int_str)
-    except ValueError:
-        if label:
-            raise SrfParseError(f'Expecting int ({label}), got: "{int_str}"')
-        else:
-            raise SrfParseError(f'Expecting int, got: "{int_str}"')
-
-
 def read_srf(srf_ffp: Path) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
@@ -438,7 +358,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         plane_count_line = srf_file_handle.readline().strip()
         plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
         if not plane_count_match:
-            raise SrfParseError(
+            raise parse_utils.ParseError(
                 f'Expecting PLANE header line, got: "{plane_count_line}"'
             )
         plane_count = int(plane_count_match.group(1))
@@ -447,17 +367,17 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         for _ in range(plane_count):
             segments.append(
                 {
-                    "elon": read_float(srf_file_handle),
-                    "elat": read_float(srf_file_handle),
-                    "nstk": read_int(srf_file_handle),
-                    "ndip": read_int(srf_file_handle),
-                    "len": read_float(srf_file_handle),
-                    "wid": read_float(srf_file_handle),
-                    "stk": read_float(srf_file_handle),
-                    "dip": read_float(srf_file_handle),
-                    "dtop": read_float(srf_file_handle),
-                    "shyp": read_float(srf_file_handle),
-                    "dhyp": read_float(srf_file_handle),
+                    "elon": parse_utils.read_float(srf_file_handle),
+                    "elat": parse_utils.read_float(srf_file_handle),
+                    "nstk": parse_utils.read_int(srf_file_handle),
+                    "ndip": parse_utils.read_int(srf_file_handle),
+                    "len": parse_utils.read_float(srf_file_handle),
+                    "wid": parse_utils.read_float(srf_file_handle),
+                    "stk": parse_utils.read_float(srf_file_handle),
+                    "dip": parse_utils.read_float(srf_file_handle),
+                    "dtop": parse_utils.read_float(srf_file_handle),
+                    "shyp": parse_utils.read_float(srf_file_handle),
+                    "dhyp": parse_utils.read_float(srf_file_handle),
                 }
             )
         headers = pd.DataFrame(segments)
@@ -467,7 +387,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         points_count_line = srf_file_handle.readline().strip()
         points_count_match = re.match(POINT_COUNT_RE, points_count_line)
         if not points_count_match:
-            raise SrfParseError(
+            raise parse_utils.ParseError(
                 f'Expecting POINTS header line, got: "{points_count_line}"'
             )
         point_count = int(points_count_match.group(1))

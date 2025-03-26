@@ -8,7 +8,7 @@ import scipy as sp
 import shapely
 
 from qcore import coordinates
-from source_modelling import srf
+from source_modelling import parse_utils, srf
 
 SRF_DIR = Path(__file__).parent / "srfs"
 
@@ -357,16 +357,16 @@ def test_srf_dip_90_geometry():
 
 def test_junk_srfs():
     """Test that malformed SRFs raise srf parsing errors."""
-    with pytest.raises(srf.SrfParseError):
+    with pytest.raises(parse_utils.ParseError):
         srf.read_srf(SRF_DIR / "empty.srf")
 
-    with pytest.raises(srf.SrfParseError):
+    with pytest.raises(parse_utils.ParseError):
         srf.read_srf(SRF_DIR / "bad_int.srf")
 
-    with pytest.raises(srf.SrfParseError):
+    with pytest.raises(parse_utils.ParseError):
         srf.read_srf(SRF_DIR / "bad_float.srf")
 
-    with pytest.raises(srf.SrfParseError):
+    with pytest.raises(parse_utils.ParseError):
         srf.read_srf(SRF_DIR / "no_points.srf")
 
 
