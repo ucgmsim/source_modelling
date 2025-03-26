@@ -169,6 +169,14 @@ def leonard_magnitude_to_length(
     -------
     float
             Length of the fault. (km)
+
+    References
+    ----------
+    .. [0] Leonard, Mark. "Self‐consistent earthquake fault‐scaling
+           relations: Update and extension to stable continental strike‐slip
+           faults." Bulletin of the Seismological Society of America 104.6
+           (2014): 2953-2965.
+
     """
     a_strike_slip_small = sp.stats.norm(loc=4.16, scale=0.39).rvs() if random else 4.17
     b_strike_slip_small = 1.667
@@ -214,6 +222,14 @@ def leonard_magnitude_to_width(
     -------
     float
             Width of the fault. (km)
+
+    References
+    ----------
+    .. [0] Leonard, Mark. "Self‐consistent earthquake fault‐scaling
+           relations: Update and extension to stable continental strike‐slip
+           faults." Bulletin of the Seismological Society of America 104.6
+           (2014): 2953-2965.
+
     """
     a_strike_slip_small = (
         sp.stats.norm(loc=3.885, scale=0.065).rvs() if random else 3.88
@@ -255,6 +271,13 @@ def leonard_magnitude_to_length_width(
     -------
     tuple[float, float]
         Length and width of the fault.
+
+    References
+    ----------
+    .. [0] Leonard, Mark. "Self‐consistent earthquake fault‐scaling
+           relations: Update and extension to stable continental strike‐slip
+           faults." Bulletin of the Seismological Society of America 104.6
+           (2014): 2953-2965.
     """
     area = leonard_magnitude_to_area(magnitude, rake, random)
     length = leonard_magnitude_to_length(magnitude, rake, random)
@@ -436,6 +459,11 @@ def contreras_interface_magnitude_to_length_width(
     -------
     tuple[float, float]
             Length and width of the fault.
+
+    References
+    ----------
+    .. [0] Contreras, Victor, et al. "NGA-Sub source and path database." Earthquake Spectra 38.2 (2022): 799-840.
+
     """
     area = contreras_interface_magnitude_to_area(magnitude, random)
     aspect_ratio = contreras_interface_magnitude_to_aspect_ratio(magnitude, random)
@@ -577,6 +605,13 @@ def contreras_slab_magnitude_to_length_width(
     -------
     tuple[float, float]
         Length and width of the fault.
+
+    References
+    ----------
+    .. [0] Bozorgnia, Y., & Stewart, J.P. (2020). Data Resources for
+           NGA-Subduction Project (Report No. 2020/02). Pacific Earthquake
+           Engineering Research Center (PEER).
+           https://doi.org/10.55461/RDWC6463
     """
     area = strasser_slab_magnitude_to_area(magnitude, random)
     aspect_ratio = contreras_slab_magnitude_to_aspect_ratio(magnitude, random)
