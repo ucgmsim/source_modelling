@@ -26,8 +26,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Optional
 
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import parse
+import scipy as sp
 
 HEADER_PATTERN = """EventTAG: {event_tag}
 Loc : LAT = {latitude:g} LON = {longitude:g} DEP = {depth:g}
@@ -176,6 +179,27 @@ class FSPFile:
     # Number of segments (== len(data))
     segment_count: int
     data: pd.DataFrame
+
+    @property
+    def segments(self) -> list[npt.NDArray[np.float64]]:
+        """ndarray: a list of segment slips in the shape (ny, nx)."""
+        grouped_slips = []
+
+        for _, segment_df in self.data.groupby("segment"):
+            # Get unique z-values and sort them
+            unique_z = np.sort(segment_df["z"].unique())
+
+            # Create a list to store slip values for each z
+            slip_layers = []
+            for z in unique_z:
+                # Select slip values corresponding to this z
+                slip_values = segment_df[segment_df["z"] == z]["slip"].values
+                slip_layers.append(slip_values)
+
+            # Convert to a NumPy array (ragged arrays will have dtype=object)
+            grouped_slips.append(np.vstack(slip_layers))
+
+        return grouped_slips
 
     @classmethod
     def read_from_file(cls: Callable, fsp_ffp: Path) -> "FSPFile":
@@ -418,3 +442,140 @@ def _parse_velocity_density_structure(
         return None
     significand = float(significand.group(1))
     return significand * scale
+
+
+def autocorrelation_dimension(
+    slip_array: npt.NDArray[np.float64], dx: float, axis: int = 0
+) -> float:
+    """Calculate the autocorrelation dimension of a slip array.
+
+    Parameters
+    ----------
+    slip_array : ndarray
+        The slip array to calculate the autocorrelation dimension of.
+    dx : float
+        The length of each subfault.
+    axis : int, optional
+        The axis along which to calculate the autocorrelation dimension, by default 0.
+
+    Returns
+    -------
+    float
+        The autocorrelation dimension of the slip array.
+    """
+    slip_function = slip_array.sum(axis=int(not bool(axis)))
+
+    # Calculate the autocorrelation of the slip array
+    autocorrelation = sp.signal.correlate(slip_function, slip_function, mode="full")
+
+    # Calculate the autocorrelation dimension
+    return sp.integrate.trapezoid(autocorrelation, dx=dx) / autocorrelation.max()
+
+
+def trim_array_to_target_length(
+    slip_array: npt.NDArray[np.float64],
+    dx: float,
+    target_length: float,
+    axis: int = 0,
+    trim_left: bool = True,
+) -> npt.NDArray[np.float64]:
+    """Trim an array to a target length.
+
+    Parameters
+    ----------
+    slip_array : ndarray
+        The array to trim.
+    dx : float
+        The length of each subfault.
+    target_length : float
+        The target length to trim the array to. Array will be trimmed to have ideally length of
+        target_length +/- 2 * dx.
+    axis : int, optional
+        The axis along which to trim the array, by default 0.
+
+    Returns
+    -------
+    ndarray
+        The trimmed array.
+    """
+
+    keep_threshold = slip_array.max() / 3
+
+    slip_function = slip_array.max(axis=int(not axis))
+
+    cut_threshold = min(slip_function[0], slip_function[-1])
+    left = 0
+    right = len(slip_function)
+    freeze_left = False
+    freeze_right = False
+    while left < right and not (freeze_left and freeze_right):
+        if slip_function[left] >= keep_threshold:
+            if left > 0:
+                left -= 1
+            freeze_left = True
+        elif slip_function[left] <= cut_threshold:
+            left += 1
+
+        if slip_function[right - 1] >= keep_threshold:
+            if right < len(slip_function):
+                right += 1
+            freeze_right = True
+        elif slip_function[right - 1] <= cut_threshold:
+            right -= 1
+
+        if (right - left) * dx - target_length <= 2 * dx:
+            break
+        else:
+            cut_threshold = min(slip_function[left], slip_function[right - 1])
+
+    while left > 0 and slip_function[left - 1] >= cut_threshold:
+        left -= 1
+
+    while right < len(slip_function) and slip_function[right] >= cut_threshold:
+        right += 1
+
+    while slip_function[left] == 0 and left < right:
+        left += 1
+
+    while slip_function[right - 1] == 0 and left < right:
+        right -= 1
+
+    if not trim_left:
+        left = 0
+
+    if left >= right:
+        raise ValueError("Cannot trim array to target length")
+
+    return left, right
+
+
+def trim_slip_array(
+    slip_array: npt.NDArray[np.float64], dx: float, dz: float, keep_top: bool = True
+) -> npt.NDArray[np.float64]:
+    """Trim a slip array to remove areas of low asperity.
+
+    Parameters
+    ----------
+    slip_array : ndarray
+        The slip array to trim.
+    dx : float
+        The length of each subfault.
+    dz : float
+        The width of each subfault.
+
+    Returns
+    -------
+    ndarray
+        The trimmed slip array.
+    """
+    autocorrelation_length = autocorrelation_dimension(slip_array, dx, axis=1)
+
+    autocorrelation_width = autocorrelation_dimension(slip_array, dz, axis=0)
+    left, right = trim_array_to_target_length(
+        slip_array, dx, autocorrelation_length, axis=1
+    )
+    top, bottom = trim_array_to_target_length(
+        slip_array, dz, autocorrelation_width, trim_left=not keep_top
+    )
+
+    return slip_array[top:bottom, left:right]
