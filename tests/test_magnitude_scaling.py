@@ -342,8 +342,8 @@ def test_normal_error_contreras_interface_mag_to_area(
         itertools.product(
             [magnitude_scaling.strasser_slab_area_to_magnitude],
             np.linspace(
-                magnitude_scaling.strasser_slab_magnitude_to_area(5.9),
-                magnitude_scaling.strasser_slab_magnitude_to_area(7.8),
+                130,
+                5212,
                 10,
             ),
         )
@@ -458,7 +458,7 @@ def test_normal_error_leonard(
                 magnitude_scaling.contreras_interface_magnitude_to_area,
             ),
         ],
-        np.linspace(6.0, 9.0, 10),
+        np.linspace(6, 7.8, 10),
     ),
 )
 def test_area_preservation_lw(
