@@ -16,6 +16,7 @@ from source_modelling import sources
 from source_modelling.sources import Fault, Plane
 
 DATA_PATH = Path("tests") / "data"
+np.random.seed(0)
 
 
 def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndarray:
@@ -1066,3 +1067,137 @@ def test_load_fault(fault_name: str):
     fault = Fault(planes=[Plane.from_corners(c) for c in corners])
     assert fault.dip == pytest.approx(dip, abs=0.5)
     assert fault.dip_dir == pytest.approx(dip_dir, abs=1)
+
+
+def generate_sheared_fault_with_lengths(
+    lengths: np.ndarray,
+    shears: np.ndarray,
+    width: float,
+    dip: float,
+    strike: float,
+    start_coordinates: np.ndarray,
+) -> Fault:
+    dip_rotvec = sp.spatial.transform.Rotation.from_rotvec(
+        np.array([dip, 0, 0]), degrees=True
+    )
+    strike_rotvec = sp.spatial.transform.Rotation.from_rotvec(
+        np.array([0, 0, strike]), degrees=True
+    )
+    trace_lengths = np.sqrt(lengths**2 - shears**2)
+    trace = np.zeros((len(lengths) + 1, 3))
+    trace[1:, 0] = np.cumsum(trace_lengths)
+
+    bottom_trace = trace.copy()
+    bottom_trace[:, 1] = width
+
+    trace = dip_rotvec.apply(trace)
+    bottom_trace = dip_rotvec.apply(bottom_trace)
+
+    trace[1:, 1] += shears.cumsum()
+    bottom_trace[1:, 1] += shears.cumsum()
+
+    trace = strike_rotvec.apply(trace)
+    bottom_trace = strike_rotvec.apply(bottom_trace)
+
+    trace += start_coordinates
+    bottom_trace += start_coordinates
+
+    return Fault(
+        [
+            Plane(
+                np.array(
+                    [
+                        trace[i],
+                        trace[i + 1],
+                        bottom_trace[i + 1],
+                        bottom_trace[i],
+                    ]
+                )
+            )
+            for i in range(len(lengths))
+        ]
+    )
+
+
+@st.composite
+def fault(
+    draw: st.DrawFn,
+    min_segments: int = 1,
+    max_segments: int = 10,
+    min_length: float = 0.1,
+    max_length: float = 100,
+    max_dip: float = 90,
+    max_width: float = 100,
+) -> Fault:
+    lengths = draw(
+        st.lists(
+            st.floats(min_length, max_length),
+            min_size=min_segments,
+            max_size=max_segments,
+        )
+    )
+    shears = [draw(st.floats(0.95 * -length, 0.95 * length)) for length in lengths]
+    width = draw(st.floats(0.1, max_width)) * 1000
+    dip = draw(st.floats(1, max_dip))
+    strike = draw(st.floats(0, 360))
+    start_coordinates = coordinates.wgs_depth_to_nztm(
+        draw(
+            st.builds(
+                coordinate,
+                lat=st.floats(-47, -34),
+                lon=st.floats(165, 178),
+                depth=st.just(0),
+            )
+        )
+    )
+    return generate_sheared_fault_with_lengths(
+        np.array(lengths) * 1000,
+        np.array(shears) * 1000,
+        width,
+        dip,
+        strike,
+        start_coordinates,
+    )
+
+
+@given(fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100))
+def test_simplify_fault(fault: Fault):
+    tolerance = 0.4
+    simplified_fault = sources.simplify_fault(fault, tolerance)
+    for plane in simplified_fault.planes:
+        assert plane.length > tolerance or plane.length == pytest.approx(tolerance)
+
+    consecutive_small_planes = False
+    for plane, next_plane in itertools.pairwise(fault.planes):
+        if plane.length < tolerance and next_plane.length < tolerance:
+            consecutive_small_planes = True
+            break
+
+    if not consecutive_small_planes:
+        assert len(simplified_fault.planes) == sum(
+            1 for plane in fault.planes if plane.length >= tolerance
+        )
+
+    # Check that the simplified fault is similar to the original fault
+    assert simplified_fault.area() / fault.area() == pytest.approx(1, abs=0.2)
+
+
+@given(
+    st.lists(
+        fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100),
+        min_size=2,
+        max_size=10,
+    ),
+)
+def test_sources_as_geojson(faults: list[Fault]):
+    geojson = json.loads(sources.sources_as_geojson_features(faults))
+    assert geojson["type"] == "FeatureCollection"
+    assert len(geojson["features"]) == len(faults)
+    for feature in geojson["features"]:
+        assert feature["type"] == "Feature"
+        assert feature["geometry"]["type"] in {
+            "Polygon",
+            "MultiPolygon",
+            "LineString",
+            "MultiLineString",
+        }

@@ -22,8 +22,9 @@ Example
 import dataclasses
 import io
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import IO, Callable, Optional
+from typing import IO, Optional
 
 import pandas as pd
 import parse
