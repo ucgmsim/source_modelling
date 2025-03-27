@@ -29,7 +29,7 @@ class ScalingRelation(StrEnum):
 MAGNITUDE_BOUNDS = {
     ScalingRelation.LEONARD2014: (4.0, 9.0),
     ScalingRelation.CONTRERAS_INTERFACE2017: (6.0, 9.0),
-    ScalingRelation.CONTRERAS_SLAB2020: (5.0, 9.0),
+    ScalingRelation.CONTRERAS_SLAB2020: (5.9, 7.8),
 }
 
 
@@ -498,6 +498,15 @@ def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
     """
+
+    # lower bound and upper bound for the area are estimated from the minimum and maximum magnitude of the Strasser model.
+    lower_bound = 130
+    upper_bound = 5212
+    if not (lower_bound <= area <= upper_bound):
+        raise ValueError(
+            f"Area out of range for Strasser model, area must be between {lower_bound} and {upper_bound} km^2."
+        )
+
     a = 4.054
     b = 0.981
     sigma_a = sp.stats.norm(loc=0, scale=0.288).rvs() if random else 0
@@ -525,7 +534,8 @@ def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> f
     Raises
     ------
     ValueError
-        If the magnitude is less than the minimum magnitude of 6.
+        If the magnitude is less than the minimum magnitude of 5.9 or
+        larger than the maximum magnitude of 7.8.
 
     References
     ----------
@@ -534,6 +544,10 @@ def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> f
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
     """
+    if not (5.9 <= magnitude <= 7.8):
+        raise ValueError(
+            "Magnitude out of range for Strasser model, magnitude must be between 5.9 and 7.8"
+        )
     a = -3.225
     sigma_a = sp.stats.norm(loc=0, scale=0.598).rvs() if random else 0
     b = 0.890

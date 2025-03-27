@@ -8,7 +8,7 @@ import hypothesis.strategies as st
 import numpy as np
 import pytest
 import scipy as sp
-from hypothesis import given
+from hypothesis import assume, given
 
 from source_modelling import magnitude_scaling
 
@@ -222,7 +222,7 @@ def test_strasser_slab_expected_area(mw: float, expected_area: float):
     )
 
 
-@given(st.floats(min_value=6.0, max_value=9.5))
+@given(st.floats(min_value=5.9, max_value=7.7))
 def test_strasser_monotonicity(mag1: float):
     mag2 = mag1 + 0.1  # Slightly higher magnitude
     assert magnitude_scaling.strasser_slab_magnitude_to_area(
@@ -237,7 +237,12 @@ def test_monotonicity_mag_to_area(
     ],
 ):
     """Test that the area is monotonic with respect to the magnitude."""
+
     scaling_relation, rake, magnitude = relation_with_magnitude
+    assume(
+        scaling_relation != magnitude_scaling.ScalingRelation.CONTRERAS_SLAB2020
+        or magnitude <= 7.7
+    )
     if scaling_relation == magnitude_scaling.ScalingRelation.LEONARD2014:
         mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)
     else:
@@ -337,8 +342,8 @@ def test_normal_error_contreras_interface_mag_to_area(
         itertools.product(
             [magnitude_scaling.strasser_slab_area_to_magnitude],
             np.linspace(
-                magnitude_scaling.strasser_slab_magnitude_to_area(6.0),
-                magnitude_scaling.strasser_slab_magnitude_to_area(9.0),
+                magnitude_scaling.strasser_slab_magnitude_to_area(5.9),
+                magnitude_scaling.strasser_slab_magnitude_to_area(7.8),
                 10,
             ),
         )
@@ -362,8 +367,8 @@ def test_normal_error_strasser_slab(area_to_mag: Callable[[float], float], area:
     itertools.product(
         [magnitude_scaling.strasser_slab_magnitude_to_area],
         np.linspace(
-            6.0,
-            9.0,
+            5.9,
+            7.8,
             5,
         ),
     ),
