@@ -500,38 +500,29 @@ def trim_array_to_target_length(
     """
 
     keep_threshold = slip_array.max() / 3
-
     slip_function = slip_array.max(axis=int(not axis))
-
-    cut_threshold = min(slip_function[0], slip_function[-1])
     left = 0
     right = len(slip_function)
-    freeze_left = False
-    freeze_right = False
-    while left < right and not (freeze_left and freeze_right):
-        if slip_function[left] >= keep_threshold:
-            if left > 0:
-                left -= 1
-            freeze_left = True
-        elif slip_function[left] <= cut_threshold:
+    while (
+        left < right
+        and not (
+            slip_function[left] >= keep_threshold
+            and slip_function[right - 1] >= keep_threshold
+        )
+        and abs((right - left) * dx - target_length) > 2 * dx
+    ):
+        if (
+            slip_function[left] < slip_function[right - 1]
+            and slip_function[left] < keep_threshold
+        ):
             left += 1
-
-        if slip_function[right - 1] >= keep_threshold:
-            if right < len(slip_function):
-                right += 1
-            freeze_right = True
-        elif slip_function[right - 1] <= cut_threshold:
+        elif slip_function[right - 1] < keep_threshold:
             right -= 1
 
-        if (right - left) * dx - target_length <= 2 * dx:
-            break
-        else:
-            cut_threshold = min(slip_function[left], slip_function[right - 1])
-
-    while left > 0 and slip_function[left - 1] >= cut_threshold:
+    while left > 0 and slip_function[left] >= keep_threshold:
         left -= 1
 
-    while right < len(slip_function) and slip_function[right] >= cut_threshold:
+    while right < len(slip_function) and slip_function[right - 1] >= keep_threshold:
         right += 1
 
     while slip_function[left] == 0 and left < right:
