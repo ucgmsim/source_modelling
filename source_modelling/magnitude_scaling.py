@@ -331,7 +331,7 @@ def contreras_interface_area_to_magnitude(area: float, random: bool = False) -> 
 
     Notes
     -----
-    This scaling relationship for *interface* events. For slab events,
+    This scaling relationship is for *interface* events. For slab events,
     use the original Strasser scaling relationship [1]_.
 
     References
