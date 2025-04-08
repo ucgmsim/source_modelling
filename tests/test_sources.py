@@ -482,6 +482,29 @@ def test_both_dip_dir_provided():
         Plane.from_nztm_trace(trace_points, 0, 1, 45, dip_dir=90, dip_dir_nztm=90)
 
 
+def test_fault_with_short_segments():
+    """Check that a fault containing a less than 10m segment between two other segments does not raise an error."""
+    trace_points_offset = np.array(
+        [
+            [0, 0],
+            [100, 0],
+            [2, 0],
+            [300, 0],
+        ]
+    ).cumsum(axis=0)
+    trace_points_nztm = (
+        coordinates.wgs_depth_to_nztm(np.array([-43.0, 172.0])) + trace_points_offset
+    )
+    planes = [
+        Plane.from_nztm_trace(
+            trace_points_nztm[i : i + 2], dip=90, dtop=0, dbottom=10, dip_dir=90
+        )
+        for i in range(len(trace_points_nztm) - 1)
+    ]
+    with pytest.warns(UserWarning):
+        _ = Fault(planes)
+
+
 @pytest.mark.parametrize(
     "centroid, strike, dip, dip_dir, length, width, dtop, dbottom",
     [

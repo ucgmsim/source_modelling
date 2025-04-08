@@ -20,6 +20,7 @@ import copy
 import dataclasses
 import itertools
 import json
+import warnings
 from typing import Optional, Self
 
 import networkx as nx
@@ -920,6 +921,7 @@ class Fault:
                 continue
             else:
                 raise ValueError("Fault planes must be connected in a line.")
+
         if not (start_nodes == 1 and end_nodes == 1):
             raise ValueError("Fault planes must be connected in a line.")
 
@@ -977,7 +979,21 @@ class Fault:
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
             points_into_relation, create_using=nx.DiGraph
         )
-        self._validate_fault_plane_connectivity(points_into_graph)
+        try:
+            self._validate_fault_plane_connectivity(points_into_graph)
+        except ValueError:
+            # Sometimes, faults with small segments can confuse the
+            # connectivity check, so we can apply a transitive
+            # reduction and then do the check again (with a warning).
+            warnings.warn(
+                "Fault planes are connected, but not in a line."
+                " This can occur with very short segments."
+                " Trying to safely reduce the connectivity graph."
+                " Check the output fault carefully."
+            )
+            self._validate_fault_plane_connectivity(
+                nx.transitive_reduction(points_into_graph)
+            )
 
         # Now that we have established the planes line up correctly, we can
         # obtain the line in question with a topological sort, which will
