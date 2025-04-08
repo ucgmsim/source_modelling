@@ -989,7 +989,7 @@ class Fault:
                 "Fault planes are connected, but not in a line."
                 " This can occur with very short segments."
                 " Trying to safely reduce the connectivity graph."
-                " Check the output faults carefully."
+                " Check the output fault carefully."
             )
             self._validate_fault_plane_connectivity(
                 nx.transitive_reduction(points_into_graph)
