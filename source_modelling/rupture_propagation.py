@@ -21,6 +21,7 @@ from typing import Literal, Optional
 import networkx as nx
 import numpy as np
 from networkx.algorithms.tree import mst
+from scipy.cluster.hierarchy import DisjointSet
 
 from qcore import coordinates
 from source_modelling import sources
@@ -510,6 +511,106 @@ def jump_points_from_rupture_tree(
         )
         jump_points[source] = JumpPair(parent_point, source_point)
     return jump_points
+
+
+def find_rupture_components(
+    source_map: dict[str, sources.IsSource],
+    rupture_causality_tree: dict[str, sources.IsSource],
+    segment_separation_distance: float,
+) -> DisjointSet:
+    """Find rupture components based on a rupture causality tree.
+
+    This function identifies rupture components by examining the distances
+    between sources in the rupture causality tree. If the distance between
+    a source and its parent is less than the specified segment separation
+    distance, they are considered part of the same rupture component.
+
+    Parameters
+    ----------
+    source_map : dict[str, sources.IsSource]
+        A mapping of fault names to their corresponding source objects.
+    rupture_causality_tree : dict[str, sources.IsSource]
+        A rupture causality tree where keys are nodes, and values are their
+        parent nodes.
+    segment_separation_distance : float
+        The maximum distance (in metres) for two sources to be considered part
+        of the same rupture component.
+
+    Returns
+    -------
+    DisjointSet
+        A disjoint set representing the rupture components. Each component is
+        represented by a unique root node.
+    """
+    distances = {
+        source: distance_between(
+            source_map[source],
+            source_map[parent],
+            *sources.closest_point_between_sources(
+                source_map[source], source_map[parent]
+            ),
+        )
+        for source, parent in rupture_causality_tree.items()
+        if parent is not None
+    }
+
+    # Perform a union-find operation to find the connected components
+    # of source using the segment separation distance.
+    components = DisjointSet(list(source_map))
+    for fault, parent in rupture_causality_tree.items():
+        if parent is None:
+            continue
+        # Find the component of the parent fault
+        if distances[fault] < segment_separation_distance:
+            components.merge(fault, parent)
+    return components
+
+
+def rupture_magnitudes_from_tree(
+    source_map: dict[str, sources.IsSource],
+    components: DisjointSet,
+    rupture_moment: float,
+) -> dict[str, float]:
+    """Distribute a rupture moment across rupture components.
+
+    Parameters
+    ----------
+    source_map : dict[str, sources.IsSource]
+        A mapping of fault names to their corresponding source objects.
+    components : DisjointSet
+        The disjoint set of rupture components.
+    rupture_moment : float
+        The total moment of the rupture.
+
+    Returns
+    -------
+    dict[str, float]
+        A dictionary mapping fault names to their rupture moments.
+    """
+    # Calculate the area of each component
+    component_areas: dict[str, float] = {}
+    for component in components.subsets():
+        component = list(component)
+        root = components[component[0]]
+        component_areas[root] = sum(source_map[fault].area() for fault in component)
+
+    total_weighted_area = sum(area ** (3 / 2) for area in component_areas.values())
+
+    # Distribute the rupture moment proportional to area ^ 3/2 for each component.
+    component_moments = {
+        root: rupture_moment * (area ** (3 / 2)) / total_weighted_area
+        for root, area in component_areas.items()
+    }
+
+    # Within in each component, linearly distribute the moment across
+    # the sources.
+    fault_moments = {
+        fault: component_moments[components[fault]]
+        * fault.area()
+        / component_areas[components[fault]]
+        for fault in source_map
+    }
+    return fault_moments
 
 
 def tree_nodes_in_order(tree: Tree) -> Generator[str, None, None]:
