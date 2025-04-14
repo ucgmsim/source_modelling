@@ -21,7 +21,7 @@ import dataclasses
 import itertools
 import json
 import warnings
-from typing import Optional, Self
+from typing import NamedTuple, Optional, Self
 
 import networkx as nx
 import numpy as np
@@ -370,19 +370,7 @@ class Plane:
     @property
     def strike(self) -> float:  # numpydoc ignore=RT01
         """float: The WGS84 bearing of the strike direction of the fault (from north; in degrees)."""
-        return coordinates.nztm_bearing_to_great_circle_bearing(
-            self.corners[0, :2], self.length, self.strike_nztm
-        )
-
-    @property
-    def strike_nztm(self) -> float:  # numpydoc ignore=RT01
-        """float: The bearing of the strike direction of the fault (from north; in degrees)."""
-        north_direction = np.array([1, 0, 0])
-        up_direction = np.array([0, 0, 1])
-        strike_direction = self.bounds[1] - self.bounds[0]
-        return geo.oriented_bearing_wrt_normal(
-            north_direction, strike_direction, up_direction
-        )
+        return coordinates.bearing_between(self.corners[0, :2], self.corners[1, :2])
 
     @property
     def dip_dir(self) -> float:  # numpydoc ignore=RT01
@@ -390,22 +378,7 @@ class Plane:
         if np.isclose(self.dip, 90):
             return 0.0
 
-        return coordinates.nztm_bearing_to_great_circle_bearing(
-            self.corners[0, :2], self.width, self.dip_dir_nztm
-        )
-
-    @property
-    def dip_dir_nztm(self) -> float:  # numpydoc ignore=RT01
-        """float: The bearing of the dip direction (from north; in degrees)."""
-        if np.isclose(self.dip, 90):
-            return 0  # TODO: Is this right for this case?
-        north_direction = np.array([1, 0, 0])
-        up_direction = np.array([0, 0, 1])
-        dip_direction = self.bounds[-1] - self.bounds[0]
-        dip_direction[-1] = 0
-        return geo.oriented_bearing_wrt_normal(
-            north_direction, dip_direction, up_direction
-        )
+        return coordinates.bearing_between(self.corners[0, :2], self.corners[-1, :2])
 
     @property
     def dip(self) -> float:  # numpydoc ignore=RT01
@@ -432,14 +405,13 @@ class Plane:
         )
 
     @classmethod
-    def from_nztm_trace(
+    def from_trace(
         cls,
-        trace_points_nztm: np.ndarray[float],
+        trace_points: np.ndarray[float],
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dip_dir: float,
     ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
@@ -448,47 +420,33 @@ class Plane:
 
         Parameters
         ----------
-        trace_points_nztm : np.ndarray
-            The surface trace of the fault in NZTM (y, x) format.
-            The order of the points is not important, as
-            strike, and therefore the correct order, is determined
-            from dip direction.
+        trace_points : np.ndarray
+            The surface trace of the fault. The order of the points is
+            not important, as strike, and therefore the correct order,
+            is determined from dip direction.
         dtop : float
             The top depth of the plane (in km).
         dbottom : float
             The bottom depth of the plane (in km).
         dip : float
             The dip of the fault plane (degrees).
-        dip_dir : float, optional
+        dip_dir : floa
             Plane dip direction (degrees).
-            One of `dip_dir` or `dip_dir_nztm` must be provided.
-
-            Note: If combining multiple planes into a fault using the great
-            circle bearing dip direction will cause issues, as the NZTM dip
-            direction across the Planes will not be consistent.
-        dip_dir_nztm : float, optional
-            Plane NZTM dip direction (degrees).
-            One of `dip_dir` or `dip_dir_nztm` must be provided.
 
         Returns
         -------
         Plane
             The fault plane with the given parameters.
         """
-        if dip_dir is not None and dip_dir_nztm is not None:
-            raise ValueError("Must supply at most one of dip_dir or dip_dir_nztm.")
+        trace_points_nztm = coordinates.wgs_depth_to_nztm(trace_points)
 
-        if dip_dir_nztm is None and dip_dir is None:
-            raise ValueError("Must supply at least one of dip_dir or dip_dir_nztm.")
-
-        if dip_dir_nztm is None and dip_dir is not None:
-            if np.isclose(dip, 90) or dip_dir == 0.0:
-                dip_dir_nztm = 0
-            else:
-                width = (dbottom - dtop) / np.sin(np.deg2rad(dip))
-                dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
-                    coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), width, dip_dir
-                )
+        if np.isclose(dip, 90) or dip_dir == 0.0:
+            dip_dir_nztm = 0
+        else:
+            width = (dbottom - dtop) / np.sin(np.deg2rad(dip))
+            dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
+                coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), width, dip_dir
+            )
 
         if trace_points_nztm.shape != (2, 2):
             raise ValueError("Trace points must be a 2x2 array.")
@@ -530,15 +488,14 @@ class Plane:
     def from_centroid_strike_dip(
         cls,
         centroid: np.ndarray,
+        strike: float,
         dip: float,
         length: float,
         width: float,
         dtop: Optional[float] = None,
         dbottom: Optional[float] = None,
-        strike: Optional[float] = None,
         dip_dir: Optional[float] = None,
-        strike_nztm: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        projection:
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -626,31 +583,8 @@ class Plane:
             )
         ):
             raise ValueError("Centroid depth and dbottom are inconsistent.")
-        elif not ((strike is None) ^ (strike_nztm is None)):
-            raise ValueError("Must supply exactly one of strike or NZTM strike.")
-        elif dip_dir is not None and dip_dir_nztm is not None:
-            raise ValueError(
-                "Must supply at most one of dip direction or NZTM dip direction."
-            )
 
-        if strike_nztm is None:
-            strike = coordinates.great_circle_bearing_to_nztm_bearing(
-                centroid[:2],
-                length / 2,
-                strike,
-            )
-        else:
-            strike = strike_nztm
-
-        if dip_dir_nztm is None and dip_dir is not None:
-            dip_dir = coordinates.great_circle_bearing_to_nztm_bearing(
-                centroid[:2],
-                width / 2,
-                dip_dir,
-            )
-        elif dip_dir is None and dip_dir_nztm is not None:
-            dip_dir = dip_dir_nztm
-        else:
+        if dip_dir is None:
             dip_dir = strike + 90
 
         # Values are definitely consistent, now infer dtop and dbottom
@@ -664,15 +598,11 @@ class Plane:
             dtop = dbottom - width * np.sin(np.radians(dip))
 
         projected_width = width * np.cos(np.radians(dip))
-        corners = grid.grid_corners(
-            centroid[:2],
-            strike,
-            dip_dir,
-            dtop,
-            dbottom,
-            length,
-            projected_width,
+        left_middle = coordinates.forward_bearing(centroid, strike, -length * 1000 / 2)
+        top_left = coordinates.forward_bearing(
+            left_middle, dip_dir, -projected_width * 1000 / 2
         )
+
         return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
@@ -1012,6 +942,31 @@ class Fault:
                     f"Fault must have a constant dip direction, plane {i} has dip direction {dip_dir}, but plane {i - 1} hase dip direction {dip_dir_prev}"
                 )
 
+    @classmethod
+    def from_trace(cls, trace_points: np.ndarray, **kwargs) -> Self:
+        """Create a fault from a trace.
+
+        Parameters
+        ----------
+        trace_points : np.ndarray
+            The surface trace of the fault. The order of the points is
+            not important, as strike, and therefore the correct order,
+            is determined by the dip direction.
+        kwargs : dict
+            Additional arguments to pass to `Plane.from_trace`.
+
+        Returns
+        -------
+        Fault
+            The fault object representing this geometry.
+        """
+        return cls(
+            [
+                Plane.from_trace(trace_points[i : i + 2], **kwargs)
+                for i in range(len(trace_points) - 1)
+            ]
+        )
+
     @property
     def dip(self) -> float:  # numpydoc ignore=RT01
         """float: The dip angle of the fault."""
@@ -1273,8 +1228,32 @@ def sources_as_geojson_features(sources: list[IsSource]) -> str:
     )
 
 
+class SourceBounds(NamedTuple):
+    """A named tuple representing the bounds of a source.
+
+    Attributes
+    ----------
+    x_min : float
+        The minimum x-coordinate of the source.
+    y_min : float
+        The minimum y-coordinate of the source.
+    x_max : float
+        The maximum x-coordinate of the source.
+    y_max : float
+        The maximum y-coordinate of the source.
+    """
+
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+
+
 def closest_point_between_sources(
-    source_a: IsSource, source_b: IsSource
+    source_a: IsSource,
+    source_b: IsSource,
+    source_a_bounds: SourceBounds = SourceBounds(x_min=0, x_max=1, y_min=0, y_max=1),
+    source_b_bounds: SourceBounds = SourceBounds(x_min=0, x_max=1, y_min=0, y_max=1),
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 
@@ -1284,6 +1263,12 @@ def closest_point_between_sources(
         The first source. Must have a two-dimensional fault coordinate system.
     source_b : IsSource
         The second source. Must have a two-dimensional fault coordinate system.
+    source_a_bounds : tuple[float, float], optional
+        The bounds of the first source in fault coordinates. Used to
+        constraint the optimisation process. Default is (0, 1).
+    source_b_bounds : tuple[float, float], optional
+        The bounds of the second source in fault coordinates. Used to
+        constrain the optimisation process. Default is (0, 1).
 
     Raises
     ------
@@ -1314,7 +1299,20 @@ def closest_point_between_sources(
     res = sp.optimize.least_squares(
         fault_coordinate_distance,
         np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
-        bounds=([0] * 4, [1] * 4),
+        bounds=(
+            [
+                source_a_bounds.x_min,
+                source_a_bounds.y_min,
+                source_b_bounds.x_min,
+                source_b_bounds.y_min,
+            ],
+            [
+                source_a_bounds.x_max,
+                source_a_bounds.y_max,
+                source_b_bounds.x_max,
+                source_b_bounds.y_max,
+            ],
+        ),
         gtol=1e-5,
         ftol=1e-5,
         xtol=1e-5,
