@@ -1,6 +1,7 @@
 """Magnitude scaling relationships for fault dimensions."""
 
 import functools
+import warnings
 from enum import Enum, StrEnum, auto
 
 import numpy as np
@@ -223,6 +224,11 @@ def leonard_magnitude_to_width(
     float
             Width of the fault. (km)
 
+    Warns
+    -----
+    UserWarning
+            If the width is out of range for the Leonard model.
+
     References
     ----------
     .. [0] Leonard, Mark. "Self‐consistent earthquake fault‐scaling
@@ -239,13 +245,13 @@ def leonard_magnitude_to_width(
     if rake_type(rake) == RakeType.STRIKE_SLIP:
         width = 10 ** ((magnitude - a_strike_slip_small) / b_strike_slip_small)
         if width > 19.0 or width < 3.4:
-            raise ValueError("Width out of range for Leonard model.")
+            warnings.warn("Width out of range for Leonard model.")
     else:
         a_dip_slip_small = sp.stats.norm(loc=3.67, scale=0.06).rvs() if random else 3.63
         b_dip_slip_small = 2.5
         width = 10 ** ((magnitude - a_dip_slip_small) / b_dip_slip_small)
         if width <= 5.4:
-            raise ValueError("Width out of range for Leonard model.")
+            warnings.warn("Width out of range for Leonard model.")
 
     return width
 
@@ -324,9 +330,9 @@ def contreras_interface_area_to_magnitude(area: float, random: bool = False) -> 
     float
         Moment magnitude of the fault.
 
-    Raises
-    ------
-    ValueError
+    Warns
+    -----
+    UserWarning
         If the area is less than the minimum area of 137.76 km^2.
 
     Notes
@@ -342,8 +348,8 @@ def contreras_interface_area_to_magnitude(area: float, random: bool = False) -> 
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
     """
-    if area < 137:
-        raise ValueError(
+    if area < 137.76:
+        warnings.warn(
             "Area out of range for Contreras model, minimum area is 137.76 km^2"
         )
     sigma_a = sp.stats.norm(loc=0, scale=0.73).rvs() if random else 0
@@ -370,9 +376,9 @@ def contreras_interface_magnitude_to_area(
     float
         Area of the fault. (km^2)
 
-    Raises
-    ------
-    ValueError
+    Warns
+    -----
+    UserWarning
         If the magnitude is less than the minimum magnitude of 6.
 
     Notes
@@ -389,7 +395,7 @@ def contreras_interface_magnitude_to_area(
            Research Letters 81.6 (2010): 941-950.
     """
     if magnitude < 6:
-        raise ValueError(
+        warnings.warn(
             "Magnitude out of range for Contreras model, minimum magnitude is 6"
         )
     sigma_a = sp.stats.norm(loc=0, scale=0.73).rvs() if random else 0
@@ -416,9 +422,9 @@ def contreras_interface_magnitude_to_aspect_ratio(
     float
         Aspect ratio of the fault.
 
-    Raises
-    ------
-    ValueError
+    Warns
+    -----
+    UserWarning
         If the magnitude is less than the minimum magnitude of 6.
 
     References
@@ -426,7 +432,7 @@ def contreras_interface_magnitude_to_aspect_ratio(
     .. [0] Contreras, Victor, et al. "NGA-Sub source and path database." Earthquake Spectra 38.2 (2022): 799-840.
     """
     if magnitude < 6:
-        raise ValueError(
+        warnings.warn(
             "Magnitude out of range for Contreras model, minimum magnitude is 6"
         )
     a_3 = 0.6248
@@ -486,10 +492,10 @@ def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
     float
         Moment magnitude of the fault.
 
-    Raises
-    ------
-    ValueError
-        If the area is less than the minimum area of 137.76 km^2.
+    Warns
+    -----
+    UserWarning
+        If the area is not between the minimum and maximum area of the Strasser model, estimated at 130km^2 and 5212km^2.
 
     References
     ----------
@@ -503,7 +509,7 @@ def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
     lower_bound = 130
     upper_bound = 5212
     if not (lower_bound <= area <= upper_bound):
-        raise ValueError(
+        warnings.warn(
             f"Area out of range for Strasser model, area must be between {lower_bound} and {upper_bound} km^2."
         )
 
@@ -531,9 +537,9 @@ def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> f
     float
         Area of the fault. (km^2)
 
-    Raises
-    ------
-    ValueError
+    Warns
+    -----
+    UserWarning
         If the magnitude is less than the minimum magnitude of 5.9 or
         larger than the maximum magnitude of 7.8.
 
@@ -545,7 +551,7 @@ def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> f
            Research Letters 81.6 (2010): 941-950.
     """
     if not (5.9 <= magnitude <= 7.8):
-        raise ValueError(
+        warnings.warn(
             "Magnitude out of range for Strasser model, magnitude must be between 5.9 and 7.8"
         )
     a = -3.225
@@ -573,9 +579,9 @@ def contreras_slab_magnitude_to_aspect_ratio(
     float
         Aspect ratio of the fault.
 
-    Raises
-    ------
-    ValueError
+    Warns
+    -----
+    UserWarning
         If the magnitude is less than the minimum magnitude of 5.
 
     References
@@ -586,7 +592,7 @@ def contreras_slab_magnitude_to_aspect_ratio(
            https://doi.org/10.55461/RDWC6463
     """
     if magnitude < 5:
-        raise ValueError(
+        warnings.warn(
             "Magnitude out of range for Contreras model, minimum magnitude is 6"
         )
     a_3 = 0.216
@@ -658,7 +664,7 @@ def magnitude_to_length_width(
             Length and width of the fault estimated by the scaling relation.
     """
     if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
-        raise ValueError("Rake must be specified for Leonard scaling.")
+        warnings.warn("Rake must be specified for Leonard scaling.")
     scaling_relations_map = {
         ScalingRelation.LEONARD2014: functools.partial(
             leonard_magnitude_to_length_width, rake=rake, random=random
@@ -692,6 +698,11 @@ def magnitude_to_area(
     random : bool, optional
         If True, sample parameters according to uncertainties in the
         paper, otherwise use the mean values. Default is False.
+
+    Raises
+    ------
+    ValueError
+        If `scaling_relation` is `LEONARD2014` and `rake` is not specified.
 
     Returns
     -------
