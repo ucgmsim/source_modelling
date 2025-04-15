@@ -593,7 +593,7 @@ def contreras_slab_magnitude_to_aspect_ratio(
     """
     if magnitude < 5:
         warnings.warn(
-            "Magnitude out of range for Contreras model, minimum magnitude is 6"
+            "Magnitude out of range for Contreras model, minimum magnitude is 5"
         )
     a_3 = 0.216
     m_1 = 6.5
