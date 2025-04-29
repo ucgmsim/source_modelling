@@ -29,7 +29,7 @@ import numpy.typing as npt
 import scipy as sp
 import shapely
 
-from qcore import coordinates, geo, grid
+from qcore import coordinates, geo, grid, nhm
 
 _KM_TO_M = 1000
 
@@ -1042,6 +1042,35 @@ class Fault:
             The fault object representing this geometry.
         """
         return cls([Plane.from_corners(corners) for corners in fault_corners])
+
+    @classmethod
+    def from_nhm_fault(cls, nhm_fault: nhm.NHMFault) -> Self:
+        """Construct a fault from a NHM fault.
+
+        Parameters
+        ----------
+        nhm_fault : nhm.NHMFault
+            The NHM fault to convert.
+
+        Returns
+        -------
+        Fault
+            The fault object representing this geometry.
+        """
+        trace_points_nztm = coordinates.wgs_depth_to_nztm(nhm_fault.trace[:, ::-1])
+        n_planes = nhm_fault.trace.shape[0] - 1
+        return cls(
+            [
+                Plane.from_nztm_trace(
+                    np.array([trace_points_nztm[i], trace_points_nztm[i + 1]]),
+                    nhm_fault.dtop,
+                    nhm_fault.dbottom,
+                    nhm_fault.dip,
+                    dip_dir=nhm_fault.dip_dir,
+                )
+                for i in range(n_planes)
+            ]
+        )
 
     def area(self) -> float:
         """Compute the area of a fault.
