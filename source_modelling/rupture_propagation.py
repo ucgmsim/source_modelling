@@ -20,6 +20,7 @@ from typing import Literal, Optional
 
 import networkx as nx
 import numpy as np
+import scipy as sp
 from networkx.algorithms.tree import mst
 
 from qcore import coordinates
@@ -291,6 +292,99 @@ def shaw_dieterich_distance_model(distance: float, d0: float, delta: float) -> f
     return min(1, np.exp(-(distance - delta) / d0))
 
 
+def truncated_weibull_pdf(
+    x: float, upper_value: float, c: float = 3.353, scale_factor: float = 0.612
+) -> float:
+    """
+    Evaluate the PDF for a truncated Weibull distribution.
+
+    Parameters
+    ----------
+    x : float
+        The value at which to evaluate the PDF.
+    upper_value : float
+        Upper value for truncation of the Weibull distribution.
+    c : float, optional
+        Shape parameter of the Weibull distribution (default is 3.353).
+    scale_factor : float, optional
+        Scale factor of the Weibull distribution (default is 0.612).
+
+    Returns
+    -------
+    float
+        Expected value for the truncated Weibull distribution.
+    """
+    return upper_value * sp.stats.truncweibull_min(
+        c, 0, 1 / scale_factor, scale=scale_factor
+    ).pdf(x)
+
+
+def closest_point_between_sources_weighted(
+    source_a: sources.IsSource,
+    source_b: sources.IsSource,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Find the closest point between two sources that have local coordinates.
+
+    Parameters
+    ----------
+    source_a : IsSource
+        The first source. Must have a two-dimensional fault coordinate system.
+    source_b : IsSource
+        The second source. Must have a two-dimensional fault coordinate system.
+
+    Raises
+    ------
+    ValueError
+        Raised when we are unable to converge on the closest points between sources.
+
+    Returns
+    -------
+    source_a_coordinates : np.ndarray
+        The source-local coordinates of the closest point on source a.
+    source_b_coordinates : np.ndarray
+        The source-local coordinates of the closest point on source b.
+    """
+
+    def fault_coordinate_distance(
+        fault_coordinates: np.ndarray,
+    ) -> float:  # numpydoc ignore=GL08
+        source_a_global_coordinates = (
+            source_a.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates[:2])
+        )
+        source_b_global_coordinates = (
+            source_b.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates[2:])
+        )
+        distance = (
+            np.linalg.norm(
+                coordinates.wgs_depth_to_nztm(source_a_global_coordinates)
+                - coordinates.wgs_depth_to_nztm(source_b_global_coordinates)
+            )
+            / 1000
+        )
+        distance_weighting = min(0, -(distance - 1) / 3)
+        down_dip_a_weighting = np.log(
+            truncated_weibull_pdf(fault_coordinates[1], 1) + 1e-6
+        )
+        down_dip_b_weighting = np.log(
+            truncated_weibull_pdf(fault_coordinates[3], 1) + 1e-6
+        )
+        return -(distance_weighting + down_dip_a_weighting + down_dip_b_weighting)
+
+    res = sp.optimize.minimize(
+        fault_coordinate_distance,
+        np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
+        bounds=[(0, 1)] * 4,
+        method="trust-constr",
+        jac="3-point",
+    )
+
+    if not res.success and res.status != 0:
+        raise ValueError(
+            f"Optimisation failed to converge for provided sources: {res.message} with x = {res.x}"
+        )
+    return res.x[:2], res.x[2:]
+
+
 def prune_distance_graph(distances: DistanceGraph, cutoff: float) -> DistanceGraph:
     """
     Remove edges from a distance graph that exceed a cutoff.
@@ -446,7 +540,7 @@ def sample_rupture_propagation(
             source_b_name: distance_between(
                 source_a,
                 source_b,
-                *sources.closest_point_between_sources(source_a, source_b),
+                *closest_point_between_sources_weighted(source_a, source_b),
             )
             for source_b_name, source_b in sources_map.items()
             if source_a_name != source_b_name
@@ -454,9 +548,9 @@ def sample_rupture_propagation(
         for source_a_name, source_a in sources_map.items()
     }
     # Prune the distance graph to remove physically impossible jumps.
-    distance_graph = prune_distance_graph(
-        distance_graph, jump_impossibility_limit_distance
-    )
+    # distance_graph = prune_distance_graph(
+    #     distance_graph, jump_impossibility_limit_distance
+    # )
     # Convert the distance graph to a probability graph.
     jump_probability_graph = probability_graph(distance_graph)
     tree_sampler = (
@@ -505,7 +599,7 @@ def jump_points_from_rupture_tree(
     for source, parent in rupture_causality_tree.items():
         if parent is None:
             continue
-        source_point, parent_point = sources.closest_point_between_sources(
+        source_point, parent_point = closest_point_between_sources_weighted(
             source_map[source], source_map[parent]
         )
         jump_points[source] = JumpPair(parent_point, source_point)
