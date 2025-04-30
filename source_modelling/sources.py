@@ -1388,7 +1388,10 @@ def simplify_fault(fault: Fault, length_tolerance: float) -> Fault:
 
     while len(planes) > 1:
         lengths = [plane.length for plane in planes]
-        if all(length >= length_tolerance for length in lengths):
+        if all(
+            length > length_tolerance or np.isclose(length, length_tolerance)
+            for length in lengths
+        ):
             break
 
         min_length_index = np.argmin(lengths)

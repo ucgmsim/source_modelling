@@ -1205,7 +1205,9 @@ def test_simplify_fault(fault: Fault):
 
     if not consecutive_small_planes:
         assert len(simplified_fault.planes) == sum(
-            1 for plane in fault.planes if plane.length >= tolerance
+            1
+            for plane in fault.planes
+            if plane.length > tolerance or np.isclose(plane.length, tolerance)
         )
 
     # Check that the simplified fault is similar to the original fault
