@@ -108,10 +108,11 @@ class Segment:
             The Plane object representing the segment.
         """
         if not (
-            self.strike
+            self.strike is not None
             and self.dip
             and self.length
             and self.width
+            and self.dtop is not None
             and isinstance(self.top_centre, np.ndarray)
         ):
             raise ValueError(
