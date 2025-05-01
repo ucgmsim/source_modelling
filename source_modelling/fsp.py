@@ -337,6 +337,94 @@ class FSPFile:
             return fsp_file
 
 
+SEGMENT_HEADER_PATTERN = re.compile(
+    r"""
+    %\s*SEGMENT\s*\#\s*
+    (?P<segment_index>\d+)           # Segment index number
+    \s*:\s*
+    STRIKE\s*=\s*
+    (?P<strike>[\d.]+)               # Strike value in degrees
+    \s*deg\s*
+    DIP\s*=\s*
+    (?P<dip>[\d.]+)                  # Dip value in degrees
+    \s*deg
+    """,
+    re.VERBOSE,
+)
+
+DEPTH_TO_TOP_PATTERN = re.compile(
+    r"""
+    %\s*depth\s+to\s+top:\s+
+    Z2top\s*=\s*
+    (?P<dtop>[\d.]+)                 # Depth to top in km
+    \s*km
+    """,
+    re.VERBOSE,
+)
+
+LATLON_PATTERN = re.compile(
+    r"""
+    %\s*LAT\s*=\s*
+    (?P<lat>[+-]?\d+(?:\.\d+)?)      # Latitude value
+    \s*,\s*
+    LON\s*=\s*
+    (?P<lon>[+-]?\d+(?:\.\d+)?)      # Longitude value
+    """,
+    re.VERBOSE,
+)
+
+DXDZ_PATTERN = re.compile(
+    r"""
+    %\s*Dx\s*=\s*
+    (?P<dx>[+-]?\d+(?:\.\d+)?)       # Dx value in km
+    \s*km\s+
+    Dz\s*=\s*
+    (?P<dz>[+-]?\d+(?:\.\d+)?)       # Dz value in km
+    \s*km
+    """,
+    re.VERBOSE,
+)
+
+HYPOCENTRE_PATTERN = re.compile(
+    r"""
+    %\s*hypocenter\s+on\s+SEG\s+\#\s*\d+\s*:\s*
+    along-strike\s*\(X\)\s*=\s*
+    (?P<along_strike>[\d.]+)         # Along-strike value
+    \s*,\s*
+    down-dip\s*\(Z\)\s*=\s*
+    (?P<down_dip>[\d.]+)             # Down-dip value
+    """,
+    re.VERBOSE,
+)
+
+SUBFAULTS_PATTERN = re.compile(
+    r"""
+    %\s+Nsbfs\s*=\s*
+    (?P<subfaults>\d+)               # Number of subfaults
+    """,
+    re.VERBOSE,
+)
+
+DIMENSIONS_PATTERN = re.compile(
+    r"""
+    %\s+LEN\s*=\s*
+    (?P<length>\d+(?:\.\d+)?)        # Length in km
+    \s+km\s+
+    WID\s*=\s*
+    (?P<width>\d+(?:\.\d+)?)         # Width in km
+    \s+km
+    """,
+    re.VERBOSE,
+)
+
+COLUMN_HEADER_PATTERN = re.compile(
+    r"""
+    %\s+LAT\s+LON                    # Column header indicator
+    """,
+    re.VERBOSE,
+)
+
+
 def _parse_segment_slip(
     fsp_file_handle: IO[str], segment_count: int
 ) -> tuple[pd.DataFrame, list[Segment]]:
@@ -370,62 +458,59 @@ def _parse_segment_slip(
     """
     segments: list[Segment] = []
     segment_data: list[pd.DataFrame] = []
+
     for i in range(segment_count):
         segment = Segment()
         for line in fsp_file_handle:
-            # hunt for the line % Nsbfs = x, where x is the number of subfaults.
-            if segment_header := re.match(
-                r"%\s*SEGMENT\s*#\s*(\d+)\s*:\s*STRIKE\s*=\s*([\d.]+)\s*deg\s*DIP\s*=\s*([\d.]+)\s*deg",
-                line,
-            ):
-                segment_index, strike, dip = segment_header.groups()
-                if int(segment_index) != i + 1:
+            # Parse segment header with strike and dip values
+            if segment_header := SEGMENT_HEADER_PATTERN.match(line):
+                segment_index = int(segment_header.group("segment_index"))
+                if segment_index != i + 1:
                     raise FSPParseError(
                         f"Expected segment {i + 1} but found segment {segment_index}"
                     )
-                segment.strike = float(strike)
-                segment.dip = float(dip)
-            if dtop_match := re.match(
-                r"%\s*depth\s+to\s+top:\s+Z2top\s*=\s*([\d.]+)\s*km", line
-            ):
-                segment.dtop = float(dtop_match.group(1))
+                segment.strike = float(segment_header.group("strike"))
+                segment.dip = float(segment_header.group("dip"))
 
-            if latlon_match := re.match(
-                r"%\s*LAT\s*=\s*([+-]?\d+(?:\.\d+)?)\s*,\s*LON\s*=\s*([+-]?\d+(?:\.\d+)?)",
-                line,
-            ):
+            # Parse depth to top
+            if dtop_match := DEPTH_TO_TOP_PATTERN.match(line):
+                segment.dtop = float(dtop_match.group("dtop"))
+
+            # Parse latitude and longitude
+            if latlon_match := LATLON_PATTERN.match(line):
                 segment.top_centre = np.array(
-                    [float(latlon_match.group(1)), float(latlon_match.group(2))]
+                    [float(latlon_match.group("lat")), float(latlon_match.group("lon"))]
                 )
-            if dxdz_match := re.match(
-                r"%\s*Dx\s*=\s*([+-]?\d+(?:\.\d+)?)\s*km\s+Dz\s*=\s*([+-]?\d+(?:\.\d+)?)\s*km",
-                line,
-            ):
-                segment.dx = float(dxdz_match.group(1))
-                segment.dz = float(dxdz_match.group(2))
 
-            if hypocentre_match := re.match(
-                r"%\s*hypocenter\s+on\s+SEG\s+#\s*\d+\s*:\s*along-strike\s*\(X\)\s*=\s*([\d.]+)\s*,\s*down-dip\s*\(Z\)\s*=\s*([\d.]+)",
-                line,
-            ):
+            # Parse dx and dz values
+            if dxdz_match := DXDZ_PATTERN.match(line):
+                segment.dx = float(dxdz_match.group("dx"))
+                segment.dz = float(dxdz_match.group("dz"))
+
+            # Parse hypocentre information
+            if hypocentre_match := HYPOCENTRE_PATTERN.match(line):
                 segment.hypocentre = np.array(
-                    [float(hypocentre_match.group(1)), float(hypocentre_match.group(2))]
+                    [
+                        float(hypocentre_match.group("along_strike")),
+                        float(hypocentre_match.group("down_dip")),
+                    ]
                 )
 
-            if match := re.search(r"%\s+Nsbfs\s*=\s*(\d+)", line):
-                segment.subfaults = int(match.group(1))
-            # hunt for the line % LEN = x km WID = y km, where x and y are the
-            # length and width respectively.
-            if dimensions := re.match(
-                r"%\s+LEN\s*=\s*(\d+(\.\d+)?)\s+km\s+WID\s*=\s*(\d+(\.\d+)?)\s+km", line
-            ):
-                segment.length = float(dimensions.group(1))
-                segment.width = float(dimensions.group(3))
+            # Parse number of subfaults
+            if match := SUBFAULTS_PATTERN.search(line):
+                segment.subfaults = int(match.group("subfaults"))
 
-            if re.match(r"%\s+LAT\s+LON", line):
+            # Parse segment dimensions
+            if dimensions := DIMENSIONS_PATTERN.match(line):
+                segment.length = float(dimensions.group("length"))
+                segment.width = float(dimensions.group("width"))
+
+            # Check for column headers
+            if COLUMN_HEADER_PATTERN.match(line):
                 break
         else:
             raise FSPParseError(f"Cannot find columns for FSP file on segment {i + 1}.")
+
         segments.append(segment)
 
         if segment.subfaults is None:
@@ -435,16 +520,19 @@ def _parse_segment_slip(
 
         columns = line.lower().lstrip("% ").split()
         _ = next(fsp_file_handle)  # Skip header decoration
-        # read subfaults lines into StringIO buffer
+
+        # Read subfaults lines into StringIO buffer
         lines = io.StringIO(
             "\n".join([next(fsp_file_handle) for _ in range(segment.subfaults)])
         )
+
         data = pd.read_csv(
             lines,
             delimiter=r"\s+",
             header=None,
             names=columns,
         )
+
         data = data.rename(
             columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
         )
