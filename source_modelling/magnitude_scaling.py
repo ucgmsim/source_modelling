@@ -45,21 +45,17 @@ def rake_type(rake: float) -> RakeType:
     -------
     RakeType
         Type of rake of the fault.
-
-    Raises
-    ------
-    ValueError
-        If the rake is not between -180 and 180 degrees.
     """
-    if not (-180 <= rake <= 180):
-        raise ValueError("Rake must be between -180 and 180 degrees.")
-    if -30 <= rake <= 30 or 150 <= rake <= 210 or -180 <= rake <= -150:
+    rake %= 360
+    if (
+        (0 <= rake <= 30) or (150 <= rake <= 210) or (330 <= rake < 360)
+    ):  # Use < 360 because modulo maps 360 to 0
         return RakeType.STRIKE_SLIP
     elif 60 <= rake <= 120:
         return RakeType.REVERSE
-    elif -120 <= rake <= -60:
+    elif 240 <= rake <= 300:
         return RakeType.NORMAL
-    elif -150 < rake < -120 or -60 < rake < -30:
+    elif (210 < rake < 240) or (300 < rake < 330):
         return RakeType.NORMAL_OBLIQUE
     else:
         return RakeType.REVERSE_OBLIQUE
