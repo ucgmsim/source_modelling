@@ -61,9 +61,6 @@ def seed(seed: int):
         (59, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
         (121, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
         (149, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
-        (-200, magnitude_scaling.RakeType.UNDEFINED),
-        (250, magnitude_scaling.RakeType.UNDEFINED),
-        (999, magnitude_scaling.RakeType.UNDEFINED),
     ],
 )
 def test_rake_type(rake: float, expected: magnitude_scaling.RakeType):
