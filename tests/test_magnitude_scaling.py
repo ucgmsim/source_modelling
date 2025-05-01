@@ -46,7 +46,6 @@ def seed(seed: int):
         (0, magnitude_scaling.RakeType.STRIKE_SLIP),
         (30, magnitude_scaling.RakeType.STRIKE_SLIP),
         (150, magnitude_scaling.RakeType.STRIKE_SLIP),
-        (210, magnitude_scaling.RakeType.STRIKE_SLIP),
         (60, magnitude_scaling.RakeType.REVERSE),
         (90, magnitude_scaling.RakeType.REVERSE),
         (120, magnitude_scaling.RakeType.REVERSE),
@@ -61,13 +60,18 @@ def seed(seed: int):
         (59, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
         (121, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
         (149, magnitude_scaling.RakeType.REVERSE_OBLIQUE),
-        (-200, magnitude_scaling.RakeType.UNDEFINED),
-        (250, magnitude_scaling.RakeType.UNDEFINED),
-        (999, magnitude_scaling.RakeType.UNDEFINED),
     ],
 )
 def test_rake_type(rake: float, expected: magnitude_scaling.RakeType):
     assert magnitude_scaling.rake_type(rake) == expected
+
+
+def test_invalid_rake_type():
+    """Test that an invalid rake type raises a ValueError."""
+    with pytest.raises(ValueError):
+        magnitude_scaling.rake_type(200)  # Invalid rake value
+    with pytest.raises(ValueError):
+        magnitude_scaling.rake_type(-200)  # Invalid rake value
 
 
 def relation_with_magnitude(
