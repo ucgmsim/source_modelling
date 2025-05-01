@@ -30,6 +30,9 @@ import numpy as np
 import pandas as pd
 import parse
 
+from qcore import coordinates
+from source_modelling.sources import Plane
+
 HEADER_PATTERN = """EventTAG: {event_tag}
 Loc : LAT = {latitude:g} LON = {longitude:g} DEP = {depth:g}
 Size : LEN = {length:g} km WID = {width:g} km Mw = {magnitude:g} Mo = {moment:g} Nm
@@ -89,6 +92,50 @@ class Segment:
     """The width of the subfaults."""
     subfaults: Optional[int] = None
     """The number of subfaults in the segment."""
+
+    def as_plane(self) -> Plane:
+        """Convert the segment to a Plane object.
+
+        Note
+        ----
+        Only works for segments with a defined strike, dip, length,
+        width, and top_centre. Segments must be within the bounds of
+        NZTM coordinates to workflow reliably.
+
+        Returns
+        -------
+        Plane
+            The Plane object representing the segment.
+        """
+        if not (
+            self.strike
+            and self.dip
+            and self.length
+            and self.width
+            and isinstance(self.top_centre, np.ndarray)
+        ):
+            raise ValueError(
+                "Cannot convert segment to Plane: missing required attributes."
+            )
+        strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
+            self.top_centre, self.width, self.strike
+        )
+        top_centre_nztm = coordinates.wgs_depth_to_nztm(self.top_centre)
+        dip_dir = strike_nztm + 90
+        dip_direction = np.array(
+            [np.cos(np.radians(dip_dir)), np.sin(np.radians(dip_dir))]
+        )
+        projected_width = self.width * 1000 / 2 * np.cos(np.radians(self.dip))
+        centroid = projected_width * dip_direction + top_centre_nztm
+        return Plane.from_centroid_strike_dip(
+            coordinates.nztm_to_wgs_depth(centroid),
+            self.dip,
+            self.length,
+            self.width,
+            dtop=self.dtop,
+            strike_nztm=strike_nztm,
+            dip_dir_nztm=dip_dir,
+        )
 
 
 @dataclasses.dataclass
