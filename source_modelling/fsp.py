@@ -125,8 +125,9 @@ class Segment:
         dip_direction = np.array(
             [np.cos(np.radians(dip_dir)), np.sin(np.radians(dip_dir))]
         )
-        projected_width = self.width * 1000 / 2 * np.cos(np.radians(self.dip))
-        centroid = projected_width * dip_direction + top_centre_nztm
+        km_to_m = 1000
+        projected_width_m = self.width * km_to_m / 2 * np.cos(np.radians(self.dip))
+        centroid = projected_width_m * dip_direction + top_centre_nztm
         return Plane.from_centroid_strike_dip(
             coordinates.nztm_to_wgs_depth(centroid),
             self.dip,
