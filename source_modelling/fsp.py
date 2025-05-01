@@ -26,6 +26,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Optional
 
+import numpy as np
 import pandas as pd
 import parse
 
@@ -62,6 +63,32 @@ class FSPParseError(Exception):
     """Exception raised for errors in parsing FSP files."""
 
     pass
+
+
+@dataclasses.dataclass
+class Segment:
+    """A representation of a segment in an FSP file."""
+
+    strike: Optional[float] = None
+    """The strike of the segment."""
+    dip: Optional[float] = None
+    """The dip of the segment."""
+    length: Optional[float] = None
+    """The length of the segment."""
+    width: Optional[float] = None
+    """The width of the segment."""
+    dtop: Optional[float] = None
+    """The top depth of the segment."""
+    top_centre: Optional[np.ndarray] = None
+    """The top centre of the segment."""
+    hypocentre: Optional[np.ndarray] = None
+    """The hypocentre of the segment."""
+    dx: Optional[float] = None
+    """The length of the subfaults."""
+    dz: Optional[float] = None
+    """The width of the subfaults."""
+    subfaults: Optional[int] = None
+    """The number of subfaults in the segment."""
 
 
 @dataclasses.dataclass
@@ -130,6 +157,8 @@ class FSPFile:
         are the segement index, length and width respectively. To perform
         operations over multi-segment data, group by 'segment' and apply the
         operation to each group.
+    segments : list[Segment]
+        A list of segments, each containing a `Segment` object.
     """
 
     event_tag: str
@@ -176,6 +205,8 @@ class FSPFile:
     # Number of segments (== len(data))
     segment_count: int
     data: pd.DataFrame
+
+    segments: list[Segment] = dataclasses.field(default_factory=list)
 
     @classmethod
     def read_from_file(cls: Callable, fsp_ffp: Path) -> "FSPFile":
@@ -226,9 +257,13 @@ class FSPFile:
             velocity_model = _parse_velocity_density_structure(fsp_file_handle)
 
             # now sniff ahead for the columns
-            data = _parse_segment_slip(fsp_file_handle, metadata["segment_count"])
+            data, segments = _parse_segment_slip(
+                fsp_file_handle, metadata["segment_count"]
+            )
 
-            fsp_file = cls(data=data, velocity_model=velocity_model, **metadata)
+            fsp_file = cls(
+                data=data, velocity_model=velocity_model, segments=segments, **metadata
+            )
 
             # A lot of parameters can be 999 or -999 to indicate "no known
             # value", so we can detect that and set to None
@@ -255,7 +290,9 @@ class FSPFile:
             return fsp_file
 
 
-def _parse_segment_slip(fsp_file_handle: IO[str], segment_count: int) -> pd.DataFrame:
+def _parse_segment_slip(
+    fsp_file_handle: IO[str], segment_count: int
+) -> tuple[pd.DataFrame, list[Segment]]:
     """
     Parse segment slip data from an FSP file.
 
@@ -275,6 +312,8 @@ def _parse_segment_slip(fsp_file_handle: IO[str], segment_count: int) -> pd.Data
     pd.DataFrame
         A DataFrame containing parsed subfault data for all segments.
         The DataFrame includes a "segment" column identifying the segment index.
+    list[Segment]
+        A list of Segment objects representing each segment's properties.
 
     Raises
     ------
@@ -282,37 +321,76 @@ def _parse_segment_slip(fsp_file_handle: IO[str], segment_count: int) -> pd.Data
         If the column headers for a segment cannot be found or the number of
         subfaults for a segment is missing.
     """
-    segments: list[pd.DataFrame] = []
+    segments: list[Segment] = []
+    segment_data: list[pd.DataFrame] = []
     for i in range(segment_count):
-        subfaults = None
-        length = width = None
+        segment = Segment()
         for line in fsp_file_handle:
             # hunt for the line % Nsbfs = x, where x is the number of subfaults.
+            if segment_header := re.match(
+                r"%\s*SEGMENT\s*#\s*(\d+)\s*:\s*STRIKE\s*=\s*([\d.]+)\s*deg\s*DIP\s*=\s*([\d.]+)\s*deg",
+                line,
+            ):
+                segment_index, strike, dip = segment_header.groups()
+                if int(segment_index) != i + 1:
+                    raise FSPParseError(
+                        f"Expected segment {i + 1} but found segment {segment_index}"
+                    )
+                segment.strike = float(strike)
+                segment.dip = float(dip)
+            if dtop_match := re.match(
+                r"%\s*depth\s+to\s+top:\s+Z2top\s*=\s*([\d.]+)\s*km", line
+            ):
+                segment.dtop = float(dtop_match.group(1))
+
+            if latlon_match := re.match(
+                r"%\s*LAT\s*=\s*([+-]?\d+(?:\.\d+)?)\s*,\s*LON\s*=\s*([+-]?\d+(?:\.\d+)?)",
+                line,
+            ):
+                segment.top_centre = np.array(
+                    [float(latlon_match.group(1)), float(latlon_match.group(2))]
+                )
+            if dxdz_match := re.match(
+                r"%\s*Dx\s*=\s*([+-]?\d+(?:\.\d+)?)\s*km\s+Dz\s*=\s*([+-]?\d+(?:\.\d+)?)\s*km",
+                line,
+            ):
+                segment.dx = float(dxdz_match.group(1))
+                segment.dz = float(dxdz_match.group(2))
+
+            if hypocentre_match := re.match(
+                r"%\s*hypocenter\s+on\s+SEG\s+#\s*\d+\s*:\s*along-strike\s*\(X\)\s*=\s*([\d.]+)\s*,\s*down-dip\s*\(Z\)\s*=\s*([\d.]+)",
+                line,
+            ):
+                segment.hypocentre = np.array(
+                    [float(hypocentre_match.group(1)), float(hypocentre_match.group(2))]
+                )
+
             if match := re.search(r"%\s+Nsbfs\s*=\s*(\d+)", line):
-                subfaults = match.group(1)
+                segment.subfaults = int(match.group(1))
             # hunt for the line % LEN = x km WID = y km, where x and y are the
             # length and width respectively.
             if dimensions := re.match(
                 r"%\s+LEN\s*=\s*(\d+(\.\d+)?)\s+km\s+WID\s*=\s*(\d+(\.\d+)?)\s+km", line
             ):
-                length = float(dimensions.group(1))
-                width = float(dimensions.group(1))
+                segment.length = float(dimensions.group(1))
+                segment.width = float(dimensions.group(3))
+
             if re.match(r"%\s+LAT\s+LON", line):
                 break
         else:
             raise FSPParseError(f"Cannot find columns for FSP file on segment {i + 1}.")
+        segments.append(segment)
 
-        if subfaults is None:
+        if segment.subfaults is None:
             raise FSPParseError(
                 f"Cannot find number of subfaults for FSP file on segment {i + 1}."
             )
 
-        subfaults = int(subfaults)
         columns = line.lower().lstrip("% ").split()
         _ = next(fsp_file_handle)  # Skip header decoration
         # read subfaults lines into StringIO buffer
         lines = io.StringIO(
-            "\n".join([next(fsp_file_handle) for _ in range(subfaults)])
+            "\n".join([next(fsp_file_handle) for _ in range(segment.subfaults)])
         )
         data = pd.read_csv(
             lines,
@@ -324,13 +402,9 @@ def _parse_segment_slip(fsp_file_handle: IO[str], segment_count: int) -> pd.Data
             columns={"x==ew": "x", "y==ns": "y", "x==ns": "x", "y==ew": "y"}
         )
         data["segment"] = i
-        if length:
-            data["length"] = length
-        if width:
-            data["width"] = width
-        segments.append(data)
+        segment_data.append(data)
 
-    return pd.concat(segments)
+    return pd.concat(segment_data), segments
 
 
 def _parse_velocity_density_structure(
