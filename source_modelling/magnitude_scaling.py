@@ -47,7 +47,7 @@ def rake_type(rake: float) -> RakeType:
     RakeType
         Type of rake of the fault.
     """
-    if -30 <= rake <= 30 or 150 <= rake <= 210:
+    if -30 <= rake <= 30 or 150 <= rake <= 210 or -180 <= rake <= -150:
         return RakeType.STRIKE_SLIP
     elif 60 <= rake <= 120:
         return RakeType.REVERSE
