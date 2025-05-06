@@ -1297,13 +1297,13 @@ class CoordinateBounds(NamedTuple):
     """A class representing the coordinate bounds of a source."""
 
     min_strike: float
-    """Minimum strike coordinate (0-1)."""
+    """float: Minimum normalised strike coordinate, in the range of [0, 1]."""
     min_dip: float
-    """Minimum dip coordinate (0-1)."""
+    """float: Minimum normalised dip coordinate, in the range of [0, 1]."""
     max_strike: float
-    """Maximum strike coordinate (0-1)."""
+    """float: Maximum normalised strike coordinate, in the range of [0, 1]."""
     max_dip: float
-    """Maximum dip coordinate (0-1)."""
+    """float: Maximum normalised dip coordinate, in the range of [0, 1]."""
 
 
 def closest_point_between_sources(
