@@ -422,6 +422,16 @@ class Plane:
         return shapely.Polygon(self.bounds)
 
     @property
+    def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
+        """np.ndarray: The trace of the fault plane on the surface."""
+        return self.bounds[:2]
+
+    @property
+    def trace_geometry(self) -> shapely.LineString:  # numpydoc ignore=RT01
+        """shapely.LineString: The trace of the fault plane on the surface."""
+        return shapely.LineString(self.trace)
+
+    @property
     def geojson(self) -> dict:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
@@ -1100,6 +1110,16 @@ class Fault:
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 
+    @property
+    def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
+        """np.ndarray: The trace of the fault plane on the surface."""
+        return np.vstack([plane.trace for plane in self.planes])
+
+    @property
+    def trace_geometry(self) -> shapely.LineString:  # numpydoc ignore=RT01
+        """shapely.LineString: The trace of the fault plane on the surface."""
+        return shapely.LineString(self.trace)
+
     def wgs_depth_coordinates_to_fault_coordinates(
         self, global_coordinates: np.ndarray
     ) -> np.ndarray:
@@ -1368,7 +1388,10 @@ def simplify_fault(fault: Fault, length_tolerance: float) -> Fault:
 
     while len(planes) > 1:
         lengths = [plane.length for plane in planes]
-        if all(length >= length_tolerance for length in lengths):
+        if all(
+            length > length_tolerance or np.isclose(length, length_tolerance)
+            for length in lengths
+        ):
             break
 
         min_length_index = np.argmin(lengths)
