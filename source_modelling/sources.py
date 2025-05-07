@@ -21,7 +21,7 @@ import dataclasses
 import itertools
 import json
 import warnings
-from typing import Optional, Self
+from typing import NamedTuple, Optional, Self
 
 import networkx as nx
 import numpy as np
@@ -1293,8 +1293,28 @@ def sources_as_geojson_features(sources: list[IsSource]) -> str:
     )
 
 
+class CoordinateBounds(NamedTuple):
+    """A class representing the coordinate bounds of a source."""
+
+    min_strike: float
+    """float: Minimum normalised strike coordinate, in the range of [0, 1]."""
+    min_dip: float
+    """float: Minimum normalised dip coordinate, in the range of [0, 1]."""
+    max_strike: float
+    """float: Maximum normalised strike coordinate, in the range of [0, 1]."""
+    max_dip: float
+    """float: Maximum normalised dip coordinate, in the range of [0, 1]."""
+
+
 def closest_point_between_sources(
-    source_a: IsSource, source_b: IsSource
+    source_a: IsSource,
+    source_b: IsSource,
+    source_a_coordinate_bounds: CoordinateBounds = CoordinateBounds(
+        min_strike=0, min_dip=0, max_strike=1, max_dip=1
+    ),
+    source_b_coordinate_bounds: CoordinateBounds = CoordinateBounds(
+        min_strike=0, min_dip=0, max_strike=1, max_dip=1
+    ),
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 
@@ -1304,6 +1324,10 @@ def closest_point_between_sources(
         The first source. Must have a two-dimensional fault coordinate system.
     source_b : IsSource
         The second source. Must have a two-dimensional fault coordinate system.
+    source_a_coordinate_bounds : CoordinateBounds, optional
+        The coordinate bounds of the first source. Default is unconstrained.
+    source_b_coordinate_bounds : CoordinateBounds, optional
+        The coordinate bounds of the second source. Default is unconstrained.
 
     Raises
     ------
@@ -1331,10 +1355,20 @@ def closest_point_between_sources(
             source_a_global_coordinates
         ) - coordinates.wgs_depth_to_nztm(source_b_global_coordinates)
 
+    # We could use the named accessor here, but this method works with
+    # both namedtuples or regular tuples, in case those are passed by
+    # mistake.
+    min_bounds = list(source_a_coordinate_bounds[:2]) + list(
+        source_b_coordinate_bounds[:2]
+    )
+    max_bounds = list(source_a_coordinate_bounds[2:]) + list(
+        source_b_coordinate_bounds[2:]
+    )
+
     res = sp.optimize.least_squares(
         fault_coordinate_distance,
         np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
-        bounds=([0] * 4, [1] * 4),
+        bounds=(min_bounds, max_bounds),
         gtol=1e-5,
         ftol=1e-5,
         xtol=1e-5,
