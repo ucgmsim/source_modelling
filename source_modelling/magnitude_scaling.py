@@ -16,7 +16,6 @@ class RakeType(Enum):
     STRIKE_SLIP = auto()
     REVERSE_OBLIQUE = auto()
     NORMAL_OBLIQUE = auto()
-    UNDEFINED = auto()
 
 
 class ScalingRelation(StrEnum):
@@ -47,18 +46,19 @@ def rake_type(rake: float) -> RakeType:
     RakeType
         Type of rake of the fault.
     """
-    if -30 <= rake <= 30 or 150 <= rake <= 210:
+    rake %= 360
+    if (
+        (0 <= rake <= 30) or (150 <= rake <= 210) or (330 <= rake < 360)
+    ):  # Use < 360 because modulo maps 360 to 0
         return RakeType.STRIKE_SLIP
     elif 60 <= rake <= 120:
         return RakeType.REVERSE
-    elif -120 <= rake <= -60:
+    elif 240 <= rake <= 300:
         return RakeType.NORMAL
-    elif -150 < rake < -120 or -60 < rake < -30:
+    elif (210 < rake < 240) or (300 < rake < 330):
         return RakeType.NORMAL_OBLIQUE
-    elif 30 < rake < 60 or 120 < rake < 150:
+    else:
         return RakeType.REVERSE_OBLIQUE
-
-    return RakeType.UNDEFINED
 
 
 def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) -> float:

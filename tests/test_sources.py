@@ -432,6 +432,10 @@ def test_plane_from_trace(data: tuple):
         plane.projected_width / np.cos(np.radians(plane.dip)), abs=1e-6
     )
     assert pytest.approx(plane.length_m, abs=1e-3) == length
+    assert shapely.get_coordinates(
+        plane.trace_geometry, include_z=True
+    ) == pytest.approx(plane.bounds[:2])
+
     if plane.dip == 90:
         assert shapely.get_coordinates(plane.geometry, include_z=True) == pytest.approx(
             plane.bounds[:2]
@@ -886,6 +890,9 @@ def test_fault_construction(fault: Fault):
     assert fault.geometry.equals(
         shapely.union_all([plane.geometry for plane in fault.planes])
     )
+    assert fault.trace_geometry.equals(
+        shapely.union_all([plane.trace_geometry for plane in fault.planes])
+    )
     assert np.allclose(
         fault.wgs_depth_coordinates_to_fault_coordinates(fault.centroid),
         np.array([1 / 2, 1 / 2]),
@@ -1198,7 +1205,9 @@ def test_simplify_fault(fault: Fault):
 
     if not consecutive_small_planes:
         assert len(simplified_fault.planes) == sum(
-            1 for plane in fault.planes if plane.length >= tolerance
+            1
+            for plane in fault.planes
+            if plane.length > tolerance or np.isclose(plane.length, tolerance)
         )
 
     # Check that the simplified fault is similar to the original fault
