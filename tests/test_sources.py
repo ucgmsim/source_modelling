@@ -1233,3 +1233,39 @@ def test_sources_as_geojson(faults: list[Fault]):
             "LineString",
             "MultiLineString",
         }
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=5),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    )
+)
+def test_fault_from_trace(fault: Fault):
+    trace = coordinates.nztm_to_wgs_depth(fault.trace[:, :2])
+
+    # Remove duplicated points
+    if len(fault.planes) > 1:
+        trace = np.concatenate((trace[0, None], trace[1:-1, :][::2], trace[-1, None]), axis=0)
+
+    new_fault = Fault.from_trace_points(
+        trace,
+        min(fault.bounds[:, 2]) / 1000,
+        max(fault.bounds[:, 2]) / 1000,
+        fault.dip,
+        dip_dir_nztm=fault.dip_dir_nztm
+    )
+
+    assert pytest.approx(new_fault.dip, abs=1e-6) == fault.dip
+    assert pytest.approx(new_fault.dip_dir, abs=1e-3) == fault.dip_dir
+    assert np.allclose(new_fault.trace, fault.trace, atol=1e-3)
+    assert np.allclose(new_fault.bounds, fault.bounds, atol=1e-3)
+
+
+    
+
+    
