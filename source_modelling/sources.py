@@ -26,10 +26,12 @@ from typing import NamedTuple, Optional, Self
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
+import pyproj
 import scipy as sp
 import shapely
 
-from qcore import coordinates, geo, grid
+from qcore import coordinates, geo
+from qcore.coordinates import SphericalProjection
 
 _KM_TO_M = 1000
 
@@ -52,8 +54,7 @@ class Point:
         The dip direction of the point source in degrees.
     """
 
-    # The bounds of a point source are just the coordinates of the point
-    bounds: np.ndarray
+    centroid: np.ndarray
     # used to approximate point source as a small planar patch (metres).
     length_m: float
     # The usual strike, dip, dip direction, etc cannot be calculated
@@ -61,30 +62,6 @@ class Point:
     strike: float
     dip: float
     dip_dir: float
-
-    @classmethod
-    def from_lat_lon_depth(cls, point_coordinates: np.ndarray, **kwargs) -> Self:
-        """Construct a point source from a lat, lon, depth format.
-
-        Parameters
-        ----------
-        point_coordinates : np.ndarray
-            The coordinates of the point in lat, lon, depth format.
-        **kwargs : dict
-            The remaining point source arguments (see the class-level docstring).
-
-        Returns
-        -------
-        Point
-            The Point source representing this geometry.
-
-        """
-        return cls(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
-
-    @property
-    def coordinates(self) -> np.ndarray:  # numpydoc ignore=RT01
-        """np.ndarray: The coordinates of the point in (lat, lon, depth) format. Depth is in metres."""
-        return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
     def length(self) -> float:  # numpydoc ignore=RT01
@@ -102,14 +79,9 @@ class Point:
         return self.width_m / _KM_TO_M
 
     @property
-    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
-        """np.ndarray: The centroid of the point source (which is just the point's coordinates)."""
-        return self.coordinates
-
-    @property
     def geometry(self) -> shapely.Point:  # numpydoc ignore=RT01
         """shapely.Point: A shapely geometry for the point (projected onto the surface)."""
-        return shapely.Point(self.bounds)
+        return shapely.Point(self.centroid)
 
     @property
     def geojson(self) -> dict:  # numpydoc ignore=RT01
@@ -162,8 +134,8 @@ class Point:
         ValueError
             If the point is not near the source point.
         """
-        nztm_coordinates = coordinates.wgs_depth_to_nztm(wgs_depth_coordinates)
-        distance = np.abs(nztm_coordinates - self.bounds).max() / _KM_TO_M
+        local_coordinates = self._projection(wgs_depth_coordinates)
+        distance = np.abs(local_coordinates - self.bounds).max() / _KM_TO_M
         if distance < self.length / 2 or np.isclose(distance, self.length / 2):
             return np.array([1 / 2, 1 / 2])  # Point is in the centre of the small patch
         raise ValueError("Given global coordinates out of bounds for point source.")
@@ -182,9 +154,8 @@ class Point:
         float
             The rrup distance (in metres) between the point and the fault geometry.
         """
-        return coordinates.distance_between_wgs_depth_coordinates(
-            self.coordinates, point
-        )
+        point_local = self._projection(*point.T)
+        return np.linalg.norm(point_local - self._projection(*self.centroid))
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.
@@ -200,8 +171,9 @@ class Point:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        projection = self._projection
+        return shapely.transform(self.geometry, lambda xx: projection(*xx.T)).distance(
+            shapely.transform(shapely.Point(point), lambda xx: projection(*xx.T))
         )
 
 
@@ -233,73 +205,12 @@ class Plane:
          3            2
     """
 
-    bounds: npt.NDArray[np.float32]
-
-    def _check_bounds_form_plane(self):
-        """Check that the bounds form a plane.
-
-        The checks performed are:
-            1. Two points with a minimum depth.
-            2. Two points with a maximum depth.
-            3. Four points total, spanning exactly a plane. Not a line or a point.
-
-        Raises
-        ------
-        ValueError
-            If the bounds do not form a plane.
-        """
-        top_mask = np.isclose(self.bounds[:, 2], self.bounds[:, 2].min())
-        top = self.bounds[top_mask]
-        bottom = self.bounds[~top_mask]
-        if (
-            np.linalg.matrix_rank(self.bounds) != 3
-            or len(top) != 2
-            or len(self.bounds) != 4
-            or not np.isclose(bottom[0, 2], bottom[1, 2])
-        ):
-            raise ValueError("Bounds do not form a plane.")
-
-    def __post_init__(self):
-        """Check that the plane bounds are consistent and in the correct order.
-
-        These checks are performed to ensure that the corners of the plane
-        actually form a plane, and the order of the points is in the order
-        required for the plane coordinates to make sense. The plane coordinates
-        require the first two points to be the top left and top right corners
-        (with respect to strike), and the last two points to be the bottom right
-        and bottom left corners (with respect to strike).
-
-        These checks are non-trivial which is why we implement them here instead
-        of requiring the caller to verify this themselves.
-
-        Raises
-        ------
-        ValueError
-            If the bounds do not form a plane.
-        """
-        self._check_bounds_form_plane()
-
-        top_mask = np.isclose(self.bounds[:, 2], self.bounds[:, 2].min())
-        top = self.bounds[top_mask]
-        bottom = self.bounds[~top_mask]
-        # We want to ensure that the bottom and top are pointing in roughly the
-        # same direction. To do this, we compare the dot product of the top and
-        # bottom vectors. If the dot product is positive then they are pointing
-        # in roughly the same direction, if it is negative then they are
-        # pointing in opposite directions.
-        if np.dot(top[1] - top[0], bottom[0] - bottom[1]) < 0:
-            bottom = bottom[::-1]
-        orientation = np.linalg.det(
-            np.array([top[1] - top[0], bottom[1] - top[0]])[:, :-1]
-        )
-
-        # If the orientation is not close to 0 and is negative, then dip
-        # direction is to the left of the strike direction, so we reverse
-        # the order of the top and bottom corners.
-        if not np.isclose(orientation, 0, atol=1e-3) and orientation < 0:
-            top = top[::-1]
-            bottom = bottom[::-1]
-        self.bounds = np.array([top[0], top[1], bottom[0], bottom[1]])
+    centroid: npt.NDArray[np.float64]
+    strike: float
+    dip: float
+    dip_dir: Optional[float]
+    length_m: float
+    width_m: float
 
     @classmethod
     def from_corners(cls, corners: np.ndarray) -> Self:
@@ -315,32 +226,102 @@ class Plane:
         Plane
             The plane source representing this geometry.
         """
-        return cls(coordinates.wgs_depth_to_nztm(corners))
+        # find the centroid of the plane
+        geod = pyproj.Geod(ellps="sphere")
+        mid_depth = np.mean(corners[:, 2])
+        lat0, lon0, _ = corners[0]
+        sum_x: float = 0
+        sum_y: float = 0
+        for lat, lon, _ in corners:
+            # Convert to Cartesian offset
+            az12, _, dist = geod.inv(lon0, lat0, lon, lat)
+            x = dist * np.cos(np.radians(az12))
+            y = dist * np.sin(np.radians(az12))
+            sum_x += x
+            sum_y += y
+
+        avg_x = sum_x / 3
+        avg_y = sum_y / 3
+
+        avg_dist = np.hypot(avg_x, avg_y)
+        avg_az = np.degrees(np.arctan2(avg_y, avg_x))
+
+        lon_mid, lat_mid, _ = geod.fwd(lon0, lat0, avg_az, avg_dist)
+        centroid = np.array([lat_mid, lon_mid, mid_depth])
+
+        # find the strike and dip
+
+        projection = coordinates.SphericalProjection(
+            mlon=centroid[1], mlat=centroid[0], mrot=0.0
+        )
+        corners_local = projection(*corners.T)
+
+        top_mask = corners_local[:, 2] == corners_local[:, 2].min()
+
+        top = corners_local[top_mask]
+        bottom = corners_local[~top_mask]
+        # We want to ensure that the bottom and top are pointing in roughly the
+        # same direction. To do this, we compare the dot product of the top and
+        # bottom vectors. If the dot product is positive then they are pointing
+        # in roughly the same direction, if it is negative then they are
+        # pointing in opposite directions.
+        # if np.dot(top[1] - top[0], bottom[0] - bottom[1]) < 0:
+        #     bottom = bottom[::-1]
+        # orientation = np.linalg.det(
+        #     np.array([top[1] - top[0], bottom[1] - top[0]])[:, :-1]
+        # )
+
+        # # If the orientation is not close to 0 and is negative, then dip
+        # # direction is to the left of the strike direction, so we reverse
+        # # the order of the top and bottom corners.
+        # if not np.isclose(orientation, 0, atol=1e-3) and orientation < 0:
+        #     top = top[::-1]
+        #     bottom = bottom[::-1]
+
+        # if (
+        #     np.linalg.matrix_rank(corners_local) != 3
+        #     or len(top) != 2
+        #     or len(corners_local) != 4
+        #     or not np.isclose(bottom[0, 2], bottom[1, 2])
+        # ):
+        #     raise ValueError("Corners do not form a plane.")
+
+        length = np.linalg.norm(top[1] - top[0])
+        width = np.linalg.norm(bottom[1] - top[0])
+
+        strike_direction = top[1] - top[0]
+        strike = np.degrees(np.arctan2(strike_direction[0], -strike_direction[1])) % 360
+        dip_direction = bottom[1] - top[0]
+        dip_dir = np.degrees(np.arctan2(dip_direction[0], -dip_direction[1])) % 360
+
+        depth = bottom[0, 2] - top[0, 2]
+        dip = np.degrees(np.arcsin(depth / width))
+
+        return cls(
+            centroid=centroid,
+            strike=strike,
+            dip=dip,
+            dip_dir=dip_dir,
+            length_m=length,
+            width_m=width,
+        )
 
     @property
     def corners(self) -> np.ndarray:  # numpydoc ignore=RT01
         """np.ndarray: The corners of the fault plane in (lat, lon, depth) format. The corners are the same as in corners_nztm."""
-        return coordinates.nztm_to_wgs_depth(self.bounds)
-
-    @property
-    def length_m(self) -> float:  # numpydoc ignore=RT01
-        """float: The length of the fault plane (in metres)."""
-        return float(np.linalg.norm(self.bounds[1] - self.bounds[0]))
-
-    @property
-    def width_m(self) -> float:  # numpydoc ignore=RT01
-        """float: The width of the fault plane (in metres)."""
-        return float(np.linalg.norm(self.bounds[-1] - self.bounds[0]))
+        return self._projection.inverse(
+            self.bounds[:, 0], self.bounds[:, 1], self.bounds[:, 2]
+        )
 
     @property
     def bottom_m(self) -> float:  # numpydoc ignore=RT01
         """float: The bottom depth (in metres)."""
-        return self.bounds[-1, -1]
+        return self.centroid[2] + np.sin(np.radians(self.dip)) * self.width_m / 2
 
     @property
     def top_m(self) -> float:  # numpydoc ignore=RT01
         """float: The top depth of the fault."""
-        return self.bounds[0, -1]
+        return self.centroid[2] - np.sin(np.radians(self.dip)) * self.width_m / 2
 
     @property
     def width(self) -> float:  # numpydoc ignore=RT01
@@ -368,41 +349,18 @@ class Plane:
         return self.projected_width_m / _KM_TO_M
 
     @property
-    def strike(self) -> float:  # numpydoc ignore=RT01
-        """float: The WGS84 bearing of the strike direction of the fault (from north; in degrees)."""
-        return coordinates.bearing_between(self.corners[0, :2], self.corners[1, :2])
-
-    @property
-    def dip_dir(self) -> float:  # numpydoc ignore=RT01
-        """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
-        if np.isclose(self.dip, 90):
-            return 0.0
-
-        return coordinates.bearing_between(self.corners[0, :2], self.corners[-1, :2])
-
-    @property
-    def dip(self) -> float:  # numpydoc ignore=RT01
-        """float: The dip angle of the fault."""
-        return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
-
-    @property
     def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the plane (projected onto the surface).
 
         Geometry will be a LineString if `dip = 90`."""
         if self.dip == 90:
-            return shapely.LineString(self.bounds[:2])
-        return shapely.Polygon(self.bounds)
+            return shapely.LineString(self.corners[:2])
+        return shapely.Polygon(self.corners)
 
     @property
     def geojson(self) -> dict:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
-        return shapely.to_geojson(
-            shapely.transform(
-                self.geometry,
-                lambda coords: coordinates.nztm_to_wgs_depth(coords)[:, ::-1],
-            )
-        )
+        return shapely.to_geojson(self.geometry)
 
     @classmethod
     def from_trace(
@@ -411,7 +369,7 @@ class Plane:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: float,
+        dip_dir: float | None,
     ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
@@ -430,59 +388,57 @@ class Plane:
             The bottom depth of the plane (in km).
         dip : float
             The dip of the fault plane (degrees).
-        dip_dir : floa
-            Plane dip direction (degrees).
+        dip_dir : float, optional
+            Plane dip direction (degrees). Must be None if dip = 90.
 
         Returns
         -------
         Plane
             The fault plane with the given parameters.
         """
-        trace_points_nztm = coordinates.wgs_depth_to_nztm(trace_points)
-
-        if np.isclose(dip, 90) or dip_dir == 0.0:
-            dip_dir_nztm = 0
-        else:
-            width = (dbottom - dtop) / np.sin(np.deg2rad(dip))
-            dip_dir_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
-                coordinates.nztm_to_wgs_depth(trace_points_nztm[0]), width, dip_dir
+        if (dip_dir == None) != (dip == 90):
+            raise ValueError(
+                "Must supply dip direction, or use dip_dir = None if dip = 90."
             )
 
-        if trace_points_nztm.shape != (2, 2):
-            raise ValueError("Trace points must be a 2x2 array.")
+        width = (dbottom - dtop) / np.sin(np.radians(dip))
+        geod = pyproj.Geod(ellps="sphere")
+        # The `npts` method returns equally spaced points between two endpoints.
+        # Setting the number of points to 1 gives us the midpoint between the two endpoints.
+        top_mid_lon, top_mid_lat = geod.npts(
+            trace_points[0, 1],
+            trace_points[0, 0],
+            trace_points[1, 1],
+            trace_points[1, 0],
+            1,
+        )[0]  # npts returns a list, so we take the first element
 
-        if np.isclose(dip, 90) and dip_dir_nztm != 0:
-            raise ValueError("Dip direction must be 0 for vertical faults.")
-
+        if dip_dir is None:
+            centroid_lon, centroid_lat = top_mid_lat, top_mid_lon
+        else:
+            centroid_lon, centroid_lat, _ = geod.fwd(
+                trace_points[0, 1], trace_points[0, 0], dip_dir, width / 2
+            )
         dtop, dbottom = dtop * _KM_TO_M, dbottom * _KM_TO_M
+        centroid = np.array([centroid_lat, centroid_lon, (dbottom + dtop) / 2])
+        projection = coordinates.SphericalProjection(
+            mlon=centroid_lon, mlat=centroid_lat, mrot=0.0
+        )
+        # Convert the trace points to the local projection
+        trace_points_local = projection(*trace_points.T)
 
-        # Define the trace corners in NZTM coordinates (y, x, depth)
-        corners_top = np.column_stack((trace_points_nztm, np.array([dtop, dtop])))
-
-        # Compute remaining corners
-        if np.isclose(dip, 90):
-            corners_bottom = np.column_stack(
-                (trace_points_nztm, np.array([dbottom, dbottom]))
-            )
-        else:
-            dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
-            proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
-
-            displacement = np.array(
-                [
-                    np.cos(dip_dir_nztm_rad) * proj_width,
-                    np.sin(dip_dir_nztm_rad) * proj_width,
-                    dbottom - dtop,
-                ]
-            )
-
-            # Apply displacement to trace points to get c3 and c4
-            corners_bottom = corners_top + displacement
-
-        # Flip the order of the bottom corners
-        corners_bottom = corners_bottom[::-1]
-
-        return cls(np.vstack((corners_top, corners_bottom)))
+        # Calculate the strike direction
+        strike_direction = trace_points_local[1] - trace_points_local[0]
+        strike = np.degrees(np.arctan2(strike_direction[0], -strike_direction[1])) % 360
+        length_m = np.linalg.norm(trace_points_local[1] - trace_points_local[0])
+        return cls(
+            centroid=centroid,
+            width_m=width * _KM_TO_M,
+            length_m=length_m,
+            strike=strike,
+            dip=dip,
+            dip_dir=dip_dir,
+        )
 
     @classmethod
     def from_centroid_strike_dip(
@@ -495,7 +451,6 @@ class Plane:
         dtop: Optional[float] = None,
         dbottom: Optional[float] = None,
         dip_dir: Optional[float] = None,
-        projection:
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -587,28 +542,69 @@ class Plane:
         if dip_dir is None:
             dip_dir = strike + 90
 
-        # Values are definitely consistent, now infer dtop and dbottom
-        # based on what we have.
-        if dtop is None and dbottom is None:
-            dtop = centroid[2] - width / 2 * np.sin(np.radians(dip))
-            dbottom = centroid[2] + width / 2 * np.sin(np.radians(dip))
-        elif dtop is not None:
-            dbottom = dtop + width * np.sin(np.radians(dip))
-        elif dbottom is not None:
-            dtop = dbottom - width * np.sin(np.radians(dip))
+        if centroid.shape == (2,):
+            centroid = np.append(centroid, (dbottom - dtop) / 2 * _KM_TO_M)
 
-        projected_width = width * np.cos(np.radians(dip))
-        left_middle = coordinates.forward_bearing(centroid, strike, -length * 1000 / 2)
-        top_left = coordinates.forward_bearing(
-            left_middle, dip_dir, -projected_width * 1000 / 2
+        return cls(
+            strike=strike,
+            dip=dip,
+            dip_dir=dip_dir,
+            length=length,
+            width=width,
+            centroid=centroid,
         )
 
-        return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
+    @property
+    def _projection(self) -> SphericalProjection:
+        """SphericalProjection: The coordinate projection system for the plane."""
+        return SphericalProjection(
+            mlon=self.centroid[1], mlat=self.centroid[0], mrot=0.0
+        )
 
     @property
-    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
-        """np.ndarray: The center of the fault plane."""
-        return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
+    def bounds(self) -> np.ndarray:  # numpydoc ignore=RT01
+        """np.ndarray: The corners of the fault plane in local spherical coordinates."""
+        projection = self._projection
+
+        centroid = projection(self.centroid[0], self.centroid[1]).ravel()
+
+        strike_direction = np.array(
+            [
+                np.sin(np.radians(self.strike)),
+                -np.cos(
+                    np.radians(self.strike)
+                ),  # north is down in the spherical projection
+            ]
+        )
+        dtop = self.top_m
+        dbottom = self.bottom_m
+        if self.dip_dir is None:
+            dip_direction = np.zeros_like(strike_direction)
+        else:
+            dip_direction = np.array(
+                [
+                    np.sin(np.radians(self.dip_dir)),
+                    -np.cos(np.radians(self.dip_dir)),
+                ]
+            )
+
+        # Create the frame of reference
+        basis = (
+            np.array(
+                [
+                    [-1, -1],  # origin
+                    [1, -1],  # x_upper
+                    [1, 1],
+                    [-1, 1],
+                ],
+                dtype=np.float64,
+            )
+            * np.array([self.length_m, self.projected_width_m])
+            * 0.5
+        )
+
+        corners = centroid + basis @ np.array([strike_direction, dip_direction])
+        return np.c_[corners, np.array([dtop, dtop, dbottom, dbottom])]
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, plane_coordinates: np.ndarray
@@ -640,12 +636,23 @@ class Plane:
         np.ndarray
             A 3d-vector of (lat, lon, depth) transformed coordinates.
         """
-        origin = self.bounds[0]
-        top_right = self.bounds[1]
-        bottom_left = self.bounds[-1]
+        bounds = self.bounds
+        origin = bounds[0]
+        top_right = bounds[1]
+        bottom_left = bounds[-1]
         frame = np.vstack((top_right - origin, bottom_left - origin))
-
-        return coordinates.nztm_to_wgs_depth(origin + plane_coordinates @ frame)
+        spherical_coordinates = origin + plane_coordinates @ frame
+        if plane_coordinates.ndim == 1:
+            return self._projection.inverse(
+                spherical_coordinates[0],
+                spherical_coordinates[1],
+                spherical_coordinates[2],
+            ).reshape((3,))
+        return self._projection.inverse(
+            spherical_coordinates[:, 0],
+            spherical_coordinates[:, 1],
+            spherical_coordinates[:, 2],
+        ).reshape((-1, 3))
 
     def wgs_depth_coordinates_to_fault_coordinates(
         self,
@@ -679,22 +686,20 @@ class Plane:
         are made about the accuracy of the inversion if you do not pass
         depth information.
         """
+        bounds = self.bounds
         coordinate_length = (
             3 if global_coordinates.shape[-1] == 3 or self.dip == 90 else 2
         )
-        strike_direction = (
-            self.bounds[1, :coordinate_length] - self.bounds[0, :coordinate_length]
-        )
-        dip_direction = (
-            self.bounds[-1, :coordinate_length] - self.bounds[0, :coordinate_length]
-        )
-        offset = (
-            coordinates.wgs_depth_to_nztm(global_coordinates[:coordinate_length])
-            - self.bounds[0, :coordinate_length]
-        )
+        strike_direction = bounds[1, :coordinate_length] - bounds[0, :coordinate_length]
+        dip_direction = bounds[-1, :coordinate_length] - bounds[0, :coordinate_length]
+        local_coordinates = self._projection(*global_coordinates[:coordinate_length].T)
+
+        offset = local_coordinates - bounds[0, :coordinate_length]
+        frame = np.array([strike_direction, dip_direction])
         fault_local_coordinates, _, _, _ = np.linalg.lstsq(
-            np.array([strike_direction, dip_direction]).T, offset, rcond=None
+            frame.T, offset.T, rcond=None
         )
+
         tolerance = 1e-6 if coordinate_length == 3 else 1e-4
         if not np.all(
             (
@@ -722,24 +727,23 @@ class Plane:
         float
             The rrup distance (in metres) between the point and the fault geometry.
         """
-        point_nztm = coordinates.wgs_depth_to_nztm(point)
-        frame = np.array(
-            [self.bounds[1] - self.bounds[0], self.bounds[-1] - self.bounds[0]]
-        )
+        point_local = self._projection(*point)
+        bounds = self.bounds
+        frame = np.array([bounds[1] - bounds[0], bounds[-1] - bounds[0]])
         local_coords, _, _, _ = np.linalg.lstsq(
             frame.T,
-            point_nztm - self.bounds[0],
+            point_local - bounds[0],
             rcond=None,
         )
-        projected_point = local_coords @ frame + self.bounds[0]
-        out_of_plane_distance = np.linalg.norm(point_nztm - projected_point)
+        projected_point = local_coords @ frame + bounds[0]
+        out_of_plane_distance = np.linalg.norm(point_local - projected_point)
         if np.allclose(local_coords, np.clip(local_coords, 0, 1)):
             # solution lies in fault, ergo just return projected distance
             return float(out_of_plane_distance)
 
         in_plane_distance = min(
             geo.point_to_segment_distance(
-                projected_point, self.bounds[i], self.bounds[(i + 1) % 4]
+                projected_point, bounds[i], bounds[(i + 1) % 4]
             )
             for i in range(4)
         )
@@ -760,8 +764,9 @@ class Plane:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        projection = self._projection
+        return shapely.transform(self.geometry, lambda xx: projection(*xx.T)).distance(
+            shapely.transform(shapely.Point(point), lambda xx: projection(*xx.T))
         )
 
 
