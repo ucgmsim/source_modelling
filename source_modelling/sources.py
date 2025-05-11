@@ -1053,6 +1053,60 @@ class Fault:
         """
         return cls([Plane.from_corners(corners) for corners in fault_corners])
 
+    @classmethod
+    def from_trace_points(
+        cls,
+        trace_points: np.ndarray,
+        dtop: float,
+        dbottom: float,
+        dip: float,
+        dip_dir: Optional[float] = None,
+        dip_dir_nztm: Optional[float] = None,
+    ) -> Self:
+        """Construct a fault from the trace points of the fault.
+
+        This assumes that the fault is a series of connected planes, 
+        and that the planes have the same dtop, dbottom, dip and dip_dir.
+
+        Parameters
+        ----------
+        trace_points : np.ndarray
+            The trace points of the fault in lat, lon format. Has shape (n x 2).
+        dtop : float
+            The top depth of the fault (in km).
+        dbottom : float
+            The bottom depth of the fault (in km).
+        dip : float
+            The dip of the fault (in degrees).
+        dip_dir : float, optional
+            Fault dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+        dip_dir_nztm : float, optional
+            Plane NZTM dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+
+        Returns
+        -------
+        Fault
+            The fault object representing this geometry.
+        """
+        trace_points_nztm = coordinates.wgs_depth_to_nztm(trace_points)
+
+        n_planes = trace_points.shape[0] - 1
+        return cls(
+            [
+                Plane.from_nztm_trace(
+                    np.array([trace_points_nztm[i], trace_points_nztm[i + 1]]),
+                    dtop,
+                    dbottom,
+                    dip,
+                    dip_dir=dip_dir,
+                    dip_dir_nztm=dip_dir_nztm,
+                )
+                for i in range(n_planes)
+            ]
+        )
+
     def area(self) -> float:
         """Compute the area of a fault.
 
