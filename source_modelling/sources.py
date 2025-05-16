@@ -1420,12 +1420,14 @@ def closest_point_between_sources(
     )
 
     initial_point_a = (
-        (source_a.min_strike + source_a.max_strike) / 2,
-        (source_a.min_dip + source_a.max_dip) / 2,
+        (source_a_coordinate_bounds.min_strike + source_a_coordinate_bounds.max_strike)
+        / 2,
+        (source_a_coordinate_bounds.min_dip + source_a_coordinate_bounds.max_dip) / 2,
     )
     initial_point_b = (
-        (source_b.min_strike + source_b.max_strike) / 2,
-        (source_b.min_dip + source_b.max_dip) / 2,
+        (source_b_coordinate_bounds.min_strike + source_b_coordinate_bounds.max_strike)
+        / 2,
+        (source_b_coordinate_bounds.min_dip + source_b_coordinate_bounds.max_dip) / 2,
     )
 
     res = sp.optimize.least_squares(
