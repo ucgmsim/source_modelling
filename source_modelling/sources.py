@@ -1065,7 +1065,7 @@ class Fault:
     ) -> Self:
         """Construct a fault from the trace points of the fault.
 
-        This assumes that the fault is a series of connected planes, 
+        This assumes that the fault is a series of connected planes,
         and that the planes have the same dtop, dbottom, dip and dip_dir.
 
         Parameters
@@ -1419,9 +1419,18 @@ def closest_point_between_sources(
         source_b_coordinate_bounds[2:]
     )
 
+    initial_point_a = (
+        (source_a.min_strike + source_a.max_strike) / 2,
+        (source_a.min_dip + source_a.max_dip) / 2,
+    )
+    initial_point_b = (
+        (source_b.min_strike + source_b.max_strike) / 2,
+        (source_b.min_dip + source_b.max_dip) / 2,
+    )
+
     res = sp.optimize.least_squares(
         fault_coordinate_distance,
-        np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
+        np.array([*initial_point_a, *initial_point_b]),
         bounds=(min_bounds, max_bounds),
         gtol=1e-5,
         ftol=1e-5,
