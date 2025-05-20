@@ -100,10 +100,16 @@ def test_find_connected_faults(
         fault1 = create_autospec(Fault, instance=True)
         fault1.dip = dip_a
         fault1.planes = [plane1]
+        fault1.bottom_m = (
+            10000.0  # closest points beneath is mocked out so it doesn't matter
+        )
 
         fault2 = create_autospec(Fault, instance=True)
         fault2.dip = dip_b
         fault2.planes = [plane2]
+        fault2.bottom_m = (
+            10000.0  # closest points beneath is mocked out so it doesn't matter
+        )
 
         faults = {"A": fault1, "B": fault2}
 
