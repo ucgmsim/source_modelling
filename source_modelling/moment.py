@@ -69,7 +69,15 @@ def find_connected_faults(
         source_distance = rupture_propagation.distance_between(
             fault_a,
             fault_b,
-            *sources.closest_points_beneath(fault_a, fault_b, min_connected_depth),
+            *sources.closest_points_beneath(
+                fault_a,
+                fault_b,
+                min(
+                    min_connected_depth,
+                    0.99 * fault_a.bottom_m,
+                    0.99 * fault_b.bottom_m,
+                ),
+            ),
         )
         if hasattr(fault_a, "planes"):
             mean_strike_a = geo.avg_wbearing(
