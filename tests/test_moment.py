@@ -1,4 +1,4 @@
-from unittest.mock import patch, create_autospec
+from unittest.mock import create_autospec, patch
 
 import numpy as np
 import pytest
@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
 from source_modelling import moment
-from source_modelling.sources import Plane, Fault
+from source_modelling.sources import Fault, Plane
 
 
 @given(
