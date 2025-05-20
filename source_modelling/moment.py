@@ -74,8 +74,8 @@ def find_connected_faults(
                 fault_b,
                 min(
                     min_connected_depth,
-                    0.99 * fault_a.bottom_m,
-                    0.99 * fault_b.bottom_m,
+                    0.99 * fault_a.bottom_m / 1000,
+                    0.99 * fault_b.bottom_m / 1000,
                 ),
             ),
         )
