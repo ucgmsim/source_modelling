@@ -85,7 +85,7 @@ def find_connected_faults(
             )
         else:
             mean_strike_a = fault_a.strike
-        if hasattr(fault_a, "planes"):
+        if hasattr(fault_b, "planes"):
             mean_strike_b = geo.avg_wbearing(
                 [(plane.strike, plane.length) for plane in fault_b.planes]
             )
