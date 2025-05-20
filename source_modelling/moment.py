@@ -24,8 +24,9 @@ def find_connected_faults(
     """Identify groups of connected faults based on proximity and dip angle.
 
     Faults are considered connected if this distance is within a specified
-    threshold and their dip angles are similar. A DisjointSet data structure
-    is used to group connected faults.
+    threshold, their dip angles are similar, and (optionally) their strike
+    angles are similar. A DisjointSet data structure is used to group connected
+    faults.
 
     Parameters
     ----------
@@ -55,6 +56,7 @@ def find_connected_faults(
         A `DisjointSet` object where each set represents a group of
         interconnected faults. The elements in the sets are the fault names
         (strings) provided in the input `faults` dictionary.
+
     """
     fault_names = list(faults)
     fault_components = DisjointSet(fault_names)
@@ -69,13 +71,13 @@ def find_connected_faults(
             fault_b,
             *sources.closest_points_beneath(fault_a, fault_b, min_connected_depth),
         )
-        if isinstance(fault_a, Fault):
+        if hasattr(fault_a, "planes"):
             mean_strike_a = geo.avg_wbearing(
                 [(plane.strike, plane.length) for plane in fault_a.planes]
             )
         else:
             mean_strike_a = fault_a.strike
-        if isinstance(fault_b, Fault):
+        if hasattr(fault_a, "planes"):
             mean_strike_b = geo.avg_wbearing(
                 [(plane.strike, plane.length) for plane in fault_b.planes]
             )

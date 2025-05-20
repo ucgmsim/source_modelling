@@ -1485,7 +1485,7 @@ def closest_points_beneath(
 
     min_depth *= _KM_TO_M
 
-    if min_depth > min(source_a.bottom_m, source_b.bottom_m):
+    if min_depth >= min(source_a.bottom_m, source_b.bottom_m):
         raise ValueError(
             "The specified minimum depth exceeds the bottom depth of at least one of the sources "
             f"{min_depth=}m {source_a.bottom_m=}m {source_b.bottom_m=}m."
