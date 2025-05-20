@@ -16,7 +16,7 @@ from source_modelling.sources import Fault, Plane
 
 def find_connected_faults(
     faults: dict[str, Fault | Plane],
-    seperation_distance: float = 2.0,
+    separation_distance: float = 2.0,
     dip_delta: float = 20.0,
     strike_delta: float | None = None,
     min_connected_depth: float = 5.0,
@@ -85,7 +85,7 @@ def find_connected_faults(
             mean_strike_b = fault_b.strike
 
         if (
-            source_distance < seperation_distance * 1000
+            source_distance < separation_distance * 1000
             and abs(fault_a.dip - fault_b.dip) < dip_delta
             and (
                 strike_delta is None
