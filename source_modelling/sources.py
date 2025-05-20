@@ -1492,14 +1492,16 @@ def closest_points_beneath(
         )
 
     # The minimum dip coordinate is found via similar triangles.
-    dip_coordinate_a = min(
+    dip_coordinate_a = np.clip(
         (min_depth - source_a.planes[0].top_m)
         / (source_a.planes[0].bottom_m - source_a.planes[0].top_m),
+        0,
         0.99,
     )
-    dip_coordinate_b = min(
+    dip_coordinate_b = np.clip(
         (min_depth - source_b.planes[0].top_m)
         / (source_b.planes[0].bottom_m - source_b.planes[0].top_m),
+        0,
         0.99,
     )
 
