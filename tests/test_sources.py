@@ -432,6 +432,10 @@ def test_plane_from_trace(data: tuple):
         plane.projected_width / np.cos(np.radians(plane.dip)), abs=1e-6
     )
     assert pytest.approx(plane.length_m, abs=1e-3) == length
+    assert shapely.get_coordinates(
+        plane.trace_geometry, include_z=True
+    ) == pytest.approx(plane.bounds[:2])
+
     if plane.dip == 90:
         assert shapely.get_coordinates(plane.geometry, include_z=True) == pytest.approx(
             plane.bounds[:2]
@@ -480,6 +484,29 @@ def test_both_dip_dir_provided():
         ValueError, match="Must supply at most one of dip_dir or dip_dir_nztm."
     ):
         Plane.from_nztm_trace(trace_points, 0, 1, 45, dip_dir=90, dip_dir_nztm=90)
+
+
+def test_fault_with_short_segments():
+    """Check that a fault containing a less than 10m segment between two other segments does not raise an error."""
+    trace_points_offset = np.array(
+        [
+            [0, 0],
+            [100, 0],
+            [2, 0],
+            [300, 0],
+        ]
+    ).cumsum(axis=0)
+    trace_points_nztm = (
+        coordinates.wgs_depth_to_nztm(np.array([-43.0, 172.0])) + trace_points_offset
+    )
+    planes = [
+        Plane.from_nztm_trace(
+            trace_points_nztm[i : i + 2], dip=90, dtop=0, dbottom=10, dip_dir=90
+        )
+        for i in range(len(trace_points_nztm) - 1)
+    ]
+    with pytest.warns(UserWarning):
+        _ = Fault(planes)
 
 
 @pytest.mark.parametrize(
@@ -863,6 +890,9 @@ def test_fault_construction(fault: Fault):
     assert fault.geometry.equals(
         shapely.union_all([plane.geometry for plane in fault.planes])
     )
+    assert fault.trace_geometry.equals(
+        shapely.union_all([plane.trace_geometry for plane in fault.planes])
+    )
     assert np.allclose(
         fault.wgs_depth_coordinates_to_fault_coordinates(fault.centroid),
         np.array([1 / 2, 1 / 2]),
@@ -1175,7 +1205,9 @@ def test_simplify_fault(fault: Fault):
 
     if not consecutive_small_planes:
         assert len(simplified_fault.planes) == sum(
-            1 for plane in fault.planes if plane.length >= tolerance
+            1
+            for plane in fault.planes
+            if plane.length > tolerance or np.isclose(plane.length, tolerance)
         )
 
     # Check that the simplified fault is similar to the original fault
@@ -1201,3 +1233,39 @@ def test_sources_as_geojson(faults: list[Fault]):
             "LineString",
             "MultiLineString",
         }
+
+@given(
+    fault=st.builds(
+        connected_fault,
+        lengths=st.lists(st.floats(0.1, 100), min_size=1, max_size=5),
+        width=st.floats(0.1, 100),
+        strike=st.floats(0, 179),
+        start_coordinates=st.builds(
+            coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
+        ),
+    )
+)
+def test_fault_from_trace(fault: Fault):
+    trace = coordinates.nztm_to_wgs_depth(fault.trace[:, :2])
+
+    # Remove duplicated points
+    if len(fault.planes) > 1:
+        trace = np.concatenate((trace[0, None], trace[1:-1, :][::2], trace[-1, None]), axis=0)
+
+    new_fault = Fault.from_trace_points(
+        trace,
+        min(fault.bounds[:, 2]) / 1000,
+        max(fault.bounds[:, 2]) / 1000,
+        fault.dip,
+        dip_dir_nztm=fault.dip_dir_nztm
+    )
+
+    assert pytest.approx(new_fault.dip, abs=1e-6) == fault.dip
+    assert pytest.approx(new_fault.dip_dir, abs=1e-3) == fault.dip_dir
+    assert np.allclose(new_fault.trace, fault.trace, atol=1e-3)
+    assert np.allclose(new_fault.bounds, fault.bounds, atol=1e-3)
+
+
+    
+
+    

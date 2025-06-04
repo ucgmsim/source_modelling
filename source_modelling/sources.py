@@ -20,7 +20,8 @@ import copy
 import dataclasses
 import itertools
 import json
-from typing import Optional, Self
+import warnings
+from typing import NamedTuple, Optional, Self
 
 import networkx as nx
 import numpy as np
@@ -419,6 +420,16 @@ class Plane:
         if self.dip == 90:
             return shapely.LineString(self.bounds[:2])
         return shapely.Polygon(self.bounds)
+
+    @property
+    def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
+        """np.ndarray: The trace of the fault plane on the surface."""
+        return self.bounds[:2]
+
+    @property
+    def trace_geometry(self) -> shapely.LineString:  # numpydoc ignore=RT01
+        """shapely.LineString: The trace of the fault plane on the surface."""
+        return shapely.LineString(self.trace)
 
     @property
     def geojson(self) -> dict:  # numpydoc ignore=RT01
@@ -920,6 +931,7 @@ class Fault:
                 continue
             else:
                 raise ValueError("Fault planes must be connected in a line.")
+
         if not (start_nodes == 1 and end_nodes == 1):
             raise ValueError("Fault planes must be connected in a line.")
 
@@ -977,7 +989,21 @@ class Fault:
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
             points_into_relation, create_using=nx.DiGraph
         )
-        self._validate_fault_plane_connectivity(points_into_graph)
+        try:
+            self._validate_fault_plane_connectivity(points_into_graph)
+        except ValueError:
+            # Sometimes, faults with small segments can confuse the
+            # connectivity check, so we can apply a transitive
+            # reduction and then do the check again (with a warning).
+            warnings.warn(
+                "Fault planes are connected, but not in a line."
+                " This can occur with very short segments."
+                " Trying to safely reduce the connectivity graph."
+                " Check the output fault carefully."
+            )
+            self._validate_fault_plane_connectivity(
+                nx.transitive_reduction(points_into_graph)
+            )
 
         # Now that we have established the planes line up correctly, we can
         # obtain the line in question with a topological sort, which will
@@ -1026,6 +1052,60 @@ class Fault:
             The fault object representing this geometry.
         """
         return cls([Plane.from_corners(corners) for corners in fault_corners])
+
+    @classmethod
+    def from_trace_points(
+        cls,
+        trace_points: np.ndarray,
+        dtop: float,
+        dbottom: float,
+        dip: float,
+        dip_dir: Optional[float] = None,
+        dip_dir_nztm: Optional[float] = None,
+    ) -> Self:
+        """Construct a fault from the trace points of the fault.
+
+        This assumes that the fault is a series of connected planes, 
+        and that the planes have the same dtop, dbottom, dip and dip_dir.
+
+        Parameters
+        ----------
+        trace_points : np.ndarray
+            The trace points of the fault in lat, lon format. Has shape (n x 2).
+        dtop : float
+            The top depth of the fault (in km).
+        dbottom : float
+            The bottom depth of the fault (in km).
+        dip : float
+            The dip of the fault (in degrees).
+        dip_dir : float, optional
+            Fault dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+        dip_dir_nztm : float, optional
+            Plane NZTM dip direction (degrees).
+            One of `dip_dir` or `dip_dir_nztm` must be provided.
+
+        Returns
+        -------
+        Fault
+            The fault object representing this geometry.
+        """
+        trace_points_nztm = coordinates.wgs_depth_to_nztm(trace_points)
+
+        n_planes = trace_points.shape[0] - 1
+        return cls(
+            [
+                Plane.from_nztm_trace(
+                    np.array([trace_points_nztm[i], trace_points_nztm[i + 1]]),
+                    dtop,
+                    dbottom,
+                    dip,
+                    dip_dir=dip_dir,
+                    dip_dir_nztm=dip_dir_nztm,
+                )
+                for i in range(n_planes)
+            ]
+        )
 
     def area(self) -> float:
         """Compute the area of a fault.
@@ -1083,6 +1163,16 @@ class Fault:
         return shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
         )
+
+    @property
+    def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
+        """np.ndarray: The trace of the fault plane on the surface."""
+        return np.vstack([plane.trace for plane in self.planes])
+
+    @property
+    def trace_geometry(self) -> shapely.LineString:  # numpydoc ignore=RT01
+        """shapely.LineString: The trace of the fault plane on the surface."""
+        return shapely.LineString(self.trace)
 
     def wgs_depth_coordinates_to_fault_coordinates(
         self, global_coordinates: np.ndarray
@@ -1257,8 +1347,28 @@ def sources_as_geojson_features(sources: list[IsSource]) -> str:
     )
 
 
+class CoordinateBounds(NamedTuple):
+    """A class representing the coordinate bounds of a source."""
+
+    min_strike: float
+    """float: Minimum normalised strike coordinate, in the range of [0, 1]."""
+    min_dip: float
+    """float: Minimum normalised dip coordinate, in the range of [0, 1]."""
+    max_strike: float
+    """float: Maximum normalised strike coordinate, in the range of [0, 1]."""
+    max_dip: float
+    """float: Maximum normalised dip coordinate, in the range of [0, 1]."""
+
+
 def closest_point_between_sources(
-    source_a: IsSource, source_b: IsSource
+    source_a: IsSource,
+    source_b: IsSource,
+    source_a_coordinate_bounds: CoordinateBounds = CoordinateBounds(
+        min_strike=0, min_dip=0, max_strike=1, max_dip=1
+    ),
+    source_b_coordinate_bounds: CoordinateBounds = CoordinateBounds(
+        min_strike=0, min_dip=0, max_strike=1, max_dip=1
+    ),
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 
@@ -1268,6 +1378,10 @@ def closest_point_between_sources(
         The first source. Must have a two-dimensional fault coordinate system.
     source_b : IsSource
         The second source. Must have a two-dimensional fault coordinate system.
+    source_a_coordinate_bounds : CoordinateBounds, optional
+        The coordinate bounds of the first source. Default is unconstrained.
+    source_b_coordinate_bounds : CoordinateBounds, optional
+        The coordinate bounds of the second source. Default is unconstrained.
 
     Raises
     ------
@@ -1295,10 +1409,20 @@ def closest_point_between_sources(
             source_a_global_coordinates
         ) - coordinates.wgs_depth_to_nztm(source_b_global_coordinates)
 
+    # We could use the named accessor here, but this method works with
+    # both namedtuples or regular tuples, in case those are passed by
+    # mistake.
+    min_bounds = list(source_a_coordinate_bounds[:2]) + list(
+        source_b_coordinate_bounds[:2]
+    )
+    max_bounds = list(source_a_coordinate_bounds[2:]) + list(
+        source_b_coordinate_bounds[2:]
+    )
+
     res = sp.optimize.least_squares(
         fault_coordinate_distance,
         np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
-        bounds=([0] * 4, [1] * 4),
+        bounds=(min_bounds, max_bounds),
         gtol=1e-5,
         ftol=1e-5,
         xtol=1e-5,
@@ -1352,7 +1476,10 @@ def simplify_fault(fault: Fault, length_tolerance: float) -> Fault:
 
     while len(planes) > 1:
         lengths = [plane.length for plane in planes]
-        if all(length >= length_tolerance for length in lengths):
+        if all(
+            length > length_tolerance or np.isclose(length, length_tolerance)
+            for length in lengths
+        ):
             break
 
         min_length_index = np.argmin(lengths)

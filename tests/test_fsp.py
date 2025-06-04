@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -47,10 +48,32 @@ def test_darfield_fsp():
         "y": -5.1682,
         "z": 0.0000,
         "slip": 4.8065,
-        "length": 10.0,
-        "width": 10.0,
     }
+    assert fsp_file.segments[0].strike == pytest.approx(307.0)
+    assert fsp_file.segments[0].dip == pytest.approx(86.2)
+    assert fsp_file.segments[0].length == pytest.approx(10.0)
+    assert fsp_file.segments[0].width == pytest.approx(12.0)
+    assert fsp_file.segments[0].dx == pytest.approx(1.0)
+    assert fsp_file.segments[0].dz == pytest.approx(1.0)
+    assert fsp_file.segments[0].dtop == pytest.approx(0.0)
+    assert fsp_file.segments[0].top_centre == pytest.approx(
+        np.array([-43.5721, 172.0226])
+    )
+    assert fsp_file.segments[0].hypocentre == pytest.approx(
+        np.array([4.151557898146846, 0.5150635970119828])
+    )
+    assert fsp_file.segments[0].subfaults == 120
     assert fsp_file.velocity_model is None
+
+    plane = fsp_file.segments[0].as_plane()
+    assert plane.strike == pytest.approx(307.0, abs=1)
+    assert plane.dip == pytest.approx(86.2, abs=1)
+    assert plane.length == pytest.approx(10.0)
+    assert plane.width == pytest.approx(12.0)
+    assert plane.bounds[0, -1] == pytest.approx(0.0)
+    assert plane.wgs_depth_coordinates_to_fault_coordinates(
+        np.array([-43.5721, 172.0226])
+    ) == pytest.approx(np.array([0.5, 0]))
 
 
 def test_kanto_fsp():
