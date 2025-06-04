@@ -1,7 +1,5 @@
 """Utility functions for working with moment rate and moment."""
 
-import itertools
-
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
