@@ -113,5 +113,7 @@ def test_find_connected_faults(
 
         faults = {"A": fault1, "B": fault2}
 
-        ds = moment.find_connected_faults(faults, strike_delta=strike_delta)
+        ds = moment.find_connected_faults(
+            faults, {"A": None, "B": "A"}, strike_delta=strike_delta
+        )
         assert ds.connected("A", "B") == expected_connected
