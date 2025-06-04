@@ -31,7 +31,7 @@ def find_connected_faults(
     ----------
     faults : dict[str, sources.Fault]
         A dictionary mapping fault names to `sources.Fault` objects.
-    rupture_tree: tree
+    rupture_tree : tree
         The rupture causality tree, used to speed up connected fault
         calculations. Faults are only considered connected if they are joined in
         the rupture tree.
