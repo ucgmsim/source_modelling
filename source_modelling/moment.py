@@ -14,7 +14,7 @@ from source_modelling.sources import Fault, Plane
 
 def find_connected_faults(
     faults: dict[str, Fault | Plane],
-    rupture_tree: dict[str, str | None],
+    rupture_tree: rupture_propagation.Tree,
     separation_distance: float = 2.0,
     dip_delta: float = 20.0,
     strike_delta: float | None = None,
@@ -31,6 +31,10 @@ def find_connected_faults(
     ----------
     faults : dict[str, sources.Fault]
         A dictionary mapping fault names to `sources.Fault` objects.
+    rupture_tree: tree
+        The rupture causality tree, used to speed up connected fault
+        calculations. Faults are only considered connected if they are joined in
+        the rupture tree.
     separation_distance : float, optional
         The maximum allowable distance (in kilometers) between two faults for
         them to be considered connected. Defaults to 2.0 km. This distance
