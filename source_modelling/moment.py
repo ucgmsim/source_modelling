@@ -16,6 +16,7 @@ from source_modelling.sources import Fault, Plane
 
 def find_connected_faults(
     faults: dict[str, Fault | Plane],
+    rupture_tree: dict[str, str | None],
     separation_distance: float = 2.0,
     dip_delta: float = 20.0,
     strike_delta: float | None = None,
@@ -60,11 +61,11 @@ def find_connected_faults(
     """
     fault_names = list(faults)
     fault_components = DisjointSet(fault_names)
-    for fault_a_name, fault_b_name in itertools.combinations(fault_names, r=2):
+    for fault_a_name, fault_b_name in rupture_tree.items():
+        if not fault_b_name:
+            continue
         fault_a = faults[fault_a_name]
         fault_b = faults[fault_b_name]
-        if fault_components.connected(fault_a_name, fault_b_name):
-            continue
 
         source_distance = rupture_propagation.distance_between(
             fault_a,
@@ -79,6 +80,7 @@ def find_connected_faults(
                 ),
             ),
         )
+
         if hasattr(fault_a, "planes"):
             mean_strike_a = geo.avg_wbearing(
                 [(plane.strike, plane.length) for plane in fault_a.planes]
