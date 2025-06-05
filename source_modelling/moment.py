@@ -8,7 +8,6 @@ import scipy as sp
 from scipy.cluster.hierarchy import DisjointSet
 from scipy.sparse import csr_array
 
-from qcore import geo
 from source_modelling import rupture_propagation, sources
 from source_modelling.sources import Fault, Plane
 
