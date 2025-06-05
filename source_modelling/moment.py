@@ -1,5 +1,6 @@
 """Utility functions for working with moment rate and moment."""
 
+import itertools
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -14,7 +15,6 @@ from source_modelling.sources import Fault, Plane
 
 def find_connected_faults(
     faults: dict[str, Fault | Plane],
-    rupture_tree: rupture_propagation.Tree,
     separation_distance: float = 2.0,
     dip_delta: float = 20.0,
     strike_delta: float | None = None,
@@ -31,10 +31,6 @@ def find_connected_faults(
     ----------
     faults : dict[str, sources.Fault]
         A dictionary mapping fault names to `sources.Fault` objects.
-    rupture_tree : tree
-        The rupture causality tree, used to speed up connected fault
-        calculations. Faults are only considered connected if they are joined in
-        the rupture tree.
     separation_distance : float, optional
         The maximum allowable distance (in kilometers) between two faults for
         them to be considered connected. Defaults to 2.0 km. This distance
@@ -63,8 +59,8 @@ def find_connected_faults(
     """
     fault_names = list(faults)
     fault_components = DisjointSet(fault_names)
-    for fault_a_name, fault_b_name in rupture_tree.items():
-        if not fault_b_name:
+    for fault_a_name, fault_b_name in itertools.product(fault_names, repeat=2):
+        if not fault_b_name or fault_components.connected(fault_a_name, fault_b_name):
             continue
         fault_a = faults[fault_a_name]
         fault_b = faults[fault_b_name]
