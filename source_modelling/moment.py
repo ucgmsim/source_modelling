@@ -17,7 +17,6 @@ def find_connected_faults(
     faults: dict[str, Fault | Plane],
     separation_distance: float = 2.0,
     dip_delta: float = 20.0,
-    strike_delta: float | None = None,
     min_connected_depth: float = 5.0,
 ) -> DisjointSet:
     """Identify groups of connected faults based on proximity and dip angle.
@@ -40,10 +39,6 @@ def find_connected_faults(
         The maximum allowable absolute difference in dip angles (in degrees)
         between two faults for them to be considered connected.
         Defaults to 20.0 degrees.
-    strike_delta : float, optional
-        The maximum allowable absolute difference in the mean strike angles (in degrees)
-        between two faults for them to be considered connected. If None, no
-        strike comparison is made. Defaults to None.
     min_connected_depth : float, optional
         The minimum depth (in kilometres)
         below which the closest points between faults are determined for the
@@ -79,26 +74,9 @@ def find_connected_faults(
             ),
         )
 
-        if hasattr(fault_a, "planes"):
-            mean_strike_a = geo.avg_wbearing(
-                [(plane.strike, plane.length) for plane in fault_a.planes]
-            )
-        else:
-            mean_strike_a = fault_a.strike
-        if hasattr(fault_b, "planes"):
-            mean_strike_b = geo.avg_wbearing(
-                [(plane.strike, plane.length) for plane in fault_b.planes]
-            )
-        else:
-            mean_strike_b = fault_b.strike
-
         if (
             source_distance < separation_distance * 1000
             and abs(fault_a.dip - fault_b.dip) < dip_delta
-            and (
-                strike_delta is None
-                or geo.angle_diff(mean_strike_a, mean_strike_b) < strike_delta
-            )
         ):
             fault_components.merge(fault_a_name, fault_b_name)
 

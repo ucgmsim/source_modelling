@@ -60,13 +60,12 @@ def test_moment_to_magnitude():
 
 
 @pytest.mark.parametrize(
-    "dip_a, dip_b, strike_a, strike_b, distance, strike_delta, expected_connected",
+    "dip_a, dip_b, strike_a, strike_b, distance, expected_connected",
     [
-        (30, 32, 90, 92, 1.0, None, True),
-        (30, 60, 90, 92, 1.0, None, False),
-        (30, 32, 90, 150, 1.0, 10, False),
-        (30, 32, 90, 150, 1.0, None, True),
-        (30, 32, 90, 92, 3.0, None, False),
+        (30, 32, 90, 92, 1.0, True),
+        (30, 60, 90, 92, 1.0, False),
+        (30, 32, 90, 150, 1.0, True),
+        (30, 32, 90, 92, 3.0, False),
     ],
 )
 def test_find_connected_faults(
@@ -75,7 +74,6 @@ def test_find_connected_faults(
     strike_a: float,
     strike_b: float,
     distance: float,
-    strike_delta: float | None,
     expected_connected: bool,
 ):
     with (
@@ -113,5 +111,7 @@ def test_find_connected_faults(
 
         faults = {"A": fault1, "B": fault2}
 
-        ds = moment.find_connected_faults(faults, strike_delta=strike_delta)
+        ds = moment.find_connected_faults(
+            faults,
+        )
         assert ds.connected("A", "B") == expected_connected
