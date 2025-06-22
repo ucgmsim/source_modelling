@@ -22,9 +22,8 @@ def find_connected_faults(
     """Identify groups of connected faults based on proximity and dip angle.
 
     Faults are considered connected if this distance is within a specified
-    threshold, their dip angles are similar, and (optionally) their strike
-    angles are similar. A DisjointSet data structure is used to group connected
-    faults.
+    threshold and their dip angles are similar. A DisjointSet data structure is
+    used to group connected faults.
 
     Parameters
     ----------
