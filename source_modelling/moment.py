@@ -1,10 +1,86 @@
 """Utility functions for working with moment rate and moment."""
 
+import itertools
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import scipy as sp
+from scipy.cluster.hierarchy import DisjointSet
 from scipy.sparse import csr_array
+
+from source_modelling import rupture_propagation, sources
+from source_modelling.sources import Fault, Plane
+
+
+def find_connected_faults(
+    faults: dict[str, Fault | Plane],
+    separation_distance: float = 2.0,
+    dip_delta: float = 20.0,
+    min_connected_depth: float = 5.0,
+) -> DisjointSet:
+    """Identify groups of connected faults based on proximity and dip angle.
+
+    Faults are considered connected if this distance is within a specified
+    threshold and their dip angles are similar. A DisjointSet data structure is
+    used to group connected faults.
+
+    Parameters
+    ----------
+    faults : dict[str, sources.Fault]
+        A dictionary mapping fault names to `sources.Fault` objects.
+    separation_distance : float, optional
+        The maximum allowable distance (in kilometers) between two faults for
+        them to be considered connected. Defaults to 2.0 km. This distance
+        is measured between the closest points on the faults below
+        `min_connected_depth`.
+    dip_delta : float, optional
+        The maximum allowable absolute difference in dip angles (in degrees)
+        between two faults for them to be considered connected.
+        Defaults to 20.0 degrees.
+    min_connected_depth : float, optional
+        The minimum depth (in kilometres)
+        below which the closest points between faults are determined for the
+        distance calculation. Defaults to 5.0.
+
+    Returns
+    -------
+    DisjointSet
+        A `DisjointSet` object where each set represents a group of
+        interconnected faults. The elements in the sets are the fault names
+        (strings) provided in the input `faults` dictionary.
+
+    """
+    fault_names = list(faults)
+    fault_components = DisjointSet(fault_names)
+    for fault_a_name, fault_b_name in itertools.product(fault_names, repeat=2):
+        if not fault_b_name or fault_components.connected(fault_a_name, fault_b_name):
+            continue
+        fault_a = faults[fault_a_name]
+        fault_b = faults[fault_b_name]
+
+        source_distance = rupture_propagation.distance_between(
+            fault_a,
+            fault_b,
+            *sources.closest_points_beneath(
+                fault_a,
+                fault_b,
+                min(
+                    min_connected_depth,
+                    0.99 * fault_a.bottom_m / 1000,
+                    0.99 * fault_b.bottom_m / 1000,
+                ),
+            ),
+        )
+
+        if (
+            source_distance < separation_distance * 1000
+            and abs(fault_a.dip - fault_b.dip) < dip_delta
+        ):
+            fault_components.merge(fault_a_name, fault_b_name)
+
+    return fault_components
+
 
 # Shear scaling constant
 MU = 3.3e10

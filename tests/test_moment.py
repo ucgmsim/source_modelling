@@ -1,3 +1,5 @@
+from unittest.mock import create_autospec, patch
+
 import numpy as np
 import pytest
 import scipy as sp
@@ -6,6 +8,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
 from source_modelling import moment
+from source_modelling.sources import Fault, Plane
 
 
 @given(
@@ -31,7 +34,9 @@ def test_moment_rate_from_slip_properties(slip_function: np.ndarray, dt: float):
     )
     assert (moment_rate["moment_rate"] >= 0).all()
     assert len(moment_rate) == nt
-    avg_displacement = np.mean(sp.integrate.trapezoid(slip_function, dx=dt, axis=1)) / 1e6
+    avg_displacement = (
+        np.mean(sp.integrate.trapezoid(slip_function, dx=dt, axis=1)) / 1e6
+    )
     cumulative_moment = moment.moment_over_time_from_moment_rate(moment_rate)
     assert moment.MU * np.sum(patch_areas) * avg_displacement == pytest.approx(
         cumulative_moment["moment"].iloc[-1]
@@ -49,3 +54,64 @@ def test_moment_to_magnitude():
     assert moment.moment_to_magnitude(2.82e20) == pytest.approx(7.6, abs=5e-02)
     # Kaikoura FSP Hayes 2017
     assert moment.moment_to_magnitude(8.96e20) == pytest.approx(7.89, abs=5e-02)
+
+
+# The following test involves some patching to make it feasible to test properly.
+
+
+@pytest.mark.parametrize(
+    "dip_a, dip_b, strike_a, strike_b, distance, expected_connected",
+    [
+        (30, 32, 90, 92, 1.0, True),
+        (30, 60, 90, 92, 1.0, False),
+        (30, 32, 90, 150, 1.0, True),
+        (30, 32, 90, 92, 3.0, False),
+    ],
+)
+def test_find_connected_faults(
+    dip_a: float,
+    dip_b: float,
+    strike_a: float,
+    strike_b: float,
+    distance: float,
+    expected_connected: bool,
+):
+    with (
+        patch(
+            "source_modelling.rupture_propagation.distance_between",
+            return_value=distance * 1000,
+        ),
+        patch(
+            "source_modelling.sources.closest_points_beneath", return_value=("a", "b")
+        ),
+    ):
+        # Create Plane mocks
+        plane1 = create_autospec(Plane, instance=True)
+        plane1.strike = strike_a
+        plane1.length = 10
+
+        plane2 = create_autospec(Plane, instance=True)
+        plane2.strike = strike_b
+        plane2.length = 10
+
+        # Create Fault mocks
+        fault1 = create_autospec(Fault, instance=True)
+        fault1.dip = dip_a
+        fault1.planes = [plane1]
+        fault1.bottom_m = (
+            10000.0  # closest points beneath is mocked out so it doesn't matter
+        )
+
+        fault2 = create_autospec(Fault, instance=True)
+        fault2.dip = dip_b
+        fault2.planes = [plane2]
+        fault2.bottom_m = (
+            10000.0  # closest points beneath is mocked out so it doesn't matter
+        )
+
+        faults = {"A": fault1, "B": fault2}
+
+        ds = moment.find_connected_faults(
+            faults,
+        )
+        assert ds.connected("A", "B") == expected_connected

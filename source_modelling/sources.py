@@ -1023,6 +1023,16 @@ class Fault:
                 )
 
     @property
+    def top_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The top-depth of the fault"""
+        return self.planes[0].top_m
+
+    @property
+    def bottom_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The bottom-depth of the fault"""
+        return self.planes[0].bottom_m
+
+    @property
     def dip(self) -> float:  # numpydoc ignore=RT01
         """float: The dip angle of the fault."""
         return self.planes[0].dip
@@ -1444,6 +1454,66 @@ def closest_point_between_sources(
             f"Optimisation failed to converge for provided sources: {res.message} with x = {res.x}"
         )
     return res.x[:2], res.x[2:]
+
+
+def closest_points_beneath(
+    source_a: Fault | Plane, source_b: Fault | Plane, min_depth: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Find the closest points between two sources beneath a minimum depth.
+
+    Parameters
+    ----------
+    source_a : fault or plane
+        The first source.
+    source_b : fault or plane
+        The second source.
+    min_depth : float
+        The minimum depth to compare between the faults, in kilometres.
+
+    Returns
+    -------
+    source_a_coordinates : np.ndarray
+        The source-local coordinates of the closest point on source a.
+    source_b_coordinates : np.ndarray
+        The source-local coordinates of the closest point on source b.
+
+    Raises
+    ------
+    ValueError
+        If `min_depth` is below the bottom depth of either `source_a` or `source_b`.
+    """
+
+    min_depth *= _KM_TO_M
+
+    if min_depth >= min(source_a.bottom_m, source_b.bottom_m):
+        raise ValueError(
+            "The specified minimum depth exceeds the bottom depth of at least one of the sources "
+            f"{min_depth=}m {source_a.bottom_m=}m {source_b.bottom_m=}m."
+        )
+
+    # The minimum dip coordinate is found via similar triangles.
+    dip_coordinate_a = np.clip(
+        (min_depth - source_a.planes[0].top_m)
+        / (source_a.planes[0].bottom_m - source_a.planes[0].top_m),
+        0,
+        0.99,
+    )
+    dip_coordinate_b = np.clip(
+        (min_depth - source_b.planes[0].top_m)
+        / (source_b.planes[0].bottom_m - source_b.planes[0].top_m),
+        0,
+        0.99,
+    )
+
+    source_a_coordinate_bounds = CoordinateBounds(
+        min_strike=0, max_strike=1, min_dip=dip_coordinate_a, max_dip=1
+    )
+    source_b_coordinate_bounds = CoordinateBounds(
+        min_strike=0, max_strike=1, min_dip=dip_coordinate_b, max_dip=1
+    )
+    return closest_point_between_sources(
+        source_a, source_b, source_a_coordinate_bounds, source_b_coordinate_bounds
+    )
 
 
 def absorb_planes(plane: Plane, other: Plane) -> Plane:
