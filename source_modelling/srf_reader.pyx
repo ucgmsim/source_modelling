@@ -199,7 +199,7 @@ cdef sparse_matrix_to_csr(sparse_matrix matrix):
     cdef np.ndarray[DTYPE_t, ndim=1] data = pnp.asarray(<DTYPE_t[:matrix.entries]>matrix.data, copy=True)
     cdef np.ndarray[ITYPE_t, ndim=1] col_indices = pnp.asarray(<ITYPE_t[:matrix.entries]>matrix.col_ptr, copy=True)
     cdef np.ndarray[ITYPE_t, ndim=1] row_indices = pnp.asarray(<ITYPE_t[:matrix.rows+1]>matrix.row_ptr, copy=True)
-
+    row_indices[matrix.rows] = matrix.entries
     return sp.sparse.csr_array((data, col_indices, row_indices))
 
 def read_srf_points(
