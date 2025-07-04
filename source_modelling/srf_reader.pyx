@@ -1,6 +1,7 @@
 cimport numpy as np
 from libc.stdio cimport *
 from libc.stdlib cimport *
+from libc.string cimport memcpy
 
 from typing import TextIO
 
@@ -67,7 +68,7 @@ cdef void malloc_sparse_matrix(sparse_matrix* slip_matrix, int num_rows):
     """
     slip_matrix.rows = num_rows
     slip_matrix.row_counter = 0
-    slip_matrix.row_ptr = <ITYPE_t *>malloc(num_rows * sizeof(ITYPE_t))
+    slip_matrix.row_ptr = <ITYPE_t *>malloc((num_rows + 1) * sizeof(ITYPE_t))
     slip_matrix.entries = 0
     slip_matrix.col_ptr = NULL
     slip_matrix.data = NULL
@@ -182,24 +183,19 @@ cdef void read_srf_points_loop(FILE* srf_file, int point_count, DTYPE_t[:, :] me
 # NOTE: not sure what the return type should be here because it a C function
 # returning a Python value. So I have just left it blank.
 cdef sparse_matrix_to_csr(sparse_matrix matrix):
-    """ Convert the internal sparse matrix representation into a scipy sparse csr array.
-    Parameters
-    ----------
-    matrix : sparse_matrix
-        The matrix to convert.
-    Returns
-    -------
-    csr_array
-        The scipy csr_array representation of matrix, or None if the matrix is empty.
-    """
     if matrix.entries == 0:
         return None
 
-    # Copy the numpy arrays rather than write into them with a loop. Should hopefully mean that numpy frees this data itself.
-    cdef np.ndarray[DTYPE_t, ndim=1] data = pnp.asarray(<DTYPE_t[:matrix.entries]>matrix.data, copy=True)
-    cdef np.ndarray[ITYPE_t, ndim=1] col_indices = pnp.asarray(<ITYPE_t[:matrix.entries]>matrix.col_ptr, copy=True)
-    cdef np.ndarray[ITYPE_t, ndim=1] row_indices = pnp.asarray(<ITYPE_t[:matrix.rows+1]>matrix.row_ptr, copy=True)
+    cdef np.ndarray[DTYPE_t, ndim=1] data = pnp.empty(matrix.entries, dtype=DTYPE)
+    cdef np.ndarray[ITYPE_t, ndim=1] col_indices = pnp.empty(matrix.entries, dtype=pnp.int64)
+    cdef np.ndarray[ITYPE_t, ndim=1] row_indices = pnp.empty(matrix.rows + 1, dtype=pnp.int64)
+
+
+    memcpy(data.data, matrix.data, matrix.entries * sizeof(DTYPE_t))
+    memcpy(col_indices.data, matrix.col_ptr, matrix.entries * sizeof(ITYPE_t))
+    memcpy(row_indices.data, matrix.row_ptr, matrix.rows * sizeof(ITYPE_t))
     row_indices[matrix.rows] = matrix.entries
+
     return sp.sparse.csr_array((data, col_indices, row_indices))
 
 def read_srf_points(
