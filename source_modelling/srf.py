@@ -390,7 +390,22 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         str(srf_ffp), position, point_count
     )
 
-    points_df = pd.DataFrame(points_metadata)
+    points_df = pd.DataFrame(
+        points_metadata.reshape((-1, 11)),
+        columns=[
+            "lon",
+            "lat",
+            "dep",
+            "stk",
+            "dip",
+            "area",
+            "tinit",
+            "dt",
+            "rake",
+            "slip1",
+            "rise",
+        ],
+    )
 
     points_df["slip"] = points_df["slip1"]
     return SrfFile(

@@ -33,21 +33,6 @@ impl SparseMatrix {
     }
 }
 
-#[derive(Default)]
-struct Metadata {
-    lat: Vec<f32>,
-    lon: Vec<f32>,
-    dep: Vec<f32>,
-    stk: Vec<f32>,
-    dip: Vec<f32>,
-    area: Vec<f32>,
-    tinit: Vec<f32>,
-    dt: Vec<f32>,
-    rake: Vec<f32>,
-    slip1: Vec<f32>,
-    rise_time: Vec<f32>,
-}
-
 fn marshall_os_error<T>(e: Error) -> PyResult<T> {
     Err(PyErr::new::<PyOSError, _>(e.to_string()))
 }
@@ -81,41 +66,41 @@ fn parse_value<T: lexical_core::FromLexical>(
 fn read_srf_points(
     data: &[u8],
     point_count: usize,
-) -> Result<(Metadata, SparseMatrix), lexical_core::Error> {
+) -> Result<(Vec<f32>, SparseMatrix), lexical_core::Error> {
     let mut index: usize = 0;
-    let mut metadata = Metadata::default();
+    let mut metadata = Vec::with_capacity(point_count * 11);
     let mut slipt1 = SparseMatrix::default();
 
     for _ in 0..point_count {
         let lon = parse_value::<f32>(data, &mut index)?;
-        metadata.lon.push(lon);
+        metadata.push(lon);
 
         let lat = parse_value::<f32>(data, &mut index)?;
-        metadata.lat.push(lat);
+        metadata.push(lat);
 
         let dep = parse_value::<f32>(data, &mut index)?;
-        metadata.dep.push(dep);
+        metadata.push(dep);
 
         let stk = parse_value::<f32>(data, &mut index)?;
-        metadata.stk.push(stk);
+        metadata.push(stk);
 
         let dip = parse_value::<f32>(data, &mut index)?;
-        metadata.dip.push(dip);
+        metadata.push(dip);
 
         let area = parse_value::<f32>(data, &mut index)?;
-        metadata.area.push(area);
+        metadata.push(area);
 
         let tinit = parse_value::<f32>(data, &mut index)?;
-        metadata.tinit.push(tinit);
+        metadata.push(tinit);
 
         let dt = parse_value::<f32>(data, &mut index)?;
-        metadata.dt.push(dt);
+        metadata.push(dt);
 
         let rake = parse_value::<f32>(data, &mut index)?;
-        metadata.rake.push(rake);
+        metadata.push(rake);
 
         let slip1 = parse_value::<f32>(data, &mut index)?;
-        metadata.slip1.push(slip1);
+        metadata.push(slip1);
 
         let nt = parse_value::<usize>(data, &mut index)?;
 
@@ -124,7 +109,7 @@ fn read_srf_points(
         let _slip3 = parse_value::<f32>(data, &mut index)?;
         let _nt3 = parse_value::<i64>(data, &mut index)?;
 
-        metadata.rise_time.push((nt as f32) * dt);
+        metadata.push((nt as f32) * dt);
 
         let start_column_index: usize = (tinit / dt).floor() as usize;
         slipt1.row_ptr.push(slipt1.data.len());
@@ -144,28 +129,16 @@ fn parse_srf(
     file_path: &str,
     offset: usize,
     num_points: usize,
-) -> PyResult<(Py<PyDict>, Py<PyAny>)> {
+) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     let file = File::open(file_path).or_else(marshall_os_error)?;
     let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
     let (metadata, sparse_matrix) =
         read_srf_points(&mmap[offset..], num_points).or_else(marshall_value_error)?;
 
-    let metadata_dict = PyDict::new(py);
-
-    metadata_dict.set_item("lat", PyArray1::from_vec(py, metadata.lat))?;
-    metadata_dict.set_item("lon", PyArray1::from_vec(py, metadata.lon))?;
-    metadata_dict.set_item("dep", PyArray1::from_vec(py, metadata.dep))?;
-    metadata_dict.set_item("stk", PyArray1::from_vec(py, metadata.stk))?;
-    metadata_dict.set_item("dip", PyArray1::from_vec(py, metadata.dip))?;
-    metadata_dict.set_item("area", PyArray1::from_vec(py, metadata.area))?;
-    metadata_dict.set_item("tinit", PyArray1::from_vec(py, metadata.tinit))?;
-    metadata_dict.set_item("dt", PyArray1::from_vec(py, metadata.dt))?;
-    metadata_dict.set_item("rake", PyArray1::from_vec(py, metadata.rake))?;
-    metadata_dict.set_item("slip1", PyArray1::from_vec(py, metadata.slip1))?;
-    metadata_dict.set_item("rise", PyArray1::from_vec(py, metadata.rise_time))?;
+    let metadata_array = PyArray1::from_vec(py, metadata);
 
     let csr = sparse_matrix.into_csr_matrix(py)?;
-    Ok((metadata_dict.to_owned().into(), csr))
+    Ok((metadata_array.to_owned().into(), csr))
 }
 
 #[pymodule]
