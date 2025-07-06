@@ -386,30 +386,18 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         point_count = int(points_count_match.group(1))
         position = srf_file_handle.tell()
 
-    points_metadata, slipt1_array = (
-        srf_parser.parse_srf(str(srf_ffp), position, point_count)
+    points_metadata, slipt1_array = srf_parser.parse_srf(
+        str(srf_ffp), position, point_count
     )
 
-    points_df = pd.DataFrame(
-        data=points_metadata.T,
-        columns=[
-            "lon",
-            "lat",
-            "dep",
-            "stk",
-            "dip",
-            "area",
-            "tinit",
-            "dt",
-            "rake",
-            "slip1",
-            "rise",
-        ],
-    )
+    points_df = pd.DataFrame(points_metadata)
 
-    points_df["slip"] = points_df['slip1']
+    points_df["slip"] = points_df["slip1"]
     return SrfFile(
-        version, headers, points_df, slipt1_array,
+        version,
+        headers,
+        points_df,
+        slipt1_array,
     )
 
 

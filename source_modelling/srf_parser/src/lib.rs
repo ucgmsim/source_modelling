@@ -1,9 +1,9 @@
 use memmap::MmapOptions;
 use numpy::PyArray1;
-use numpy::PyArray2;
 use pyo3::exceptions::PyOSError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use pyo3::wrap_pyfunction;
 
 use std::fs::File;
@@ -17,13 +17,13 @@ struct SparseMatrix {
 }
 
 impl SparseMatrix {
-    fn into_csr_matrix(&self, py: Python<'_>) -> PyResult<PyObject> {
-        if self.data.len() == 0 {
+    fn into_csr_matrix(self, py: Python<'_>) -> PyResult<PyObject> {
+        if self.data.is_empty() {
             return Ok(py.None());
         }
-        let data = PyArray1::from_vec(py, self.data.clone());
-        let indices = PyArray1::from_vec(py, self.col_ptr.clone());
-        let indptr = PyArray1::from_vec(py, self.row_ptr.clone());
+        let data = PyArray1::from_vec(py, self.data);
+        let indices = PyArray1::from_vec(py, self.col_ptr);
+        let indptr = PyArray1::from_vec(py, self.row_ptr);
 
         let csr = py
             .import("scipy.sparse")?
@@ -60,7 +60,7 @@ fn space_index(data: &[u8]) -> Result<usize, lexical_core::Error> {
     let nonwhitespace = data
         .iter()
         .enumerate()
-        .find(|&(_, &x)| x != 32 && x != 10)
+        .find(|&(_, &x)| !x.is_ascii_whitespace())
         .map(|(idx, _)| idx);
     match nonwhitespace {
         Some(x) => Ok(x),
@@ -87,11 +87,11 @@ fn read_srf_points(
     let mut slipt1 = SparseMatrix::default();
 
     for _ in 0..point_count {
-        let lat = parse_value::<f32>(data, &mut index)?;
-        metadata.lat.push(lat);
-
         let lon = parse_value::<f32>(data, &mut index)?;
         metadata.lon.push(lon);
+
+        let lat = parse_value::<f32>(data, &mut index)?;
+        metadata.lat.push(lat);
 
         let dep = parse_value::<f32>(data, &mut index)?;
         metadata.dep.push(dep);
@@ -144,30 +144,28 @@ fn parse_srf(
     file_path: &str,
     offset: usize,
     num_points: usize,
-) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+) -> PyResult<(Py<PyDict>, Py<PyAny>)> {
     let file = File::open(file_path).or_else(marshall_os_error)?;
     let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
     let (metadata, sparse_matrix) =
         read_srf_points(&mmap[offset..], num_points).or_else(marshall_value_error)?;
 
-    let metadata_array = PyArray2::from_vec2(
-        py,
-        &[
-            metadata.lat,
-            metadata.lon,
-            metadata.dep,
-            metadata.stk,
-            metadata.dip,
-            metadata.area,
-            metadata.tinit,
-            metadata.dt,
-            metadata.rake,
-            metadata.slip1,
-            metadata.rise_time,
-        ],
-    )?;
+    let metadata_dict = PyDict::new(py);
+
+    metadata_dict.set_item("lat", PyArray1::from_vec(py, metadata.lat))?;
+    metadata_dict.set_item("lon", PyArray1::from_vec(py, metadata.lon))?;
+    metadata_dict.set_item("dep", PyArray1::from_vec(py, metadata.dep))?;
+    metadata_dict.set_item("stk", PyArray1::from_vec(py, metadata.stk))?;
+    metadata_dict.set_item("dip", PyArray1::from_vec(py, metadata.dip))?;
+    metadata_dict.set_item("area", PyArray1::from_vec(py, metadata.area))?;
+    metadata_dict.set_item("tinit", PyArray1::from_vec(py, metadata.tinit))?;
+    metadata_dict.set_item("dt", PyArray1::from_vec(py, metadata.dt))?;
+    metadata_dict.set_item("rake", PyArray1::from_vec(py, metadata.rake))?;
+    metadata_dict.set_item("slip1", PyArray1::from_vec(py, metadata.slip1))?;
+    metadata_dict.set_item("rise", PyArray1::from_vec(py, metadata.rise_time))?;
+
     let csr = sparse_matrix.into_csr_matrix(py)?;
-    Ok((metadata_array.to_owned().into(), csr))
+    Ok((metadata_dict.to_owned().into(), csr))
 }
 
 #[pymodule]
