@@ -180,7 +180,11 @@ fn write_srf_points(
         }
 
         let row_idx = row_array[i] as usize;
-        let next_row_idx = row_array[i + 1] as usize;
+        let next_row_idx = row_array
+            .get(i + 1)
+            .map(|&x| x as usize)
+            .unwrap_or(row_array.len() - 1);
+        println!("row_idx = {row_idx}, next_row_idx = {next_row_idx}");
         let nt = next_row_idx - row_idx;
 
         let slice = lexical_core::write(nt, &mut buffer);
