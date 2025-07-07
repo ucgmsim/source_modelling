@@ -10,8 +10,8 @@ use std::io::Error;
 
 #[derive(Default)]
 struct SparseMatrix {
-    row_ptr: Vec<usize>,
-    col_ptr: Vec<u32>,
+    row_ptr: Vec<i64>,
+    col_ptr: Vec<i64>,
     data: Vec<f32>,
 }
 
@@ -101,7 +101,7 @@ fn read_srf_points(
         let slip1 = parse_value::<f32>(data, &mut index)?;
         metadata.push(slip1);
 
-        let nt = parse_value::<u32>(data, &mut index)?;
+        let nt = parse_value::<i64>(data, &mut index)?;
 
         let _nt2 = parse_value::<f32>(data, &mut index)?;
         let _slip2 = parse_value::<i64>(data, &mut index)?;
@@ -110,15 +110,15 @@ fn read_srf_points(
 
         metadata.push((nt as f32) * dt);
 
-        let start_column_index: u32 = (tinit / dt).floor() as u32;
-        slipt1.row_ptr.push(slipt1.data.len());
+        let start_column_index: i64 = (tinit / dt).floor() as i64;
+        slipt1.row_ptr.push(slipt1.data.len() as i64);
         for i in start_column_index..start_column_index + nt {
             let slip = parse_value::<f32>(data, &mut index)?;
             slipt1.col_ptr.push(i);
             slipt1.data.push(slip);
         }
     }
-    slipt1.row_ptr.push(slipt1.data.len());
+    slipt1.row_ptr.push(slipt1.data.len() as i64);
     Ok((metadata, slipt1))
 }
 
