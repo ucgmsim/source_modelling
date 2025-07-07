@@ -42,7 +42,6 @@ Example
 """
 
 import dataclasses
-import functools
 import re
 from collections.abc import Sequence
 from pathlib import Path
