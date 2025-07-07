@@ -164,12 +164,6 @@ fn write_srf_points(
     let data_array = data.as_slice()?;
     let mut buffer = [0u8; BUFFER_SIZE];
 
-    let n_rows = row_array.len();
-
-    if row_array.len() < n_rows + 1 {
-        return Err(PyValueError::new_err("row_ptr length insufficient"));
-    }
-
     for (i, row) in metadata_array.outer_iter().enumerate() {
         let row_len = row.len();
         if row_len == 0 {
