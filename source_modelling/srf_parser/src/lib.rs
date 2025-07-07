@@ -181,8 +181,21 @@ fn write_srf_points(
 
         let row_idx = row_array[i] as usize;
         let next_row_idx = row_array.get(i + 1).map(|&x| x as usize).unwrap_or(row_idx);
-        println!("row_idx = {row_idx}, next_row_idx = {next_row_idx}");
         let nt = next_row_idx - row_idx;
+        println!(
+            "Row {i}: {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}  nt = {}",
+            row.get(0),
+            row.get(1),
+            row.get(2),
+            row.get(3),
+            row.get(4),
+            row.get(5),
+            row.get(6),
+            row.get(7),
+            row.get(8),
+            row.get(9),
+            nt,
+        );
         let slice = lexical_core::write(nt, &mut buffer);
         buffered_writer
             .write_all(slice)
