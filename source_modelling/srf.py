@@ -402,12 +402,11 @@ def read_srf(srf_ffp: Path) -> SrfFile:
             "tinit",
             "dt",
             "rake",
-            "slip1",
+            "slip",
             "rise",
         ],
     )
 
-    points_df["slip"] = points_df["slip1"]
     return SrfFile(
         version,
         headers,
@@ -480,7 +479,7 @@ def write_srf_point(srf_file: TextIO, srf: SrfFile, point: pd.Series) -> None:
         f"{point['lon']:.6f} {point['lat']:.6f} {point['dep']:g} {point['stk']:g} {point['dip']:g} {point['area']:.4E} {point['tinit']:.4f} {point['dt']:.6E}\n"
     )
     srf_file.write(
-        f"{point['rake']:g} {point['slip1']:.4f} {len(slipt1) if slipt1 is not None else 0} 0.0 0 0.0 0\n"
+        f"{point['rake']:g} {point['slip']:.4f} {len(slipt1) if slipt1 is not None else 0} 0.0 0 0.0 0\n"
     )
     if slipt1 is not None:
         write_slip(srf_file, slipt1)
