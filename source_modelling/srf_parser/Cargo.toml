@@ -11,3 +11,4 @@ pyo3 = { version = "0.25.1", features = ["extension-module"] }
 numpy = "0.25"
 lexical-core = "1.0.5"
 memmap = "0.7.0"
+ndarray = "0.16.1"

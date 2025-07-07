@@ -512,9 +512,4 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
             )
 
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
-        srf.points["point_index"] = np.arange(len(srf.points))
-
-        srf.points.apply(
-            functools.partial(write_srf_point, srf_file_handle, srf), axis=1
-        )
-        srf.points = srf.points.drop(columns="point_index")
+        srf_parser.write_srf_points(srf.points.values, srf.slip.indices, srf.slip.data)

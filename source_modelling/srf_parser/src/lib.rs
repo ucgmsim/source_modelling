@@ -1,12 +1,18 @@
+use lexical_core::BUFFER_SIZE;
 use memmap::MmapOptions;
 use numpy::PyArray1;
+use numpy::PyReadonlyArray1;
+use numpy::PyReadonlyArray2;
 use pyo3::exceptions::PyOSError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
 use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::BufWriter;
 use std::io::Error;
+use std::io::Write;
 
 #[derive(Default)]
 struct SparseMatrix {
@@ -140,8 +146,74 @@ fn parse_srf(
     Ok((metadata_array.to_owned().into(), csr))
 }
 
+#[pyfunction]
+fn write_srf_points(
+    _py: Python<'_>,
+    points_metadata: PyReadonlyArray2<f32>,
+    row_ptr: PyReadonlyArray1<i64>,
+    data: PyReadonlyArray1<f32>,
+    file_path: &str,
+) -> PyResult<()> {
+    let file = OpenOptions::new()
+        .append(true)
+        .open(file_path)
+        .or_else(marshall_os_error)?;
+    let mut buffered_writer = BufWriter::new(file);
+    let metadata_array = points_metadata.as_array();
+    let row_array = row_ptr.as_slice()?;
+    let data_array = data.as_slice()?;
+    let mut buffer = [0u8; BUFFER_SIZE];
+
+    let n_rows = row_array.len();
+
+    if row_array.len() < n_rows + 1 {
+        return Err(PyValueError::new_err("row_ptr length insufficient"));
+    }
+
+    for (i, row) in metadata_array.outer_iter().enumerate() {
+        let row_len = row.len();
+        if row_len == 0 {
+            continue; // or error depending on domain rules
+        }
+
+        // Write all but last element
+        for v in row.iter().take(row.len() - 1) {
+            let slice = lexical_core::write(*v, &mut buffer);
+            buffered_writer
+                .write_all(slice)
+                .or_else(marshall_os_error)?;
+            buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+        }
+
+        let row_idx = row_array[i] as usize;
+        let next_row_idx = row_array[i + 1] as usize;
+        let nt = next_row_idx - row_idx;
+
+        let slice = lexical_core::write(nt, &mut buffer);
+        buffered_writer
+            .write_all(slice)
+            .or_else(marshall_os_error)?;
+        buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+
+        for v in &data_array[row_idx..next_row_idx] {
+            let slice = lexical_core::write(*v, &mut buffer);
+            buffered_writer
+                .write_all(slice)
+                .or_else(marshall_os_error)?;
+            buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+        }
+        buffered_writer
+            .write_all(b"\n")
+            .or_else(marshall_os_error)?;
+    }
+
+    buffered_writer.flush().or_else(marshall_os_error)?;
+    Ok(())
+}
+
 #[pymodule]
 fn srf_parser(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_srf, m)?)?;
+    m.add_function(wrap_pyfunction!(write_srf_points, m)?)?;
     Ok(())
 }
