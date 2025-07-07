@@ -180,25 +180,22 @@ fn write_srf_points(
         }
 
         let row_idx = row_array[i] as usize;
-        let next_row_idx = row_array
-            .get(i + 1)
-            .map(|&x| x as usize)
-            .unwrap_or(row_array.len());
+        let next_row_idx = row_array.get(i + 1).map(|&x| x as usize).unwrap_or(row_idx);
         println!("row_idx = {row_idx}, next_row_idx = {next_row_idx}");
         let nt = next_row_idx - row_idx;
-
         let slice = lexical_core::write(nt, &mut buffer);
         buffered_writer
             .write_all(slice)
             .or_else(marshall_os_error)?;
         buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
-
-        for v in &data_array[row_idx..next_row_idx] {
-            let slice = lexical_core::write(*v, &mut buffer);
-            buffered_writer
-                .write_all(slice)
-                .or_else(marshall_os_error)?;
-            buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+        if nt > 0 {
+            for v in &data_array[row_idx..next_row_idx] {
+                let slice = lexical_core::write(*v, &mut buffer);
+                buffered_writer
+                    .write_all(slice)
+                    .or_else(marshall_os_error)?;
+                buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+            }
         }
         buffered_writer
             .write_all(b"\n")
