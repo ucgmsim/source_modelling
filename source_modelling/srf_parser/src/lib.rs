@@ -165,11 +165,6 @@ fn write_srf_points(
     let mut buffer = [0u8; BUFFER_SIZE];
 
     for (i, row) in metadata_array.outer_iter().enumerate() {
-        let row_len = row.len();
-        if row_len == 0 {
-            continue; // or error depending on domain rules
-        }
-
         // Write all but last element
         for v in row.iter().take(row.len() - 1) {
             let slice = lexical_core::write(*v, &mut buffer);
@@ -182,20 +177,6 @@ fn write_srf_points(
         let row_idx = row_array[i] as usize;
         let next_row_idx = row_array.get(i + 1).map(|&x| x as usize).unwrap_or(row_idx);
         let nt = next_row_idx - row_idx;
-        println!(
-            "Row {i}: {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}  nt = {}",
-            row.get(0),
-            row.get(1),
-            row.get(2),
-            row.get(3),
-            row.get(4),
-            row.get(5),
-            row.get(6),
-            row.get(7),
-            row.get(8),
-            row.get(9),
-            nt,
-        );
         let slice = lexical_core::write(nt, &mut buffer);
         buffered_writer
             .write_all(slice)
@@ -204,6 +185,9 @@ fn write_srf_points(
             .write_all(b" 0.0 0 0.0 0")
             .or_else(marshall_os_error)?;
         if nt > 0 {
+            buffered_writer
+              .write_all(b"\n")
+              .or_else(marshall_os_error)?;
             for v in &data_array[row_idx..next_row_idx] {
                 let slice = lexical_core::write(*v, &mut buffer);
                 buffered_writer
