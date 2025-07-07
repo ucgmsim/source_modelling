@@ -512,4 +512,6 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
             )
 
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
-        srf_parser.write_srf_points(srf.points.values, srf.slip.indices, srf.slip.data)
+        srf_parser.write_srf_points(
+            str(srf_ffp), srf.points.values, srf.slip.indices, srf.slip.data
+        )
