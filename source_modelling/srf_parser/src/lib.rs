@@ -10,7 +10,7 @@ use std::io::Error;
 
 #[derive(Default)]
 struct SparseMatrix {
-    row_ptr: Vec<u32>,
+    row_ptr: Vec<usize>,
     col_ptr: Vec<u32>,
     data: Vec<f32>,
 }
@@ -111,14 +111,14 @@ fn read_srf_points(
         metadata.push((nt as f32) * dt);
 
         let start_column_index: u32 = (tinit / dt).floor() as u32;
-        slipt1.row_ptr.push(slipt1.data.len() as u32);
+        slipt1.row_ptr.push(slipt1.data.len());
         for i in start_column_index..start_column_index + nt {
             let slip = parse_value::<f32>(data, &mut index)?;
             slipt1.col_ptr.push(i);
             slipt1.data.push(slip);
         }
     }
-    slipt1.row_ptr.push(slipt1.data.len() as u32);
+    slipt1.row_ptr.push(slipt1.data.len());
     Ok((metadata, slipt1))
 }
 
