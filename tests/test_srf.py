@@ -62,7 +62,6 @@ def test_christchurch_srf():
             "dt": 2.5e-02,
             "rake": 102,
             "slip": 17.49,
-            "slip": 17.49,
             "rise": 0.3,
         }
     )
@@ -265,9 +264,6 @@ def test_srf_geometry():
         "tinit": [5.7029, 5.8000, 5.9000, 6.0000],
         "dt": [0.025] * 4,
         "rake": [102] * 4,
-        "slip": [17.49, 18.00, 19.00, 20.00],
-        "slip2": [0.0] * 4,
-        "slip3": [0.0] * 4,
         "slip": [17.49, 18.00, 19.00, 20.00],
     }
     points = pd.DataFrame(points_data)
