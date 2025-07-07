@@ -200,7 +200,9 @@ fn write_srf_points(
         buffered_writer
             .write_all(slice)
             .or_else(marshall_os_error)?;
-        buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+        buffered_writer
+            .write_all(b" 0.0 0 0.0 0")
+            .or_else(marshall_os_error)?;
         if nt > 0 {
             for v in &data_array[row_idx..next_row_idx] {
                 let slice = lexical_core::write(*v, &mut buffer);
