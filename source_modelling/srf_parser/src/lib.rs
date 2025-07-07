@@ -149,10 +149,10 @@ fn parse_srf(
 #[pyfunction]
 fn write_srf_points(
     _py: Python<'_>,
+    file_path: &str,
     points_metadata: PyReadonlyArray2<f32>,
     row_ptr: PyReadonlyArray1<i64>,
     data: PyReadonlyArray1<f32>,
-    file_path: &str,
 ) -> PyResult<()> {
     let file = OpenOptions::new()
         .append(true)
