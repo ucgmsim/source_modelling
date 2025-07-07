@@ -45,7 +45,6 @@ import dataclasses
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TextIO
 
 import numpy as np
 import pandas as pd
