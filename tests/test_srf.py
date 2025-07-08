@@ -38,11 +38,6 @@ def test_christchurch_srf():
     assert christchurch_srf.points["tinit"].min() == 0.0
     # For the Christchurch event, the slip is only defined in the t1 component.
     assert christchurch_srf.slipt1_array.shape[0] == len(christchurch_srf.points)
-    assert christchurch_srf.slipt2_array is None
-    assert christchurch_srf.slipt3_array is None
-    assert (christchurch_srf.points["slip"] == christchurch_srf.points["slip1"]).all()
-    # This test asserts that the slip and slipt1 values are not different (nnz counts the number of different entries).
-    assert (christchurch_srf.slip != christchurch_srf.slipt1_array).nnz == 0
     # dt is constant for SRF
     assert christchurch_srf.dt == 2.5e-02
     # Check that the segments code correctly identifies one segment
@@ -63,9 +58,6 @@ def test_christchurch_srf():
             "tinit": 5.7029,
             "dt": 2.5e-02,
             "rake": 102,
-            "slip1": 17.49,
-            "slip2": 0.0,
-            "slip3": 0.0,
             "slip": 17.49,
             "rise": 0.3,
         }
@@ -90,6 +82,26 @@ def test_christchurch_srf():
         5.52983e00,
         1.62786e00,
     ]
+
+    # Just to check that the last row is also parsed correctly
+    last_index = len(christchurch_srf.points) - 1
+    end_tinit_index = int(
+        christchurch_srf.points["tinit"].iloc[-1] // christchurch_srf.dt
+    )
+    end_slip_window = [
+        christchurch_srf.slipt1_array[last_index, t]
+        for t in range(end_tinit_index, end_tinit_index + 7)
+    ]
+    assert end_slip_window == [
+        0.00000e00,
+        3.97588e02,
+        7.47954e01,
+        6.18204e01,
+        4.37692e01,
+        2.48125e01,
+        9.33055e00,
+    ]
+
     for (_, header), plane in zip(
         christchurch_srf.header.iterrows(), christchurch_srf.planes
     ):
@@ -249,17 +261,12 @@ def test_srf_geometry():
         "tinit": [5.7029, 5.8000, 5.9000, 6.0000],
         "dt": [0.025] * 4,
         "rake": [102] * 4,
-        "slip1": [17.49, 18.00, 19.00, 20.00],
-        "slip2": [0.0] * 4,
-        "slip3": [0.0] * 4,
         "slip": [17.49, 18.00, 19.00, 20.00],
     }
     points = pd.DataFrame(points_data)
 
     # Mocking sparse arrays
     slipt1_array = sp.sparse.csr_array(np.random.rand(4, 10))
-    slipt2_array = None
-    slipt3_array = None
 
     # Create SrfFile instance
     srf_file = srf.SrfFile(
@@ -267,8 +274,6 @@ def test_srf_geometry():
         header=header,
         points=points,
         slipt1_array=slipt1_array,
-        slipt2_array=slipt2_array,
-        slipt3_array=slipt3_array,
     )
 
     # Get geometry
@@ -317,26 +322,18 @@ def test_srf_dip_90_geometry():
         "tinit": [5.7029, 5.8000, 5.9000, 6.0000],
         "dt": [0.025] * 4,
         "rake": [102] * 4,
-        "slip1": [17.49, 18.00, 19.00, 20.00],
-        "slip2": [0.0] * 4,
-        "slip3": [0.0] * 4,
         "slip": [17.49, 18.00, 19.00, 20.00],
     }
     points = pd.DataFrame(points_data)
 
     # Mocking sparse arrays
     slipt1_array = sp.sparse.csr_array(np.random.rand(4, 10))
-    slipt2_array = None
-    slipt3_array = None
-
     # Create SrfFile instance
     srf_file = srf.SrfFile(
         version="1.0",
         header=header,
         points=points,
         slipt1_array=slipt1_array,
-        slipt2_array=slipt2_array,
-        slipt3_array=slipt3_array,
     )
 
     # Get geometry
@@ -411,8 +408,6 @@ def test_planes_nstk_1_ndip_gt_1():
         header=header,
         points=points,
         slipt1_array=None,
-        slipt2_array=None,
-        slipt3_array=None,
     )
 
     planes = mock_srf.planes
@@ -456,8 +451,6 @@ def test_planes_nstk_1_ndip_1():
         header=header,
         points=points,
         slipt1_array=None,
-        slipt2_array=None,
-        slipt3_array=None,
     )
 
     planes = mock_srf.planes

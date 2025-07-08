@@ -42,11 +42,9 @@ Example
 """
 
 import dataclasses
-import functools
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TextIO
 
 import numpy as np
 import pandas as pd
@@ -54,7 +52,7 @@ import scipy as sp
 import shapely
 
 from qcore import coordinates
-from source_modelling import parse_utils, srf_reader
+from source_modelling import parse_utils, srf_parser
 from source_modelling.sources import Plane
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
@@ -181,18 +179,11 @@ class SrfFile:
     header: pd.DataFrame
     points: pd.DataFrame
     slipt1_array: sp.sparse.csr_array
-    slipt2_array: sp.sparse.csr_array
-    slipt3_array: sp.sparse.csr_array
 
     @property
     def slip(self):  # numpydoc ignore=RT01
         """csr_array: sparse array representing slip in all components."""
-        slip_array = self.slipt1_array.power(2)
-        if self.slipt2_array:
-            slip_array += self.slipt2_array.power(2)
-        if self.slipt3_array:
-            slip_array += self.slipt3_array.power(2)
-        return slip_array.sqrt()
+        return self.slipt1_array
 
     @property
     def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
@@ -391,123 +382,35 @@ def read_srf(srf_ffp: Path) -> SrfFile:
                 f'Expecting POINTS header line, got: "{points_count_line}"'
             )
         point_count = int(points_count_match.group(1))
+        position = srf_file_handle.tell()
 
-        points_metadata, slipt1_array, slipt2_array, slipt3_array = (
-            srf_reader.read_srf_points(srf_file_handle, point_count)
-        )
-        points_df = pd.DataFrame(
-            data=points_metadata,
-            columns=[
-                "lon",
-                "lat",
-                "dep",
-                "stk",
-                "dip",
-                "area",
-                "tinit",
-                "dt",
-                "rake",
-                "slip1",
-                "slip2",
-                "slip3",
-                "rise",
-            ],
-        )
-
-        points_df["slip"] = np.sqrt(
-            points_df["slip1"] ** 2 + points_df["slip2"] ** 2 + points_df["slip3"] ** 2
-        )
-        return SrfFile(
-            version, headers, points_df, slipt1_array, slipt2_array, slipt3_array
-        )
-
-
-def write_slip(srf_file: TextIO, slips: np.ndarray) -> None:
-    """Write out slip values to an SRF file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to write to.
-    slips : np.ndarray
-        The slip values to write.
-    """
-    for i in range(0, len(slips), 6):
-        srf_file.write(
-            "  "
-            + "  ".join(f"{slips[j]:.5E}" for j in range(i, min(len(slips), i + 6)))
-            + "\n"
-        )
-
-
-def write_srf_point(srf_file: TextIO, srf: SrfFile, point: pd.Series) -> None:
-    """Write out a single SRF point.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to write to.
-    srf : SrfFile
-        The SRF file object to write.
-    point : pd.Series
-        The point to write.
-    """
-    index = int(point["point_index"])
-    # We need to get the raw slip values for the slip arrays to write out to the SRF.
-    # The slip values for the ith point in the SRF are stored in the ith row of the slip array.
-    # The indptr array contains the indices for each row in the slip array, so:
-    #
-    # - indptr[i] is the start index in the data array for the ith row and
-    # - indptr[i + 1] is the start index in the data array for the (i + 1)th row.
-    #
-    # Hence, data[indptr[i]:indptr[i+1]] collects the slip values for the ith row.
-    # Note we cannot use standard multi-dimensional array indexing arr[i, :]
-    # because scipy sparse arrays do not support this kind of indexing.
-    #
-    # Visually:
-    #
-    # +----+-----+----+---+---+--+
-    # |    |     |    |   |   |  | indptr
-    # +----+---\-+----+---+-\-+--+
-    #           \            \
-    #            \            \
-    # +----------+\-----------+\----------+-------------+
-    # |   ...    |    row i   | row i + 1 |     ...     | data
-    # +----------+------------+-----------+-------------+
-    #            row_i = data[indptr[i]:indptr[i+1]]
-    slipt1 = (
-        srf.slipt1_array.data[
-            srf.slipt1_array.indptr[index] : srf.slipt1_array.indptr[index + 1]
-        ]
-        if srf.slipt1_array is not None
-        else None
+    points_metadata, slipt1_array = srf_parser.parse_srf(
+        str(srf_ffp), position, point_count
     )
-    slipt2 = (
-        srf.slipt2_array.data[
-            srf.slipt2_array.indptr[index] : srf.slipt2_array.indptr[index + 1]
-        ]
-        if srf.slipt2_array is not None
-        else None
+
+    points_df = pd.DataFrame(
+        points_metadata.reshape((-1, 11)),
+        columns=[
+            "lon",
+            "lat",
+            "dep",
+            "stk",
+            "dip",
+            "area",
+            "tinit",
+            "dt",
+            "rake",
+            "slip",
+            "rise",
+        ],
     )
-    slipt3 = (
-        srf.slipt3_array.data[
-            srf.slipt3_array.indptr[index] : srf.slipt3_array.indptr[index + 1]
-        ]
-        if srf.slipt3_array is not None
-        else None
+
+    return SrfFile(
+        version,
+        headers,
+        points_df,
+        slipt1_array,
     )
-    srf_file.write(
-        f"{point['lon']:.6f} {point['lat']:.6f} {point['dep']:g} {point['stk']:g} {point['dip']:g} {point['area']:.4E} {point['tinit']:.4f} {point['dt']:.6E}\n"
-    )
-    srf_file.write(
-        f"{point['rake']:g} {point['slip1']:.4f} {len(slipt1) if slipt1 is not None else 0} {point['slip2']:.4f} {len(slipt2) if slipt2 is not None else 0} {point['slip3']:.4f} {len(slipt3) if slipt3 is not None else 0}\n"
-    )
-    if slipt1 is not None:
-        write_slip(srf_file, slipt1)
-    if slipt2 is not None:
-        write_slip(srf_file, slipt2)
-    if slipt3 is not None:
-        write_slip(srf_file, slipt3)
 
 
 def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
@@ -537,9 +440,9 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
             )
 
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
-        srf.points["point_index"] = np.arange(len(srf.points))
-
-        srf.points.apply(
-            functools.partial(write_srf_point, srf_file_handle, srf), axis=1
-        )
-        srf.points = srf.points.drop(columns="point_index")
+    srf_parser.write_srf_points(
+        str(srf_ffp),
+        srf.points.values.astype(np.float32),
+        srf.slip.indptr,
+        srf.slip.data,
+    )
