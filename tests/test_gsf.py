@@ -94,7 +94,7 @@ def test_write_bad_df():
             "seg_no": [0, 0, 0],
         }
     )
-    filepath = "test.gsf"
+    filepath = Path("test.gsf")
     with pytest.raises(
         ValueError, match="The DataFrame must have a 'loc_rake' column."
     ):
