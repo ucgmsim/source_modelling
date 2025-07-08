@@ -412,6 +412,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
         slipt1_array,
     )
 
+
 def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
     """Write an SRF object to a filepath.
 
@@ -440,5 +441,8 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
 
         srf_file_handle.write(f"POINTS {len(srf.points)}\n")
     srf_parser.write_srf_points(
-        str(srf_ffp), srf.points.values, srf.slip.indptr, srf.slip.data
+        str(srf_ffp),
+        srf.points.values.astype(np.float32),
+        srf.slip.indptr,
+        srf.slip.data,
     )

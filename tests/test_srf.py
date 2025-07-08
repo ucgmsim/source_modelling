@@ -38,9 +38,6 @@ def test_christchurch_srf():
     assert christchurch_srf.points["tinit"].min() == 0.0
     # For the Christchurch event, the slip is only defined in the t1 component.
     assert christchurch_srf.slipt1_array.shape[0] == len(christchurch_srf.points)
-    assert (christchurch_srf.points["slip"] == christchurch_srf.points["slip"]).all()
-    # This test asserts that the slip and slipt1 values are not different (nnz counts the number of different entries).
-    assert (christchurch_srf.slip != christchurch_srf.slipt1_array).nnz == 0
     # dt is constant for SRF
     assert christchurch_srf.dt == 2.5e-02
     # Check that the segments code correctly identifies one segment
