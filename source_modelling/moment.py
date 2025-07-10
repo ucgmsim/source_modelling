@@ -163,3 +163,43 @@ def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFr
             "moment": integrate_f(np.arange(len(moment_rate_df))),
         }
     ).set_index("t")
+
+
+def calc_point_source_slip(
+    moment_dyne_cm: float,
+    fault_area_km2: float,
+    velocity_model_df: pd.DataFrame,
+    source_depth_km: float,
+) -> float:
+    """Calculate slip for a point source.
+
+    This calculation is the same as in the old workflow:
+    https://github.com/ucgmsim/Pre-processing/blob/6572ea8be0963da4f7ac6a503ab07dd2519296e5/srf_generation/input_file_generation/realisation_to_srf.py#L321C9-L321C57
+
+    Parameters
+    ----------
+    moment_dyne_cm : float
+        The seismic moment in dyne-cm.
+    fault_area_km2 : float
+        The area of the fault in square kilometers.
+    velocity_model_df : pd.DataFrame
+      columns:
+        - "depth_km": The depth in kilometers.
+        - "rho_g_per_cm3": The density of the fault in grams per cubic centimeter.
+        - "vs_km_per_s": The shear wave velocity in kilometers per second.
+
+    Returns
+    -------
+    float
+        The calculated slip in cm.
+    """
+
+    # Find the index of the closest depth in the velocity model
+    idx = np.argmin(np.abs(velocity_model_df["depth_km"] - source_depth_km))
+    vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
+    rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]
+
+    # The factor of 1.0e-20 converts the combination of input units to cm.
+    return (moment_dyne_cm * 1.0e-20) / (
+        fault_area_km2 * rho_g_per_cm3 * vs_km_per_s**2
+    )
