@@ -355,7 +355,15 @@ class Plane:
     @property
     def area(self) -> float:  # numpydoc ignore=RT01
         """float: The area of the plane (in km^2)."""
-        return self.length * self.width
+        return (
+            0.5
+            * np.linalg.norm(
+                np.cross(
+                    self.bounds[2] - self.bounds[0], self.bounds[1] - self.bounds[3]
+                )
+            )
+            / 1000.0**2
+        )
 
     @property
     def projected_width_m(self) -> float:  # numpydoc ignore=RT01
@@ -1125,7 +1133,7 @@ class Fault:
         float
             The area of the fault.
         """
-        return self.width * np.sum(self.lengths)
+        return sum(plane.area for plane in self.planes)
 
     @property
     def lengths(self) -> np.ndarray:  # numpydoc ignore=RT01
