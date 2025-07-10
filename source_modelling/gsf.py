@@ -12,7 +12,7 @@ read_gsf(gsf_filepath)
 References
 ----------
 The GSF file format is used to define the grid of the source model for a fault.
-See https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+On+GM
+See https://ucdigitalsms.atlassian.net/wiki/spaces/QuakeCore/pages/3291694768/File+Formats+Used+In+Ground+Motion+Simulation#FileFormatsUsedInGroundMotionSimulation-SRFinfoformat
 for details on the GSF format.
 """
 
@@ -114,8 +114,12 @@ def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
         The DataFrame containing the GSF data.  Must contain at least the columns
         'lon', 'lat', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', and 'loc_rake'.
     gsf_filepath : Path
-        The path to the GSF file to write.
+        The path to the GSF file to write. Parent directories will be created if they
+        do not exist.
+
     """
+
+    gsf_filepath.parent.mkdir(parents=True, exist_ok=True)
 
     if "init_time" not in gsf_df:
         gsf_df["init_time"] = -1
