@@ -187,6 +187,8 @@ def calc_point_source_slip(
         - "depth_km": The depth in kilometers.
         - "rho_g_per_cm3": The density of the fault in grams per cubic centimeter.
         - "vs_km_per_s": The shear wave velocity in kilometers per second.
+    source_depth_km : float
+        The depth of the source in kilometers.
 
     Returns
     -------
