@@ -362,7 +362,7 @@ class Plane:
                     self.bounds[2] - self.bounds[0], self.bounds[1] - self.bounds[3]
                 )
             )
-            / 1000.0**2
+            / _KM_TO_M**2
         )
 
     @property
