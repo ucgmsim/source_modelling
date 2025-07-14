@@ -298,15 +298,106 @@ class SrfFile:
         )
 
     def write_hdf5(self, hdf5_ffp: Path) -> None:
-        """Write an SRFFile to disk in an HDF5."""
+        """
+        Write an SRFFile to disk in an HDF5 format using xarray's to_netcdf.
+        Applies zlib compression to 'data' and 'indices' variables.
+        """
         self.to_xarray().to_netcdf(
-            hdf5_ffp, engine="h5netcdf", encoding={"zlib": True, "complevel": 9}
+            hdf5_ffp,
+            engine="h5netcdf",
+            encoding={
+                # Apply compression to the 'data' variable of the sparse array
+                "data": {"compression": "zlib", "complevel": 9},
+                # Apply compression to the 'indices' variable of the sparse array
+                "indices": {"compression": "zlib", "complevel": 9},
+            },
+        )
+
+    @classmethod
+    def from_hdf5(cls, hdf5_ffp: Path) -> Self:
+        """
+        Reads an SRFFile object from an HDF5 file.
+
+        Parameters
+        ----------
+        hdf5_ffp : Path
+            The file path to the HDF5 file.
+
+        Returns
+        -------
+        SrfFile
+            An instance of the SrfFile class reconstructed from the HDF5 data.
+        """
+        ds = xr.open_dataset(hdf5_ffp, engine="h5netcdf")
+
+        header_original_cols = [
+            "elon",
+            "elot",
+            "nstk",
+            "ndip",
+            "len",
+            "wid",
+            "stk",
+            "dip",
+            "dtop",
+            "shyp",
+            "dhyp",
+        ]
+        header_data = {}
+        for col_orig in header_original_cols:
+            plane_col_name = f"plane_{col_orig}"
+            header_data[col_orig] = ds[plane_col_name].values
+        header_df = pd.DataFrame(header_data)
+
+        points_original_cols = [
+            "lon",
+            "lat",
+            "dep",
+            "stk",
+            "dip",
+            "area",
+            "tinit",
+            "dt",
+            "rake",
+            "slip",
+        ]
+        points_data = {}
+        for col in points_original_cols:
+            points_data[col] = ds[col].values
+        points_df = pd.DataFrame(points_data)
+
+        data = ds["data"].values
+        indices = ds["indices"].values
+        indptr_saved = ds["indptr"].values
+        reconstructed_indptr = np.append(indptr_saved, len(data))
+
+        original_shape = tuple(ds.attrs["original_shape"])
+
+        slipt1_array = sp.sparse.csr_array(
+            (data, indices, reconstructed_indptr), shape=original_shape
+        )
+
+        version = ds.attrs["version"]
+
+        return cls(
+            version=version,
+            header=header_df,
+            points=points_df,
+            slipt1_array=slipt1_array,
         )
 
     def to_xarray(self) -> xr.Dataset:
-        # Prepare data variables and coordinates for the header Dataset
+        """Convert an SRFFile into an xarray dataset.
+
+        Returns
+        -------
+        xr.Dataset
+            An xarray dataset containing the information from an SRF
+            file.
+        """
         header_data_vars = {
-            col: ("segment", self.header[col].values) for col in self.header.columns
+            f"plane_{col}": ("segment", self.header[col].values)
+            for col in self.header.columns
         }
         header_coords = {"segment": np.arange(len(self.header))}
         header_ds = xr.Dataset(header_data_vars, coords=header_coords)
@@ -319,12 +410,14 @@ class SrfFile:
         points_ds = xr.Dataset(points_data_vars, coords=points_coords)
 
         n_patches, n_timesteps = self.slipt1_array.shape
-
         slip_ds = xr.Dataset(
             {
                 "data": (("nz_idx",), self.slipt1_array.data),
                 "indices": (("nz_idx",), self.slipt1_array.indices),
-                "indptr": (("row",), self.slipt1_array.indptr),
+                "indptr": (
+                    ("row",),
+                    self.slipt1_array.indptr[:-1],
+                ),  # Apply slicing to the data
             },
             coords={
                 "row": np.arange(n_patches),
@@ -343,6 +436,7 @@ class SrfFile:
 
     @property
     def slip(self):  # numpydoc ignore=RT01
+        "csr_array: A sparse array containing slip-time functions for each point."
         return self.slipt1_array
 
     @property
