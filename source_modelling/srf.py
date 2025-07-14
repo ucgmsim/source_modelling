@@ -352,6 +352,7 @@ class SrfFile:
             plane_col_name = f"plane_{col_orig}"
             header_data[col_orig] = ds[plane_col_name].values
         header_df = pd.DataFrame(header_data)
+        header_df[['nstk', 'ndip']] = header_df[['nstk', 'ndip']].astype(int)
 
         points_original_cols = [
             "lon",
