@@ -185,7 +185,7 @@ class SrfFile:
 
         Parameters
         ----------
-        srf_file : Path
+        srf_ffp : Path
             The path to the srf file.
 
         Returns
@@ -298,10 +298,14 @@ class SrfFile:
         )
 
     def write_hdf5(self, hdf5_ffp: Path) -> None:
+        """Write an SRFFile to disk in an HDF5 format using xarray's to_netcdf.
+
+        Parameters
+        ----------
+        hdf5_ffp : Path
+            The path to the HDF5 file to save to.
         """
-        Write an SRFFile to disk in an HDF5 format using xarray's to_netcdf.
-        Applies zlib compression to 'data' and 'indices' variables.
-        """
+
         self.to_xarray().to_netcdf(
             hdf5_ffp,
             engine="h5netcdf",
