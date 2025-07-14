@@ -135,7 +135,7 @@ class SrfFile:
         The columns of the header are:
 
         - elon: The centre longitude of the plane.
-        - elot: The centre latitude of the plane.
+        - elat: The centre latitude of the plane.
         - nstk: The number of patches along strike for the plane.
         - ndip: The number of patches along dip for the plane.
         - len: The length of the plane (in km).
@@ -332,7 +332,7 @@ class SrfFile:
 
         header_original_cols = [
             "elon",
-            "elot",
+            "elat",
             "nstk",
             "ndip",
             "len",
@@ -360,6 +360,7 @@ class SrfFile:
             "dt",
             "rake",
             "slip",
+            "rise",
         ]
         points_data = {}
         for col in points_original_cols:
@@ -371,16 +372,10 @@ class SrfFile:
         indptr_saved = ds["indptr"].values
         reconstructed_indptr = np.append(indptr_saved, len(data))
 
-        original_shape = tuple(ds.attrs["original_shape"])
-
-        slipt1_array = sp.sparse.csr_array(
-            (data, indices, reconstructed_indptr), shape=original_shape
-        )
-
-        version = ds.attrs["version"]
+        slipt1_array = sp.sparse.csr_array((data, indices, reconstructed_indptr))
 
         return cls(
-            version=version,
+            version="1.0",
             header=header_df,
             points=points_df,
             slipt1_array=slipt1_array,
@@ -402,7 +397,6 @@ class SrfFile:
         header_coords = {"segment": np.arange(len(self.header))}
         header_ds = xr.Dataset(header_data_vars, coords=header_coords)
 
-        # Prepare data variables and coordinates for the points Dataset
         points_data_vars = {
             col: ("patch", self.points[col].values) for col in self.points.columns
         }
