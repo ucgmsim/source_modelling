@@ -340,7 +340,7 @@ class SrfFile:
             if var_name.startswith("plane_")
         }
         header_df = pd.DataFrame(header_data)
-        header_df[['nstk', 'ndip']] = header_df[['nstk', 'ndip']].astype(int)
+        header_df[["nstk", "ndip"]] = header_df[["nstk", "ndip"]].astype(int)
 
         points_data = {
             col: ds[col].values
@@ -357,7 +357,7 @@ class SrfFile:
         slipt1_array = sp.sparse.csr_array((data, indices, reconstructed_indptr))
 
         return cls(
-            version="1.0",
+            version=ds.attrs["version"],
             header=header_df,
             points=points_df,
             slipt1_array=slipt1_array,
@@ -407,6 +407,7 @@ class SrfFile:
             },
         )
         ds = xr.merge([header_ds, points_ds, slip_ds])
+        ds.attrs["version"] = self.version
 
         return ds
 
