@@ -340,6 +340,7 @@ class SrfFile:
             if var_name.startswith("plane_")
         }
         header_df = pd.DataFrame(header_data)
+        header_df[['nstk', 'ndip']] = header_df[['nstk', 'ndip']].astype(int)
 
         points_data = {
             col: ds[col].values
