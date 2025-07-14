@@ -334,41 +334,18 @@ class SrfFile:
         """
         ds = xr.open_dataset(hdf5_ffp, engine="h5netcdf")
 
-        header_original_cols = [
-            "elon",
-            "elat",
-            "nstk",
-            "ndip",
-            "len",
-            "wid",
-            "stk",
-            "dip",
-            "dtop",
-            "shyp",
-            "dhyp",
-        ]
-        header_data = {}
-        for col_orig in header_original_cols:
-            plane_col_name = f"plane_{col_orig}"
-            header_data[col_orig] = ds[plane_col_name].values
+        header_data = {
+            var_name[len("plane_") :]: ds[var_name].values
+            for var_name in ds.data_vars
+            if var_name.startswith("plane_")
+        }
         header_df = pd.DataFrame(header_data)
 
-        points_original_cols = [
-            "lon",
-            "lat",
-            "dep",
-            "stk",
-            "dip",
-            "area",
-            "tinit",
-            "dt",
-            "rake",
-            "slip",
-            "rise",
-        ]
-        points_data = {}
-        for col in points_original_cols:
-            points_data[col] = ds[col].values
+        points_data = {
+            col: ds[col].values
+            for col in ds.data_vars
+            if not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
+        }
         points_df = pd.DataFrame(points_data)
 
         data = ds["data"].values
