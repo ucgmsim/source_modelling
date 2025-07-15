@@ -467,3 +467,39 @@ def test_planes_nstk_1_ndip_1():
     assert plane.wgs_depth_coordinates_to_fault_coordinates(
         points[["lat", "lon", "dep"]].iloc[0].values * np.array([1, 1, 1000])
     ) == pytest.approx(np.array([0.5, 0.5]), abs=1e-3)
+
+
+def test_hdf5_read_write():
+    """
+    Test that writing an SRF to HDF5 and reading it back produces an SrfFile
+    with identical properties (version, header, points, slipt1_array).
+    """
+    original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+
+    with tempfile.NamedTemporaryFile(suffix=".hdf5") as tmp_hdf5_file:
+        hdf5_ffp = Path(tmp_hdf5_file.name)
+
+        original_srf.write_hdf5(hdf5_ffp)
+
+        reconstructed_srf = srf.SrfFile.from_hdf5(hdf5_ffp)
+
+        assert original_srf.version == reconstructed_srf.version, "Version mismatch"
+        assert original_srf.header.equals(reconstructed_srf.header), "Header mismatch"
+        assert original_srf.points.equals(reconstructed_srf.points), "Points mismatch"
+
+        assert (
+            original_srf.slipt1_array.shape == reconstructed_srf.slipt1_array.shape
+        ), "slipt1_array shape mismatch"
+        assert np.array_equal(
+            original_srf.slipt1_array.data, reconstructed_srf.slipt1_array.data
+        ), "slipt1_array data mismatch"
+        assert np.array_equal(
+            original_srf.slipt1_array.indices, reconstructed_srf.slipt1_array.indices
+        ), "slipt1_array indices mismatch"
+        assert np.array_equal(
+            original_srf.slipt1_array.indptr, reconstructed_srf.slipt1_array.indptr
+        ), "slipt1_array indptr mismatch"
+
+        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (
+            "slipt1_array content mismatch"
+        )

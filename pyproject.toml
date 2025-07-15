@@ -19,6 +19,7 @@ dependencies = [
    "parse",
    "shapely",
    "scipy",
+   "xarray[io]",
    "networkx"
 ]
 
