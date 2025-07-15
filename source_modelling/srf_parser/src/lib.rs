@@ -38,6 +38,68 @@ impl SparseMatrix {
     }
 }
 
+
+struct Scanner<'a> {
+    data: &'a [u8],
+    index: usize,
+}
+
+impl<'a> Scanner<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
+        Self { data, index: 0 }
+    }
+
+    fn next<T: lexical_core::FromLexical>(
+        &mut self,
+    ) -> Result<T, lexical_core::Error> {
+        self.skip_spaces()?;
+        let (val, read) = lexical_core::parse_partial(&self.data[self.index..]).map_err(|err| match err {
+            lexical_core::Error::Overflow(offset) => lexical_core::Error::Overflow(self.index + offset),
+            lexical_core::Error::Underflow(offset) => lexical_core::Error::Underflow(self.index + offset),
+            lexical_core::Error::InvalidDigit(offset) => lexical_core::Error::InvalidDigit(self.index + offset),
+            lexical_core::Error::Empty(offset) => lexical_core::Error::Empty(self.index + offset),
+            lexical_core::Error::EmptyMantissa(offset) => lexical_core::Error::EmptyMantissa(self.index + offset),
+            lexical_core::Error::EmptyExponent(offset) => lexical_core::Error::EmptyExponent(self.index + offset),
+            lexical_core::Error::EmptyInteger(offset) => lexical_core::Error::EmptyInteger(self.index + offset),
+            lexical_core::Error::EmptyFraction(offset) => lexical_core::Error::EmptyFraction(self.index + offset),
+            lexical_core::Error::InvalidPositiveMantissaSign(offset) => lexical_core::Error::InvalidPositiveMantissaSign(self.index + offset),
+            lexical_core::Error::MissingMantissaSign(offset) => lexical_core::Error::MissingMantissaSign(self.index + offset),
+            lexical_core::Error::InvalidExponent(offset) => lexical_core::Error::InvalidExponent(self.index + offset),
+            lexical_core::Error::InvalidPositiveExponentSign(offset) => lexical_core::Error::InvalidPositiveExponentSign(self.index + offset),
+            lexical_core::Error::MissingExponentSign(offset) => lexical_core::Error::MissingExponentSign(self.index + offset),
+            lexical_core::Error::ExponentWithoutFraction(offset) => lexical_core::Error::ExponentWithoutFraction(self.index + offset),
+            lexical_core::Error::InvalidLeadingZeros(offset) => lexical_core::Error::InvalidLeadingZeros(self.index + offset),
+            lexical_core::Error::MissingExponent(offset) => lexical_core::Error::MissingExponent(self.index + offset),
+            lexical_core::Error::MissingSign(offset) => lexical_core::Error::MissingSign(self.index + offset),
+            lexical_core::Error::InvalidPositiveSign(offset) => lexical_core::Error::InvalidPositiveSign(self.index + offset),
+            lexical_core::Error::InvalidNegativeSign(offset) => lexical_core::Error::InvalidNegativeSign(self.index + offset),
+            e => e
+        })?;
+        self.index += read;
+        Ok(val)
+    }
+
+    fn skip_spaces(&mut self) -> Result<(), lexical_core::Error> {
+        let nonwhitespace = &self.data[self.index..]
+            .iter()
+            .enumerate()
+            .find(|&(_, &x)| !x.is_ascii_whitespace())
+            .map(|(idx, _)| idx);
+        match nonwhitespace {
+            Some(x) => {
+                self.index += x;
+                Ok(())
+            }
+            _ => Err(lexical_core::Error::InvalidDigit(self.index)),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.index = 0;
+    }
+}
+
+
 fn marshall_os_error<T>(e: Error) -> PyResult<T> {
     Err(PyErr::new::<PyOSError, _>(e.to_string()))
 }
@@ -46,54 +108,32 @@ fn marshall_value_error<T>(e: lexical_core::Error) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
 }
 
-fn space_index(data: &[u8], index: &mut usize) -> Result<(), lexical_core::Error> {
-    let nonwhitespace = &data[*index..]
-        .iter()
-        .enumerate()
-        .find(|&(_, &x)| !x.is_ascii_whitespace())
-        .map(|(idx, _)| idx);
-    match nonwhitespace {
-        Some(x) => {
-            *index += x;
-            Ok(())
-        }
-        _ => Err(lexical_core::Error::InvalidDigit(*index)),
-    }
-}
 
-fn parse_value<T: lexical_core::FromLexical>(
-    data: &[u8],
-    index: &mut usize,
-) -> Result<T, lexical_core::Error> {
-    space_index(data, index)?;
-    let (val, read) = lexical_core::parse_partial(&data[*index..])?;
-    *index += read;
-    Ok(val)
-}
+
 
 fn estimate_slipt1_array_size(
-    data: &[u8],
+    scanner: &mut Scanner,
     point_count: usize,
 ) -> Result<usize, lexical_core::Error> {
     // Sample size is the minimum of 500 and point count
     let sample_size = 500.min(point_count);
-    let mut total_slip_samples = 0;
-    let mut index = 0;
+    let mut total_slip_samples: usize = 0;
 
     for _ in 0..sample_size {
         // The first 10 floats are unused
         for _ in 0..10 {
-            let _ = parse_value::<f32>(data, &mut index)?;
+            let _: f32 = scanner.next()?;
         }
         // Extract nt
-        let nt = parse_value::<i64>(data, &mut index)?;
+        let nt: usize = scanner.next()?;
         total_slip_samples += nt;
         // Skip rest of unused values and the actual slip data
         for _ in 0..(nt + 4) {
-            let _ = parse_value::<f32>(data, &mut index)?;
+            let _: f32 = scanner.next()?;
         }
     }
     let avg_slip = (total_slip_samples as f64) / (sample_size as f64);
+    scanner.reset();
     Ok((point_count as f64 * avg_slip).ceil() as usize)
 }
 
@@ -101,34 +141,34 @@ fn read_srf_points(
     data: &[u8],
     point_count: usize,
 ) -> Result<(Vec<f32>, Vec<usize>, Vec<f32>), lexical_core::Error> {
-    let mut index: usize = 0;
+    let mut scanner = Scanner::new(data);
     let mut metadata = Vec::with_capacity(point_count * 11);
     let mut row_ptr = Vec::with_capacity(point_count);
-    let slipt1_capacity = estimate_slipt1_array_size(data, point_count)?;
+    let slipt1_capacity = estimate_slipt1_array_size(&mut scanner, point_count)?;
     let mut slipt1 = Vec::with_capacity(slipt1_capacity);
 
     for i in 0..point_count {
-        metadata.push(parse_value::<f32>(data, &mut index)?); // lon
-        metadata.push(parse_value::<f32>(data, &mut index)?); // lat
-        metadata.push(parse_value::<f32>(data, &mut index)?); // dep
-        metadata.push(parse_value::<f32>(data, &mut index)?); // stk
-        metadata.push(parse_value::<f32>(data, &mut index)?); // dip
-        metadata.push(parse_value::<f32>(data, &mut index)?); // area
-        metadata.push(parse_value::<f32>(data, &mut index)?); // tinit
-        let dt = parse_value::<f32>(data, &mut index)?;
+        metadata.push(scanner.next()?); // lon
+        metadata.push(scanner.next()?); // lat
+        metadata.push(scanner.next()?); // dep
+        metadata.push(scanner.next()?); // stk
+        metadata.push(scanner.next()?); // dip
+        metadata.push(scanner.next()?); // area
+        metadata.push(scanner.next()?); // tinit
+        let dt = scanner.next()?;
         metadata.push(dt);
-        metadata.push(parse_value::<f32>(data, &mut index)?); // rake
-        metadata.push(parse_value::<f32>(data, &mut index)?); // slip1
-        let nt = parse_value::<i64>(data, &mut index)?;
-        let _nt2 = parse_value::<f32>(data, &mut index)?;
-        let _slip2 = parse_value::<i64>(data, &mut index)?;
-        let _slip3 = parse_value::<f32>(data, &mut index)?;
-        let _nt3 = parse_value::<i64>(data, &mut index)?;
+        metadata.push(scanner.next()?); // rake
+        metadata.push(scanner.next()?); // slip1
+        let nt = scanner.next::<usize>()?;
+        let _slip2 = scanner.next::<f32>()?;
+        let _nt2 = scanner.next::<usize>()?;
+        let _slip3 = scanner.next::<f32>()?;
+        let _nt3 = scanner.next::<usize>()?;
         metadata.push((nt as f32) * dt);
 
         row_ptr.push(slipt1.len());
         for _ in 0..nt {
-            slipt1.push(parse_value::<f32>(data, &mut index)?);
+            slipt1.push(scanner.next()?);
         }
     }
 
@@ -147,7 +187,7 @@ fn parse_srf(
     let file = File::open(file_path).or_else(marshall_os_error)?;
     let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
 
-    let (mut metadata, mut row_ptr, mut slipt1) =
+    let (metadata, row_ptr, slipt1) =
         read_srf_points(&mmap[offset..], num_points).or_else(marshall_value_error)?;
 
     let metadata_array = PyArray1::from_vec(py, metadata);
