@@ -297,13 +297,15 @@ class SrfFile:
             self.slip.data,
         )
 
-    def write_hdf5(self, hdf5_ffp: Path) -> None:
+    def write_hdf5(
+        self, hdf5_ffp: Path, include_slip_time_function: bool = True
+    ) -> None:
         """Write an SRFFile to disk in an HDF5."""
-        self.to_xarray().to_netcdf(
+        self.to_xarray(include_slip_time_function=include_slip_time_function).to_netcdf(
             hdf5_ffp, engine="h5netcdf", encoding={"zlib": True, "complevel": 9}
         )
 
-    def to_xarray(self) -> xr.Dataset:
+    def to_xarray(self, include_slip_time_function: bool = True) -> xr.Dataset:
         # Prepare data variables and coordinates for the header Dataset
         header_data_vars = {
             col: ("segment", self.header[col].values) for col in self.header.columns
@@ -317,27 +319,28 @@ class SrfFile:
         }
         points_coords = {"patch": np.arange(len(self.points))}
         points_ds = xr.Dataset(points_data_vars, coords=points_coords)
-
-        n_patches, n_timesteps = self.slipt1_array.shape
-
-        slip_ds = xr.Dataset(
-            {
-                "data": (("nz_idx",), self.slipt1_array.data),
-                "indices": (("nz_idx",), self.slipt1_array.indices),
-                "indptr": (("row",), self.slipt1_array.indptr),
-            },
-            coords={
-                "row": np.arange(n_patches),
-                "col": np.arange(n_timesteps),
-            },
-            attrs={
-                "sparse_format": "csr",
-                "original_shape": self.slipt1_array.shape,
-                "units": "cm",
-                "description": "Slip for each patch at each timestep",
-            },
-        )
-        ds = xr.merge([header_ds, points_ds, slip_ds])
+        datasets = [header_ds, points_ds]
+        if include_slip_time_function:
+            n_patches, n_timesteps = self.slipt1_array.shape
+            slip_ds = xr.Dataset(
+                {
+                    "data": (("nz_idx",), self.slipt1_array.data),
+                    "indices": (("nz_idx",), self.slipt1_array.indices),
+                    "indptr": (("row",), self.slipt1_array.indptr),
+                },
+                coords={
+                    "row": np.arange(n_patches),
+                    "col": np.arange(n_timesteps),
+                },
+                attrs={
+                    "sparse_format": "csr",
+                    "original_shape": self.slipt1_array.shape,
+                    "units": "cm",
+                    "description": "Slip for each patch at each timestep",
+                },
+            )
+            datasets.append(slip_ds)
+        ds = xr.merge(datasets)
 
         return ds
 
