@@ -135,7 +135,7 @@ class SrfFile:
         The columns of the header are:
 
         - elon: The centre longitude of the plane.
-        - elot: The centre latitude of the plane.
+        - elat: The centre latitude of the plane.
         - nstk: The number of patches along strike for the plane.
         - ndip: The number of patches along dip for the plane.
         - len: The length of the plane (in km).
@@ -185,7 +185,7 @@ class SrfFile:
 
         Parameters
         ----------
-        srf_file : Path
+        srf_ffp : Path
             The path to the srf file.
 
         Returns
@@ -300,25 +300,105 @@ class SrfFile:
     def write_hdf5(
         self, hdf5_ffp: Path, include_slip_time_function: bool = True
     ) -> None:
-        """Write an SRFFile to disk in an HDF5."""
+        """Write an SRFFile to disk in an HDF5 format using xarray's to_netcdf.
+
+        Parameters
+        ----------
+        hdf5_ffp : Path
+            The path to the HDF5 file to save to.
+        include_slip_time_function : bool
+            If True, include the slip time function in the HDF5
+            output. Slower and outputs larger files.
+        """
+
         self.to_xarray(include_slip_time_function=include_slip_time_function).to_netcdf(
-            hdf5_ffp, engine="h5netcdf", encoding={"zlib": True, "complevel": 9}
+            hdf5_ffp,
+            engine="h5netcdf",
+            encoding={
+                # Apply compression to the 'data' variable of the sparse array
+                "data": {"compression": "zlib", "complevel": 9},
+                # Apply compression to the 'indices' variable of the sparse array
+                "indices": {"compression": "zlib", "complevel": 9},
+            }
+            if include_slip_time_function
+            else None,
+        )
+
+    @classmethod
+    def from_hdf5(cls, hdf5_ffp: Path) -> Self:
+        """
+        Reads an SRFFile object from an HDF5 file.
+
+        Parameters
+        ----------
+        hdf5_ffp : Path
+            The file path to the HDF5 file.
+
+        Returns
+        -------
+        SrfFile
+            An instance of the SrfFile class reconstructed from the HDF5 data.
+        """
+        ds = xr.open_dataset(hdf5_ffp, engine="h5netcdf")
+
+        header_data = {
+            var_name[len("plane_") :]: ds[var_name].values
+            for var_name in ds.data_vars
+            if var_name.startswith("plane_")
+        }
+        header_df = pd.DataFrame(header_data)
+        header_df[["nstk", "ndip"]] = header_df[["nstk", "ndip"]].astype(int)
+
+        points_data = {
+            col: ds[col].values
+            for col in ds.data_vars
+            if not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
+        }
+        points_df = pd.DataFrame(points_data)
+
+        data = ds["data"].values
+        indices = ds["indices"].values
+        indptr_saved = ds["indptr"].values
+        reconstructed_indptr = np.append(indptr_saved, len(data))
+
+        slipt1_array = sp.sparse.csr_array((data, indices, reconstructed_indptr))
+
+        return cls(
+            version=ds.attrs["version"],
+            header=header_df,
+            points=points_df,
+            slipt1_array=slipt1_array,
         )
 
     def to_xarray(self, include_slip_time_function: bool = True) -> xr.Dataset:
+        """Convert an SRFFile into an xarray dataset.
+
+        Parameters
+        ----------
+        include_slip_time_function : bool, default False
+            If True, include the slip time functions as well as the
+            slip summaries in the SRF. Slower.
+
+        Returns
+        -------
+        xr.Dataset
+            An xarray dataset containing the information from an SRF
+            file.
+        """
         # Prepare data variables and coordinates for the header Dataset
         header_data_vars = {
-            col: ("segment", self.header[col].values) for col in self.header.columns
+            f"plane_{col}": ("segment", self.header[col].values)
+            for col in self.header.columns
         }
         header_coords = {"segment": np.arange(len(self.header))}
         header_ds = xr.Dataset(header_data_vars, coords=header_coords)
 
-        # Prepare data variables and coordinates for the points Dataset
         points_data_vars = {
             col: ("patch", self.points[col].values) for col in self.points.columns
         }
         points_coords = {"patch": np.arange(len(self.points))}
         points_ds = xr.Dataset(points_data_vars, coords=points_coords)
+
         datasets = [header_ds, points_ds]
         if include_slip_time_function:
             n_patches, n_timesteps = self.slipt1_array.shape
@@ -326,7 +406,10 @@ class SrfFile:
                 {
                     "data": (("nz_idx",), self.slipt1_array.data),
                     "indices": (("nz_idx",), self.slipt1_array.indices),
-                    "indptr": (("row",), self.slipt1_array.indptr),
+                    "indptr": (
+                        ("row",),
+                        self.slipt1_array.indptr[:-1],
+                    ),  # Apply slicing to the data
                 },
                 coords={
                     "row": np.arange(n_patches),
@@ -341,11 +424,13 @@ class SrfFile:
             )
             datasets.append(slip_ds)
         ds = xr.merge(datasets)
+        ds.attrs["version"] = self.version
 
         return ds
 
     @property
     def slip(self):  # numpydoc ignore=RT01
+        "csr_array: A sparse array containing slip-time functions for each point."
         return self.slipt1_array
 
     @property
