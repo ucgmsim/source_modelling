@@ -46,15 +46,18 @@ fn marshall_value_error<T>(e: lexical_core::Error) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
 }
 
-fn space_index(data: &[u8]) -> Result<usize, lexical_core::Error> {
-    let nonwhitespace = data
+fn space_index(data: &[u8], index: &mut usize) -> Result<(), lexical_core::Error> {
+    let nonwhitespace = &data[*index..]
         .iter()
         .enumerate()
         .find(|&(_, &x)| !x.is_ascii_whitespace())
         .map(|(idx, _)| idx);
     match nonwhitespace {
-        Some(x) => Ok(x),
-        _ => Err(lexical_core::Error::InvalidDigit(0)),
+        Some(x) => {
+            *index += x;
+            Ok(())
+        }
+        _ => Err(lexical_core::Error::InvalidDigit(*index)),
     }
 }
 
@@ -62,70 +65,74 @@ fn parse_value<T: lexical_core::FromLexical>(
     data: &[u8],
     index: &mut usize,
 ) -> Result<T, lexical_core::Error> {
-    *index += space_index(&data[*index..])?;
+    space_index(data, index)?;
     let (val, read) = lexical_core::parse_partial(&data[*index..])?;
     *index += read;
     Ok(val)
 }
 
+fn estimate_slipt1_array_size(
+    data: &[u8],
+    point_count: usize,
+) -> Result<usize, lexical_core::Error> {
+    // Sample size is the minimum of 500 and point count
+    let sample_size = 500.min(point_count);
+    let mut total_slip_samples = 0;
+    let mut index = 0;
+
+    for _ in 0..sample_size {
+        // The first 10 floats are unused
+        for _ in 0..10 {
+            let _ = parse_value::<f32>(data, &mut index)?;
+        }
+        // Extract nt
+        let nt = parse_value::<i64>(data, &mut index)?;
+        total_slip_samples += nt;
+        // Skip rest of unused values and the actual slip data
+        for _ in 0..(nt + 4) {
+            let _ = parse_value::<f32>(data, &mut index)?;
+        }
+    }
+    let avg_slip = (total_slip_samples as f64) / (sample_size as f64);
+    Ok((point_count as f64 * avg_slip).ceil() as usize)
+}
+
 fn read_srf_points(
     data: &[u8],
     point_count: usize,
-) -> Result<(Vec<f32>, SparseMatrix), lexical_core::Error> {
+) -> Result<(Vec<f32>, Vec<usize>, Vec<f32>), lexical_core::Error> {
     let mut index: usize = 0;
     let mut metadata = Vec::with_capacity(point_count * 11);
-    let mut slipt1 = SparseMatrix::default();
+    let mut row_ptr = Vec::with_capacity(point_count);
+    let slipt1_capacity = estimate_slipt1_array_size(data, point_count)?;
+    let mut slipt1 = Vec::with_capacity(slipt1_capacity);
 
-    for _ in 0..point_count {
-        let lon = parse_value::<f32>(data, &mut index)?;
-        metadata.push(lon);
-
-        let lat = parse_value::<f32>(data, &mut index)?;
-        metadata.push(lat);
-
-        let dep = parse_value::<f32>(data, &mut index)?;
-        metadata.push(dep);
-
-        let stk = parse_value::<f32>(data, &mut index)?;
-        metadata.push(stk);
-
-        let dip = parse_value::<f32>(data, &mut index)?;
-        metadata.push(dip);
-
-        let area = parse_value::<f32>(data, &mut index)?;
-        metadata.push(area);
-
-        let tinit = parse_value::<f32>(data, &mut index)?;
-        metadata.push(tinit);
-
+    for i in 0..point_count {
+        metadata.push(parse_value::<f32>(data, &mut index)?); // lon
+        metadata.push(parse_value::<f32>(data, &mut index)?); // lat
+        metadata.push(parse_value::<f32>(data, &mut index)?); // dep
+        metadata.push(parse_value::<f32>(data, &mut index)?); // stk
+        metadata.push(parse_value::<f32>(data, &mut index)?); // dip
+        metadata.push(parse_value::<f32>(data, &mut index)?); // area
+        metadata.push(parse_value::<f32>(data, &mut index)?); // tinit
         let dt = parse_value::<f32>(data, &mut index)?;
         metadata.push(dt);
-
-        let rake = parse_value::<f32>(data, &mut index)?;
-        metadata.push(rake);
-
-        let slip1 = parse_value::<f32>(data, &mut index)?;
-        metadata.push(slip1);
-
+        metadata.push(parse_value::<f32>(data, &mut index)?); // rake
+        metadata.push(parse_value::<f32>(data, &mut index)?); // slip1
         let nt = parse_value::<i64>(data, &mut index)?;
-
         let _nt2 = parse_value::<f32>(data, &mut index)?;
         let _slip2 = parse_value::<i64>(data, &mut index)?;
         let _slip3 = parse_value::<f32>(data, &mut index)?;
         let _nt3 = parse_value::<i64>(data, &mut index)?;
-
         metadata.push((nt as f32) * dt);
 
-        let start_column_index: i64 = (tinit / dt).floor() as i64;
-        slipt1.row_ptr.push(slipt1.data.len() as i64);
-        for i in start_column_index..start_column_index + nt {
-            let slip = parse_value::<f32>(data, &mut index)?;
-            slipt1.col_ptr.push(i);
-            slipt1.data.push(slip);
+        row_ptr.push(slipt1.len());
+        for _ in 0..nt {
+            slipt1.push(parse_value::<f32>(data, &mut index)?);
         }
     }
-    slipt1.row_ptr.push(slipt1.data.len() as i64);
-    Ok((metadata, slipt1))
+
+    Ok((metadata, row_ptr, slipt1))
 }
 
 #[pyfunction]
@@ -134,18 +141,25 @@ fn parse_srf(
     file_path: &str,
     offset: usize,
     num_points: usize,
-) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
+    use numpy::PyArray1;
+
     let file = File::open(file_path).or_else(marshall_os_error)?;
     let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
-    let (metadata, sparse_matrix) =
+
+    let (mut metadata, mut row_ptr, mut slipt1) =
         read_srf_points(&mmap[offset..], num_points).or_else(marshall_value_error)?;
 
     let metadata_array = PyArray1::from_vec(py, metadata);
+    let row_ptr_array = PyArray1::from_vec(py, row_ptr);
+    let slipt1_array = PyArray1::from_vec(py, slipt1);
 
-    let csr = sparse_matrix.into_csr_matrix(py)?;
-    Ok((metadata_array.to_owned().into(), csr))
+    Ok((
+        metadata_array.to_owned().into(),
+        row_ptr_array.to_owned().into(),
+        slipt1_array.to_owned().into(),
+    ))
 }
-
 #[pyfunction]
 fn write_srf_points(
     _py: Python<'_>,
@@ -186,8 +200,8 @@ fn write_srf_points(
             .or_else(marshall_os_error)?;
         if nt > 0 {
             buffered_writer
-              .write_all(b"\n")
-              .or_else(marshall_os_error)?;
+                .write_all(b"\n")
+                .or_else(marshall_os_error)?;
             for v in &data_array[row_idx..next_row_idx] {
                 let slice = lexical_core::write(*v, &mut buffer);
                 buffered_writer
