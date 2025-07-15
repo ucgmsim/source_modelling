@@ -58,7 +58,14 @@ impl<'a> Scanner<'a> {
             lexical_core::Error::Underflow(offset) => lexical_core::Error::Underflow(self.index + offset),
             lexical_core::Error::InvalidDigit(offset) => lexical_core::Error::InvalidDigit(self.index + offset),
             lexical_core::Error::Empty(offset) => lexical_core::Error::Empty(self.index + offset),
-            lexical_core::Error::EmptyMantissa(offset) => lexical_core::Error::EmptyMantissa(self.index + offset),
+            lexical_core::Error::EmptyMantissa(offset) => {
+                    let context = &self.data[self.index + offset..self.data.len().min(self.index + offset + 20)];
+                    eprintln!(
+                        "lexical error at index {}: EmptyMantissa\ncontext: {:?}",
+                        self.index + offset,
+                        String::from_utf8_lossy(context)
+                    );
+                lexical_core::Error::EmptyMantissa(self.index + offset)},
             lexical_core::Error::EmptyExponent(offset) => lexical_core::Error::EmptyExponent(self.index + offset),
             lexical_core::Error::EmptyInteger(offset) => lexical_core::Error::EmptyInteger(self.index + offset),
             lexical_core::Error::EmptyFraction(offset) => lexical_core::Error::EmptyFraction(self.index + offset),
@@ -107,7 +114,6 @@ fn marshall_os_error<T>(e: Error) -> PyResult<T> {
 fn marshall_value_error<T>(e: lexical_core::Error) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
 }
-
 
 
 
