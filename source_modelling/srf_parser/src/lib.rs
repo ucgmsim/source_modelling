@@ -18,33 +18,107 @@ use std::io::BufWriter;
 use std::io::Error;
 use std::io::Write;
 
-#[pyclass]
+fn read_srf_points(
+    scanner: &mut Scanner,
+    point_count: usize,
+) -> Result<(Vec<f32>, Vec<usize>, Vec<f32>), ScannerError> {
+    let mut metadata = Vec::with_capacity(point_count * 11);
+    let mut row_ptr = Vec::with_capacity(point_count);
+    let slipt1_capacity = estimate_slipt1_array_size(scanner, point_count)?;
+    let mut slipt1 = Vec::with_capacity(slipt1_capacity);
+
+    for _ in 0..point_count {
+        metadata.push(scanner.next()?); // lon
+        metadata.push(scanner.next()?); // lat
+        metadata.push(scanner.next()?); // dep
+        metadata.push(scanner.next()?); // stk
+        metadata.push(scanner.next()?); // dip
+        metadata.push(scanner.next()?); // area
+        metadata.push(scanner.next()?); // tinit
+        let dt = scanner.next()?;
+        metadata.push(dt);
+        metadata.push(scanner.next()?); // rake
+        metadata.push(scanner.next()?); // slip1
+        let nt = scanner.next::<usize>()?;
+        let _slip2 = scanner.next::<f32>()?;
+        let _nt2 = scanner.next::<usize>()?;
+        let _slip3 = scanner.next::<f32>()?;
+        let _nt3 = scanner.next::<usize>()?;
+        metadata.push((nt as f32) * dt);
+
+        row_ptr.push(slipt1.len());
+        for _ in 0..nt {
+            slipt1.push(scanner.next()?);
+        }
+    }
+
+    Ok((metadata, row_ptr, slipt1))
+}
+
+pub struct SrfPlane {
+    elon: f32,
+    elat: f32,
+    nstk: usize,
+    ndip: usize,
+    len: f32,
+    wid: f32,
+    dip: f32,
+    dtop: f32,
+    shyp: f32,
+    dhyp: f32,
+}
+
+fn read_srf_header(
+    scanner: &mut Scanner,
+    plane_count: usize,
+) -> Result<Vec<SrfPlane>, ScannerError> {
+    let mut plane_vec = Vec::new();
+    for _ in 0..plane_count {
+        let elon = scanner.next()?;
+        let elat = scanner.next()?;
+        let nstk = scanner.next()?;
+        let ndip = scanner.next()?;
+        let len = scanner.next()?;
+        let wid = scanner.next()?;
+        let dip = scanner.next()?;
+        let dtop = scanner.next()?;
+        let shyp = scanner.next()?;
+        let dhyp = scanner.next()?;
+        plane_vec.push(SrfPlane {
+            elon,
+            elat,
+            nstk,
+            ndip,
+            len,
+            wid,
+            dip,
+            dtop,
+            shyp,
+            dhyp,
+        })
+    }
+    return Ok(plane_vec);
+}
+
+#[pyclass(subclass)]
 pub struct SrfFileBackend {
+    header: Vec<SrfPlane>,
+
     // Corresponds to the 'points' DataFrame in the Python SrfFile.
     // Stores the metadata for each point (lon, lat, dep, stk, dip, area, tinit, dt, rake, slip1, total_time).
-    pub metadata: Vec<f32>,
+    metadata: Vec<f32>,
 
     // Corresponds to the 'row_ptr' numpy array in the Python SrfFile.
     // Stores the starting index in the 'data' array for each point's slip data.
-    pub row_ptr: Vec<usize>,
+    row_ptr: Vec<usize>,
 
     // Corresponds to the 'slipt1_array' numpy array in the Python SrfFile.
     // Stores the actual slip data for all points concatenated.
-    pub data: Vec<f32>,
+    data: Vec<f32>,
 }
 
 #[pymethods]
 impl SrfFileBackend {
-    /// Creates a new SrfFileBackend instance.
-    #[new]
-    fn new(metadata: Vec<f32>, row_ptr: Vec<usize>, data: Vec<f32>) -> Self {
-        SrfFileBackend {
-            metadata,
-            row_ptr,
-            data,
-        }
-    }
-
     /// Reads an SRF file from the given path and returns an SrfFileBackend instance.
     /// This method leverages the `parse_srf` function to handle the file parsing.
     #[staticmethod]
@@ -56,19 +130,41 @@ impl SrfFileBackend {
         let version = scanner.line().or_else(marshall_value_error)?;
         scanner.skip_token(b"PLANE").or_else(marshall_value_error)?;
         let plane_count: usize = scanner.next().or_else(marshall_value_error)?;
-        let _ = scanner.line().or_else(marshall_value_error)?; // skip to EOL
-        for _ in 0..plane_count {
-            let _ = scanner.line().or_else(marshall_value_error)?;
-            let _ = scanner.line().or_else(marshall_value_error)?; // 2 lines per header
-        }
+        let header = read_srf_header(&mut scanner, plane_count).or_else(marshall_value_error)?;
         scanner
             .skip_token(b"POINTS")
             .or_else(marshall_value_error)?;
         let num_points = scanner.next().or_else(marshall_value_error)?;
-        let (metadata, row_ptr, slipt1) =
+        let (metadata, row_ptr, data) =
             read_srf_points(&mut scanner, num_points).or_else(marshall_value_error)?;
 
-        Ok(SrfFileBackend::new(metadata, row_ptr, slipt1))
+        Ok(SrfFileBackend {
+            header,
+            metadata,
+            row_ptr,
+            data,
+        })
+    }
+
+    #[getter]
+    fn header(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let mut header: Vec<f32> = Vec::new();
+        for plane in &self.header {
+            header.extend_from_slice(&[
+                plane.elon,
+                plane.elat,
+                plane.nstk as f32,
+                plane.ndip as f32,
+                plane.len,
+                plane.wid,
+                plane.dip,
+                plane.dtop,
+                plane.shyp,
+                plane.dhyp,
+            ]);
+        }
+        let py_array = PyArray1::from_vec(py, header);
+        Ok(py_array.to_owned().into())
     }
 
     /// Returns a copy of the metadata as a 2D NumPy array.
@@ -275,43 +371,6 @@ fn estimate_slipt1_array_size(
     let avg_slip = (total_slip_samples as f64) / (sample_size as f64);
     scanner.index = index;
     Ok((point_count as f64 * avg_slip).ceil() as usize)
-}
-
-fn read_srf_points(
-    scanner: &mut Scanner,
-    point_count: usize,
-) -> Result<(Vec<f32>, Vec<usize>, Vec<f32>), ScannerError> {
-    let mut metadata = Vec::with_capacity(point_count * 11);
-    let mut row_ptr = Vec::with_capacity(point_count);
-    let slipt1_capacity = estimate_slipt1_array_size(scanner, point_count)?;
-    let mut slipt1 = Vec::with_capacity(slipt1_capacity);
-
-    for _ in 0..point_count {
-        metadata.push(scanner.next()?); // lon
-        metadata.push(scanner.next()?); // lat
-        metadata.push(scanner.next()?); // dep
-        metadata.push(scanner.next()?); // stk
-        metadata.push(scanner.next()?); // dip
-        metadata.push(scanner.next()?); // area
-        metadata.push(scanner.next()?); // tinit
-        let dt = scanner.next()?;
-        metadata.push(dt);
-        metadata.push(scanner.next()?); // rake
-        metadata.push(scanner.next()?); // slip1
-        let nt = scanner.next::<usize>()?;
-        let _slip2 = scanner.next::<f32>()?;
-        let _nt2 = scanner.next::<usize>()?;
-        let _slip3 = scanner.next::<f32>()?;
-        let _nt3 = scanner.next::<usize>()?;
-        metadata.push((nt as f32) * dt);
-
-        row_ptr.push(slipt1.len());
-        for _ in 0..nt {
-            slipt1.push(scanner.next()?);
-        }
-    }
-
-    Ok((metadata, row_ptr, slipt1))
 }
 
 #[pyfunction]
