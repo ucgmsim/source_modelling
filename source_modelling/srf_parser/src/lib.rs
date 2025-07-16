@@ -2,6 +2,7 @@ use lexical_core::Error::*;
 use lexical_core::BUFFER_SIZE;
 use memmap::MmapOptions;
 use numpy::PyArray1;
+use numpy::PyArray2;
 use numpy::PyReadonlyArray1;
 use numpy::PyReadonlyArray2;
 use pyo3::exceptions::PyOSError;
@@ -17,27 +18,82 @@ use std::io::BufWriter;
 use std::io::Error;
 use std::io::Write;
 
-#[derive(Default)]
-struct SparseMatrix {
-    row_ptr: Vec<i64>,
-    col_ptr: Vec<i64>,
-    data: Vec<f32>,
+#[pyclass]
+pub struct SrfFileBackend {
+    // Corresponds to the 'points' DataFrame in the Python SrfFile.
+    // Stores the metadata for each point (lon, lat, dep, stk, dip, area, tinit, dt, rake, slip1, total_time).
+    pub metadata: Vec<f32>,
+
+    // Corresponds to the 'row_ptr' numpy array in the Python SrfFile.
+    // Stores the starting index in the 'data' array for each point's slip data.
+    pub row_ptr: Vec<usize>,
+
+    // Corresponds to the 'slipt1_array' numpy array in the Python SrfFile.
+    // Stores the actual slip data for all points concatenated.
+    pub data: Vec<f32>,
 }
 
-impl SparseMatrix {
-    fn into_csr_matrix(self, py: Python<'_>) -> PyResult<PyObject> {
-        if self.data.is_empty() {
-            return Ok(py.None());
+#[pymethods]
+impl SrfFileBackend {
+    /// Creates a new SrfFileBackend instance.
+    #[new]
+    fn new(metadata: Vec<f32>, row_ptr: Vec<usize>, data: Vec<f32>) -> Self {
+        SrfFileBackend {
+            metadata,
+            row_ptr,
+            data,
         }
-        let data = PyArray1::from_vec(py, self.data);
-        let indices = PyArray1::from_vec(py, self.col_ptr);
-        let indptr = PyArray1::from_vec(py, self.row_ptr);
+    }
 
-        let csr = py
-            .import("scipy.sparse")?
-            .getattr("csr_array")?
-            .call1(((&data, &indices, &indptr),))?;
-        Ok(csr.to_owned().into())
+    /// Reads an SRF file from the given path and returns an SrfFileBackend instance.
+    /// This method leverages the `parse_srf` function to handle the file parsing.
+    #[staticmethod]
+    fn from_file(py: Python<'_>, file_path: &str) -> PyResult<Self> {
+        // parse_srf now returns raw Vecs directly
+        let file = File::open(file_path).or_else(marshall_os_error)?;
+        let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
+        let mut scanner = Scanner::new(&mmap);
+        let version = scanner.line().or_else(marshall_value_error)?;
+        scanner.skip_token(b"PLANE").or_else(marshall_value_error)?;
+        let plane_count: usize = scanner.next().or_else(marshall_value_error)?;
+        let _ = scanner.line().or_else(marshall_value_error)?; // skip to EOL
+        for _ in 0..plane_count {
+            let _ = scanner.line().or_else(marshall_value_error)?;
+            let _ = scanner.line().or_else(marshall_value_error)?; // 2 lines per header
+        }
+        scanner
+            .skip_token(b"POINTS")
+            .or_else(marshall_value_error)?;
+        let num_points = scanner.next().or_else(marshall_value_error)?;
+        let (metadata, row_ptr, slipt1) =
+            read_srf_points(&mut scanner, num_points).or_else(marshall_value_error)?;
+
+        Ok(SrfFileBackend::new(metadata, row_ptr, slipt1))
+    }
+
+    /// Returns a copy of the metadata as a 2D NumPy array.
+    #[getter]
+    fn metadata(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let num_points = self.row_ptr.len();
+        // Create a new PyArray2 from the metadata Vec
+        let py_array = PyArray1::from_vec(py, self.row_ptr.clone());
+        Ok(py_array.to_owned().into())
+    }
+
+    /// Returns a copy of the row_ptr as a 1D NumPy array.
+    #[getter]
+    fn row_ptr(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        // Create a new PyArray1 from the row_ptr Vec
+        let py_array = PyArray1::from_vec(py, self.row_ptr.clone());
+        Ok(py_array.to_owned().into())
+    }
+
+    /// Returns a copy of the data (slipt1_array) as a 1D NumPy array.
+    #[getter]
+    fn data(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        // Create a new PyArray1 from the data Vec
+        let py_array = PyArray1::from_vec(py, self.data.clone());
+        Ok(py_array.to_owned().into())
     }
 }
 
@@ -259,44 +315,11 @@ fn read_srf_points(
 }
 
 #[pyfunction]
-fn parse_srf(py: Python<'_>, file_path: &str) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
-    use numpy::PyArray1;
-
-    let file = File::open(file_path).or_else(marshall_os_error)?;
-    let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
-    let mut scanner = Scanner::new(&mmap);
-    let version = scanner.line().or_else(marshall_value_error)?;
-    scanner.skip_token(b"PLANE").or_else(marshall_value_error)?;
-    let plane_count: usize = scanner.next().or_else(marshall_value_error)?;
-    let _ = scanner.line().or_else(marshall_value_error)?; // skip to EOL
-    println!("Reading {} planes", plane_count);
-    for _ in 0..plane_count {
-        let _ = scanner.line().or_else(marshall_value_error)?;
-        let _ = scanner.line().or_else(marshall_value_error)?; // 2 lines per header
-    }
-    scanner
-        .skip_token(b"POINTS")
-        .or_else(marshall_value_error)?;
-    let num_points = scanner.next().or_else(marshall_value_error)?;
-    let (metadata, row_ptr, slipt1) =
-        read_srf_points(&mut scanner, num_points).or_else(marshall_value_error)?;
-
-    let metadata_array = PyArray1::from_vec(py, metadata);
-    let row_ptr_array = PyArray1::from_vec(py, row_ptr);
-    let slipt1_array = PyArray1::from_vec(py, slipt1);
-
-    Ok((
-        metadata_array.to_owned().into(),
-        row_ptr_array.to_owned().into(),
-        slipt1_array.to_owned().into(),
-    ))
-}
-#[pyfunction]
 fn write_srf_points(
     _py: Python<'_>,
     file_path: &str,
     points_metadata: PyReadonlyArray2<f32>,
-    row_ptr: PyReadonlyArray1<i64>,
+    row_ptr: PyReadonlyArray1<usize>,
     data: PyReadonlyArray1<f32>,
 ) -> PyResult<()> {
     let file = OpenOptions::new()
@@ -352,7 +375,7 @@ fn write_srf_points(
 
 #[pymodule]
 fn srf_parser(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(parse_srf, m)?)?;
+    m.add_class::<SrfFileBackend>()?;
     m.add_function(wrap_pyfunction!(write_srf_points, m)?)?;
     Ok(())
 }
