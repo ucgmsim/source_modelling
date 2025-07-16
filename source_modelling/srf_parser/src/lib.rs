@@ -151,7 +151,7 @@ impl<'a> Scanner<'a> {
         match newline_index {
             Some(x) => {
                 let res = Ok(&self.data[self.index..self.index + x]);
-                self.index += x + 1;
+                self.index += x + 1; // plus 1 to skip the newline itself.
                 res
             }
             _ => Err(ScannerError::new(
@@ -268,6 +268,7 @@ fn parse_srf(py: Python<'_>, file_path: &str) -> PyResult<(Py<PyAny>, Py<PyAny>,
     let version = scanner.line().or_else(marshall_value_error)?;
     scanner.skip_token(b"PLANE").or_else(marshall_value_error)?;
     let plane_count: usize = scanner.next().or_else(marshall_value_error)?;
+    println!("Reading {} planes", plane_count);
     for _ in 0..plane_count {
         let _ = scanner.line().or_else(marshall_value_error)?;
         let _ = scanner.line().or_else(marshall_value_error)?; // 2 lines per header
