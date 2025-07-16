@@ -76,7 +76,7 @@ impl SrfFileBackend {
     fn metadata(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let num_points = self.row_ptr.len();
         // Create a new PyArray2 from the metadata Vec
-        let py_array = PyArray1::from_vec(py, self.row_ptr.clone());
+        let py_array = PyArray1::from_vec(py, self.metadata.clone());
         Ok(py_array.to_owned().into())
     }
 
