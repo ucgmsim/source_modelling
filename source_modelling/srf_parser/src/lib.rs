@@ -150,8 +150,9 @@ impl<'a> Scanner<'a> {
             .map(|(idx, _)| idx);
         match newline_index {
             Some(x) => {
-                self.index += x;
-                Ok(&self.data[self.index - x..self.index])
+                let res = Ok(&self.data[self.index..x]);
+                self.index = x + 1;
+                res
             }
             _ => Err(ScannerError::new(
                 self.context(),
