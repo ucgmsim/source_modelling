@@ -44,26 +44,44 @@ impl SparseMatrix {
 #[derive(Debug)]
 struct ScannerError {
     context: String,
-    lexical_error: lexical_core::Error,
+    error: Box<dyn error::Error>,
 }
 
 impl ScannerError {
-    fn new(data: &[u8], lexical_error: lexical_core::Error) -> Self {
+    fn new(data: &[u8], error: impl error::Error + 'static) -> Self {
         Self {
             context: String::from_utf8_lossy(data).into_owned(),
-            lexical_error: lexical_error,
+            error: Box::new(error),
         }
     }
 }
 
 impl fmt::Display for ScannerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let err_string = self.lexical_error.to_string();
-        write!(f, "{err_string}, context: {0}", self.context)
+        write!(f, "{}, context: {}", self.error, self.context)
     }
 }
 
 impl error::Error for ScannerError {}
+
+#[derive(Debug)]
+enum ScannerErrorReason {
+    InvalidToken(String, String),
+    NoNewlineFound,
+}
+
+impl fmt::Display for ScannerErrorReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidToken(expected, found) => {
+                write!(f, "Invalid token, expected: {}, found: {}", expected, found)
+            }
+            Self::NoNewlineFound => write!(f, "Could not find newline"),
+        }
+    }
+}
+
+impl error::Error for ScannerErrorReason {}
 
 struct Scanner<'a> {
     data: &'a [u8],
@@ -124,6 +142,41 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    fn line(&mut self) -> Result<&[u8], ScannerError> {
+        let newline_index = &self.data[self.index..]
+            .iter()
+            .enumerate()
+            .find(|&(_, &x)| x == b'\n')
+            .map(|(idx, _)| idx);
+        match newline_index {
+            Some(x) => {
+                self.index += x;
+                Ok(&self.data[self.index..self.index - x])
+            }
+            _ => Err(ScannerError::new(
+                self.context(),
+                ScannerErrorReason::NoNewlineFound,
+            )),
+        }
+    }
+
+    fn skip_token(&mut self, token: &[u8]) -> Result<(), ScannerError> {
+        self.skip_spaces()?;
+        let next = &self.data[self.index..self.index + token.len()];
+        if next == token {
+            self.index += token.len();
+            Ok(())
+        } else {
+            Err(ScannerError::new(
+                self.context(),
+                ScannerErrorReason::InvalidToken(
+                    String::from_utf8_lossy(token).into_owned(),
+                    String::from_utf8_lossy(next).into_owned(),
+                ),
+            ))
+        }
+    }
+
     fn context(&self) -> &[u8] {
         return &self.data[self.index..(self.index + 20).min(self.data.len())];
     }
@@ -168,13 +221,12 @@ fn estimate_slipt1_array_size(
 }
 
 fn read_srf_points(
-    data: &[u8],
+    scanner: &mut Scanner,
     point_count: usize,
 ) -> Result<(Vec<f32>, Vec<usize>, Vec<f32>), ScannerError> {
-    let mut scanner = Scanner::new(data);
     let mut metadata = Vec::with_capacity(point_count * 11);
     let mut row_ptr = Vec::with_capacity(point_count);
-    let slipt1_capacity = estimate_slipt1_array_size(&mut scanner, point_count)?;
+    let slipt1_capacity = estimate_slipt1_array_size(scanner, point_count)?;
     let mut slipt1 = Vec::with_capacity(slipt1_capacity);
 
     for _ in 0..point_count {
@@ -206,19 +258,25 @@ fn read_srf_points(
 }
 
 #[pyfunction]
-fn parse_srf(
-    py: Python<'_>,
-    file_path: &str,
-    offset: usize,
-    num_points: usize,
-) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
+fn parse_srf(py: Python<'_>, file_path: &str) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
     use numpy::PyArray1;
 
     let file = File::open(file_path).or_else(marshall_os_error)?;
     let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
-
+    let mut scanner = Scanner::new(&mmap);
+    let version = scanner.line().or_else(marshall_value_error)?;
+    scanner.skip_token(b"PLANE").or_else(marshall_value_error)?;
+    let plane_count: usize = scanner.next().or_else(marshall_value_error)?;
+    for _ in 0..plane_count {
+        let _ = scanner.line().or_else(marshall_value_error)?;
+        let _ = scanner.line().or_else(marshall_value_error)?; // 2 lines per header
+    }
+    scanner
+        .skip_token(b"POINTS")
+        .or_else(marshall_value_error)?;
+    let num_points = scanner.next().or_else(marshall_value_error)?;
     let (metadata, row_ptr, slipt1) =
-        read_srf_points(&mmap[offset..], num_points).or_else(marshall_value_error)?;
+        read_srf_points(&mut scanner, num_points).or_else(marshall_value_error)?;
 
     let metadata_array = PyArray1::from_vec(py, metadata);
     let row_ptr_array = PyArray1::from_vec(py, row_ptr);
