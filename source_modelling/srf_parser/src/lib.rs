@@ -151,7 +151,7 @@ impl<'a> Scanner<'a> {
         match newline_index {
             Some(x) => {
                 self.index += x;
-                Ok(&self.data[self.index..self.index - x])
+                Ok(&self.data[self.index - x..self.index])
             }
             _ => Err(ScannerError::new(
                 self.context(),
