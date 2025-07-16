@@ -268,7 +268,7 @@ fn parse_srf(py: Python<'_>, file_path: &str) -> PyResult<(Py<PyAny>, Py<PyAny>,
     let version = scanner.line().or_else(marshall_value_error)?;
     scanner.skip_token(b"PLANE").or_else(marshall_value_error)?;
     let plane_count: usize = scanner.next().or_else(marshall_value_error)?;
-    scanner.skip_spaces().or_else(marshall_value_error)?;
+    let _ = scanner.line().or_else(marshall_value_error)?; // skip to EOL
     println!("Reading {} planes", plane_count);
     for _ in 0..plane_count {
         let _ = scanner.line().or_else(marshall_value_error)?;
