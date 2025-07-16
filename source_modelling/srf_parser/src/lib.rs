@@ -202,7 +202,7 @@ fn estimate_slipt1_array_size(
     // Sample size is the minimum of 500 and point count
     let sample_size = 500.min(point_count);
     let mut total_slip_samples: usize = 0;
-
+    let index = scanner.index;
     for _ in 0..sample_size {
         // The first 10 floats are unused
         for _ in 0..10 {
@@ -217,7 +217,7 @@ fn estimate_slipt1_array_size(
         }
     }
     let avg_slip = (total_slip_samples as f64) / (sample_size as f64);
-    scanner.reset();
+    scanner.index = index;
     Ok((point_count as f64 * avg_slip).ceil() as usize)
 }
 
