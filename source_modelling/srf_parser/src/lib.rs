@@ -1,3 +1,4 @@
+use lexical_core::Error::*;
 use lexical_core::BUFFER_SIZE;
 use memmap::MmapOptions;
 use numpy::PyArray1;
@@ -8,6 +9,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
+use std::error;
+use std::fmt;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::BufWriter;
@@ -38,6 +41,29 @@ impl SparseMatrix {
     }
 }
 
+#[derive(Debug)]
+struct ScannerError {
+    context: String,
+    lexical_error: lexical_core::Error,
+}
+
+impl ScannerError {
+    fn new(data: &[u8], lexical_error: lexical_core::Error) -> Self {
+        Self {
+            context: String::from_utf8_lossy(data).into_owned(),
+            lexical_error: lexical_error,
+        }
+    }
+}
+
+impl fmt::Display for ScannerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let err_string = self.lexical_error.to_string();
+        write!(f, "{err_string}, context: {0}", self.context)
+    }
+}
+
+impl error::Error for ScannerError {}
 
 struct Scanner<'a> {
     data: &'a [u8],
@@ -49,44 +75,41 @@ impl<'a> Scanner<'a> {
         Self { data, index: 0 }
     }
 
-    fn next<T: lexical_core::FromLexical>(
-        &mut self,
-    ) -> Result<T, lexical_core::Error> {
+    fn next<T: lexical_core::FromLexical>(&mut self) -> Result<T, ScannerError> {
         self.skip_spaces()?;
-        let (val, read) = lexical_core::parse_partial(&self.data[self.index..]).map_err(|err| match err {
-            lexical_core::Error::Overflow(offset) => lexical_core::Error::Overflow(self.index + offset),
-            lexical_core::Error::Underflow(offset) => lexical_core::Error::Underflow(self.index + offset),
-            lexical_core::Error::InvalidDigit(offset) => lexical_core::Error::InvalidDigit(self.index + offset),
-            lexical_core::Error::Empty(offset) => lexical_core::Error::Empty(self.index + offset),
-            lexical_core::Error::EmptyMantissa(offset) => {
-                    let context = &self.data[self.index + offset..self.data.len().min(self.index + offset + 20)];
-                    eprintln!(
-                        "lexical error at index {}: EmptyMantissa\ncontext: {:?}",
-                        self.index + offset,
-                        String::from_utf8_lossy(context)
-                    );
-                lexical_core::Error::EmptyMantissa(self.index + offset)},
-            lexical_core::Error::EmptyExponent(offset) => lexical_core::Error::EmptyExponent(self.index + offset),
-            lexical_core::Error::EmptyInteger(offset) => lexical_core::Error::EmptyInteger(self.index + offset),
-            lexical_core::Error::EmptyFraction(offset) => lexical_core::Error::EmptyFraction(self.index + offset),
-            lexical_core::Error::InvalidPositiveMantissaSign(offset) => lexical_core::Error::InvalidPositiveMantissaSign(self.index + offset),
-            lexical_core::Error::MissingMantissaSign(offset) => lexical_core::Error::MissingMantissaSign(self.index + offset),
-            lexical_core::Error::InvalidExponent(offset) => lexical_core::Error::InvalidExponent(self.index + offset),
-            lexical_core::Error::InvalidPositiveExponentSign(offset) => lexical_core::Error::InvalidPositiveExponentSign(self.index + offset),
-            lexical_core::Error::MissingExponentSign(offset) => lexical_core::Error::MissingExponentSign(self.index + offset),
-            lexical_core::Error::ExponentWithoutFraction(offset) => lexical_core::Error::ExponentWithoutFraction(self.index + offset),
-            lexical_core::Error::InvalidLeadingZeros(offset) => lexical_core::Error::InvalidLeadingZeros(self.index + offset),
-            lexical_core::Error::MissingExponent(offset) => lexical_core::Error::MissingExponent(self.index + offset),
-            lexical_core::Error::MissingSign(offset) => lexical_core::Error::MissingSign(self.index + offset),
-            lexical_core::Error::InvalidPositiveSign(offset) => lexical_core::Error::InvalidPositiveSign(self.index + offset),
-            lexical_core::Error::InvalidNegativeSign(offset) => lexical_core::Error::InvalidNegativeSign(self.index + offset),
-            e => e
-        })?;
+        let (val, read) = lexical_core::parse_partial(&self.data[self.index..])
+            .map_err(|err| match err {
+                Overflow(offset) => Overflow(self.index + offset),
+                Underflow(offset) => Underflow(self.index + offset),
+                InvalidDigit(offset) => InvalidDigit(self.index + offset),
+                Empty(offset) => Empty(self.index + offset),
+                EmptyMantissa(offset) => EmptyMantissa(self.index + offset),
+                EmptyExponent(offset) => EmptyExponent(self.index + offset),
+                EmptyInteger(offset) => EmptyInteger(self.index + offset),
+                EmptyFraction(offset) => EmptyFraction(self.index + offset),
+                InvalidPositiveMantissaSign(offset) => {
+                    InvalidPositiveMantissaSign(self.index + offset)
+                }
+                MissingMantissaSign(offset) => MissingMantissaSign(self.index + offset),
+                InvalidExponent(offset) => InvalidExponent(self.index + offset),
+                InvalidPositiveExponentSign(offset) => {
+                    InvalidPositiveExponentSign(self.index + offset)
+                }
+                MissingExponentSign(offset) => MissingExponentSign(self.index + offset),
+                ExponentWithoutFraction(offset) => ExponentWithoutFraction(self.index + offset),
+                InvalidLeadingZeros(offset) => InvalidLeadingZeros(self.index + offset),
+                MissingExponent(offset) => MissingExponent(self.index + offset),
+                MissingSign(offset) => MissingSign(self.index + offset),
+                InvalidPositiveSign(offset) => InvalidPositiveSign(self.index + offset),
+                InvalidNegativeSign(offset) => InvalidNegativeSign(self.index + offset),
+                e => e,
+            })
+            .map_err(|err| ScannerError::new(self.context(), err))?;
         self.index += read;
         Ok(val)
     }
 
-    fn skip_spaces(&mut self) -> Result<(), lexical_core::Error> {
+    fn skip_spaces(&mut self) -> Result<(), ScannerError> {
         let nonwhitespace = &self.data[self.index..]
             .iter()
             .enumerate()
@@ -97,8 +120,12 @@ impl<'a> Scanner<'a> {
                 self.index += x;
                 Ok(())
             }
-            _ => Err(lexical_core::Error::InvalidDigit(self.index)),
+            _ => Err(ScannerError::new(self.context(), InvalidDigit(self.index))),
         }
+    }
+
+    fn context(&self) -> &[u8] {
+        return &self.data[self.index..(self.index + 20).min(self.data.len())];
     }
 
     fn reset(&mut self) {
@@ -106,21 +133,18 @@ impl<'a> Scanner<'a> {
     }
 }
 
-
 fn marshall_os_error<T>(e: Error) -> PyResult<T> {
     Err(PyErr::new::<PyOSError, _>(e.to_string()))
 }
 
-fn marshall_value_error<T>(e: lexical_core::Error) -> PyResult<T> {
+fn marshall_value_error<T, U: error::Error>(e: U) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
 }
-
-
 
 fn estimate_slipt1_array_size(
     scanner: &mut Scanner,
     point_count: usize,
-) -> Result<usize, lexical_core::Error> {
+) -> Result<usize, ScannerError> {
     // Sample size is the minimum of 500 and point count
     let sample_size = 500.min(point_count);
     let mut total_slip_samples: usize = 0;
@@ -146,14 +170,14 @@ fn estimate_slipt1_array_size(
 fn read_srf_points(
     data: &[u8],
     point_count: usize,
-) -> Result<(Vec<f32>, Vec<usize>, Vec<f32>), lexical_core::Error> {
+) -> Result<(Vec<f32>, Vec<usize>, Vec<f32>), ScannerError> {
     let mut scanner = Scanner::new(data);
     let mut metadata = Vec::with_capacity(point_count * 11);
     let mut row_ptr = Vec::with_capacity(point_count);
     let slipt1_capacity = estimate_slipt1_array_size(&mut scanner, point_count)?;
     let mut slipt1 = Vec::with_capacity(slipt1_capacity);
 
-    for i in 0..point_count {
+    for _ in 0..point_count {
         metadata.push(scanner.next()?); // lon
         metadata.push(scanner.next()?); // lat
         metadata.push(scanner.next()?); // dep
