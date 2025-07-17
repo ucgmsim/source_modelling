@@ -44,6 +44,8 @@ class Point:
         The coordinates (NZTM) of the point source.
     length_m : float
         Length used to approximate the point source as a small planar patch (metres).
+    width_m : float
+        Width used to approximate the point source as a small planar patch (metres).
     strike : float
         The strike angle of the point source in degrees.
     dip : float
@@ -56,6 +58,7 @@ class Point:
     bounds: np.ndarray
     # used to approximate point source as a small planar patch (metres).
     length_m: float
+    width_m: float
     # The usual strike, dip, dip direction, etc cannot be calculated
     # from a point source and so must be provided by the user.
     strike: float
@@ -90,11 +93,6 @@ class Point:
     def length(self) -> float:  # numpydoc ignore=RT01
         """float: The length of the approximating planar patch (in kilometres)."""
         return self.length_m / _KM_TO_M
-
-    @property
-    def width_m(self) -> float:  # numpydoc ignore=RT01
-        """float: The width of the approximating planar patch (in metres)."""
-        return self.length_m
 
     @property
     def width(self) -> float:  # numpydoc ignore=RT01
