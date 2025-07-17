@@ -119,7 +119,7 @@ class Segments(Sequence):
         return len(self._header)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(repr=False)
 class SrfFile:
     """
     Representation of an SRF file.
@@ -178,12 +178,15 @@ class SrfFile:
     version: str
     header: pd.DataFrame
     points: pd.DataFrame
-    slipt1_array: sp.sparse.csr_array
+    row_ptr: np.ndarray
+    slipt1_array: np.ndarray
 
-    @property
-    def slip(self):  # numpydoc ignore=RT01
-        """csr_array: sparse array representing slip in all components."""
-        return self.slipt1_array
+    def slip(self, point: int):  # numpydoc ignore=RT01
+        idx_start = self.row_ptr[point]
+        idx_end = (
+            self.row_ptr[point + 1] if point < len(self.row_ptr) else len(self.row_ptr)
+        )
+        return self.slipt1_array[idx_start:idx_end]
 
     @property
     def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
@@ -329,6 +332,27 @@ class SrfFile:
                 planes.append(Plane(corners + (corners - interior) / 2))
         return planes
 
+    def __repr__(self) -> str:
+        cls_name = self.__class__.__name__
+        n_points = len(self.points)
+        n_planes = len(self.header)
+        size = (
+            self.points.memory_usage().sum().item()
+            + self.header.memory_usage().sum().item()
+            + self.slipt1_array.nbytes
+            + self.row_ptr.nbytes
+        )
+        scale = 1024**3
+        unit = "GB"
+        for i, trial_unit in enumerate(["B", "KB", "MB"]):
+            if size < (1024 ** (i + 1)):
+                scale = 1024**i
+                unit = trial_unit
+                break
+        size_human = size / scale
+
+        return f"{cls_name}({n_planes} planes with {n_points} points total, {size_human:.1f} {unit} in memory)"
+
 
 def read_srf(srf_ffp: Path) -> SrfFile:
     """Read an SRF file into an SrfFile object.
@@ -343,75 +367,52 @@ def read_srf(srf_ffp: Path) -> SrfFile:
     SrfFile
         The filepath of the SRF file.
     """
-    with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
-        version = srf_file_handle.readline().strip()
 
-        plane_count_line = srf_file_handle.readline().strip()
-        plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
-        if not plane_count_match:
-            raise parse_utils.ParseError(
-                f'Expecting PLANE header line, got: "{plane_count_line}"'
-            )
-        plane_count = int(plane_count_match.group(1))
-        segments = []
-
-        for _ in range(plane_count):
-            segments.append(
-                {
-                    "elon": parse_utils.read_float(srf_file_handle),
-                    "elat": parse_utils.read_float(srf_file_handle),
-                    "nstk": parse_utils.read_int(srf_file_handle),
-                    "ndip": parse_utils.read_int(srf_file_handle),
-                    "len": parse_utils.read_float(srf_file_handle),
-                    "wid": parse_utils.read_float(srf_file_handle),
-                    "stk": parse_utils.read_float(srf_file_handle),
-                    "dip": parse_utils.read_float(srf_file_handle),
-                    "dtop": parse_utils.read_float(srf_file_handle),
-                    "shyp": parse_utils.read_float(srf_file_handle),
-                    "dhyp": parse_utils.read_float(srf_file_handle),
-                }
-            )
-        headers = pd.DataFrame(segments)
-        headers["nstk"] = headers["nstk"].astype(int)
-        headers["ndip"] = headers["ndip"].astype(int)
-
-        points_count_line = srf_file_handle.readline().strip()
-        points_count_match = re.match(POINT_COUNT_RE, points_count_line)
-        if not points_count_match:
-            raise parse_utils.ParseError(
-                f'Expecting POINTS header line, got: "{points_count_line}"'
-            )
-        point_count = int(points_count_match.group(1))
-        position = srf_file_handle.tell()
-
-    return srf_parser.parse_srf(str(srf_ffp), position, point_count)
+    version, header, points, row_ptr, slipt1 = srf_parser.parse_srf(str(srf_ffp))
     # points_metadata, slipt1_array = srf_parser.parse_srf(
     #     str(srf_ffp), position, point_count
     # )
+    header_df = pd.DataFrame(
+        header.reshape((-1, 11)),
+        columns=[
+            "elon",
+            "elat",
+            "nstk",
+            "ndip",
+            "len",
+            "wid",
+            "stk",
+            "dip",
+            "dtop",
+            "shyp",
+            "dhyp",
+        ],
+    )
 
-    # points_df = pd.DataFrame(
-    #     points_metadata.reshape((-1, 11)),
-    #     columns=[
-    #         "lon",
-    #         "lat",
-    #         "dep",
-    #         "stk",
-    #         "dip",
-    #         "area",
-    #         "tinit",
-    #         "dt",
-    #         "rake",
-    #         "slip",
-    #         "rise",
-    #     ],
-    # )
+    points_df = pd.DataFrame(
+        points.reshape((-1, 11)),
+        columns=[
+            "lon",
+            "lat",
+            "dep",
+            "stk",
+            "dip",
+            "area",
+            "tinit",
+            "dt",
+            "rake",
+            "slip",
+            "rise",
+        ],
+    )
 
-    # return SrfFile(
-    #     version,
-    #     headers,
-    #     points_df,
-    #     slipt1_array,
-    # )
+    return SrfFile(
+        version,
+        header_df,
+        points_df,
+        row_ptr,
+        slipt1,
+    )
 
 
 def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
