@@ -388,9 +388,15 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
         # Test case 1: Simple sources map with equal initial source distribution
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             None,
             None,
@@ -400,9 +406,15 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
         # Test case 2: Simple sources map with skewed initial source distribution
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             None,
             {"A": 0.1, "B": 0.2, "C": 0.7},
@@ -412,9 +424,15 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
         # Test case 3: Initial source given
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             "A",
             None,
@@ -498,9 +516,15 @@ def test_sample_rupture_propagation(
         # Test case 1: Simple rupture causality tree
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             {"A": None, "B": "A", "C": "B"},
             {
@@ -515,9 +539,15 @@ def test_sample_rupture_propagation(
         # Test case 2: Another simple rupture causality tree
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             {"A": None, "B": "A", "C": "A"},
             {
