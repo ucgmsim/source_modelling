@@ -443,8 +443,8 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
 )
 def test_sample_rupture_propagation(
     sources_map: dict[str, sources.Point],
-    initial_source: Optional[str],
-    initial_source_distribution: Optional[dict[str, float]],
+    initial_source: str | None,
+    initial_source_distribution: dict[str, float] | None,
     jump_impossibility_limit_distance: int,
     expected_root_distribution: dict[str, float],
 ):
@@ -563,7 +563,7 @@ def test_sample_rupture_propagation(
 )
 def test_jump_points_from_rupture_tree(
     source_map: dict[str, sources.Point],
-    rupture_causality_tree: dict[str, Optional[str]],
+    rupture_causality_tree: dict[str, str | None],
     expected_jump_points: dict[str, rupture_propagation.JumpPair],
 ):
     result_jump_points = rupture_propagation.jump_points_from_rupture_tree(

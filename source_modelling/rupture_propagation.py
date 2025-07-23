@@ -26,7 +26,7 @@ from qcore import coordinates
 from source_modelling import sources
 
 DistanceGraph = dict[str, dict[str, float]]
-Tree = dict[str, Optional[str]]
+Tree = dict[str, str | None]
 
 
 def spanning_tree_with_probabilities(
@@ -397,8 +397,8 @@ def distance_between(
 
 def sample_rupture_propagation(
     sources_map: dict[str, sources.IsSource],
-    initial_source: Optional[str] = None,
-    initial_source_distribution: Optional[dict[str, float]] = None,
+    initial_source: str | None = None,
+    initial_source_distribution: dict[str, float] | None = None,
     strategy: Literal["random", "maximising"] = "random",
     jump_impossibility_limit_distance: int = 15000,
 ) -> Tree:

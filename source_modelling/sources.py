@@ -454,8 +454,8 @@ class Plane:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dip_dir: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
@@ -549,12 +549,12 @@ class Plane:
         dip: float,
         length: float,
         width: float,
-        dtop: Optional[float] = None,
-        dbottom: Optional[float] = None,
-        strike: Optional[float] = None,
-        dip_dir: Optional[float] = None,
-        strike_nztm: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dtop: float | None = None,
+        dbottom: float | None = None,
+        strike: float | None = None,
+        dip_dir: float | None = None,
+        strike_nztm: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -572,17 +572,17 @@ class Plane:
             The length of the fault plane (in km).
         width : float
             The width of the fault plane (in km).
-        dtop : Optional[float]
+        dtop : float | None
             The top depth of the plane (in km).
-        dbottom : Optional[float]
+        dbottom : float | None
             The bottom depth of the plane (in km).
-        strike : Optional[float]
+        strike : float | None
             The WGS84 strike bearing of the fault (in degrees).
-        dip_dir : Optional[float]
+        dip_dir : float | None
             The WGS84 dip direction bearing of the fault (in degrees). If None, this is assumed to be strike + 90 degrees.
-        strike_nztm : Optional[float]
+        strike_nztm : float | None
             The NZTM strike of the fault (in degrees).
-        dip_dir_nztm : Optional[float]
+        dip_dir_nztm : float | None
             The NZTM dip direction of the fault (in degrees).
 
         Returns
@@ -1076,8 +1076,8 @@ class Fault:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dip_dir: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Construct a fault from the trace points of the fault.
 
