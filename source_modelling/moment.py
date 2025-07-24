@@ -151,7 +151,7 @@ def magnitude_to_moment(magnitude: float) -> float:
     Returns
     -------
     float
-        moment in Nm.
+        Rupture moment in Nm.
     """
     return 10 ** ((magnitude + 6.03333) * 3 / 2)
 
