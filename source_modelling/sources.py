@@ -21,7 +21,7 @@ import dataclasses
 import itertools
 import json
 import warnings
-from typing import NamedTuple, Optional, Self
+from typing import NamedTuple, Self
 
 import networkx as nx
 import numpy as np

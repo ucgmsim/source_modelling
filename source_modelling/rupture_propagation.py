@@ -16,7 +16,7 @@ import random
 import warnings
 from collections import defaultdict, namedtuple
 from collections.abc import Generator
-from typing import Literal, Optional
+from typing import Literal
 
 import networkx as nx
 import numpy as np

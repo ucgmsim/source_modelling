@@ -1,6 +1,5 @@
 import collections
 import random
-from typing import Optional
 
 import hypothesis_networkx as hnx
 import networkx as nx

@@ -1,6 +1,6 @@
 """Parsing utilities for space-separated file formats."""
 
-from typing import Optional, TextIO
+from typing import TextIO
 
 
 class ParseError(Exception):

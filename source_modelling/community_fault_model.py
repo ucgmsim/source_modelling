@@ -24,7 +24,7 @@ from enum import Enum, Flag, auto
 from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import fiona
 import geopandas as gpd

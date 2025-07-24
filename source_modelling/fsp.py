@@ -24,7 +24,7 @@ import io
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import IO, Optional
+from typing import IO
 
 import numpy as np
 import pandas as pd

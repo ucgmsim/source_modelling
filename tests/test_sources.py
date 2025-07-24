@@ -1,7 +1,6 @@
 import itertools
 import json
 from pathlib import Path
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import numpy as np
