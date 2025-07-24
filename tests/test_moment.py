@@ -134,24 +134,26 @@ def velocity_model_df():
     )
 
 
-# The test source depths are below, within, and above the velocity model.
 @pytest.mark.parametrize(
-    "source_depth_km, expected_slip",
+    "source_depth_km, fault_area_km2, magnitude, expected_slip",
     [
-        (0.01, 3050.5729604483495),
-        (2, 225.1010168803028),
-        (1040, 19.59025563280026),
+        (0.01, 100.0, 5.0, 78.41089598165419),
+        (2.0, 100.0, 5.0, 5.785920431607016),
+        (1040.0, 100.0, 5.0, 0.5035413073522274),
     ],
 )
-def test_calc_point_source_slip(
-    velocity_model_df: pd.DataFrame, source_depth_km: float, expected_slip: float
+def test_point_source_slip(
+    velocity_model_df: pd.DataFrame,
+    source_depth_km: float,
+    fault_area_km2: float,
+    magnitude: float,
+    expected_slip: float,
 ):
-    """Test the calc_point_source_slip function with different source depths."""
-    moment_dyne_cm = 2.2387211385683286e25
-    fault_area_km2 = 162.18100973589299
+    """Test the point_source_slip function with different source depths."""
+    moment_newton_metre = moment.magnitude_to_moment(magnitude)
 
-    calculated_slip = moment.calc_point_source_slip(
-        moment_dyne_cm=moment_dyne_cm,
+    calculated_slip = moment.point_source_slip(
+        moment_newton_metre=moment_newton_metre,
         fault_area_km2=fault_area_km2,
         velocity_model_df=velocity_model_df,
         source_depth_km=source_depth_km,
@@ -160,8 +162,8 @@ def test_calc_point_source_slip(
     assert calculated_slip == pytest.approx(expected_slip)
 
 
-def test_calc_point_source_slip_bad_dataframe():
-    """Test that calc_point_source_slip crashes with a DataFrame missing required columns."""
+def test_point_source_slip_bad_dataframe():
+    """Test that point_source_slip crashes with a DataFrame missing required columns."""
     # Create a DataFrame missing the required columns
     bad_velocity_model_df = pd.DataFrame(
         {
@@ -171,15 +173,13 @@ def test_calc_point_source_slip_bad_dataframe():
         }
     )
 
-    moment_dyne_cm = 2.2387211385683286e25
-    fault_area_km2 = 162.18100973589299
-    source_depth_km = 2.0
+    moment_newton_metre = moment.magnitude_to_moment(5.0)
 
     # Should raise KeyError when trying to access missing columns
     with pytest.raises(KeyError):
-        moment.calc_point_source_slip(
-            moment_dyne_cm=moment_dyne_cm,
-            fault_area_km2=fault_area_km2,
+        moment.point_source_slip(
+            moment_newton_metre=moment_newton_metre,
+            fault_area_km2=100.0,
             velocity_model_df=bad_velocity_model_df,
-            source_depth_km=source_depth_km,
+            source_depth_km=2.0,
         )

@@ -114,12 +114,8 @@ def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
         The DataFrame containing the GSF data.  Must contain at least the columns
         'lon', 'lat', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', and 'loc_rake'.
     gsf_filepath : Path
-        The path to the GSF file to write. Parent directories will be created if they
-        do not exist.
-
-    """
-
-    gsf_filepath.parent.mkdir(parents=True, exist_ok=True)
+        The path to the GSF file to write.
+    """    
 
     if "init_time" not in gsf_df:
         gsf_df["init_time"] = -1
