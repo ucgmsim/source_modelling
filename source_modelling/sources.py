@@ -21,7 +21,7 @@ import dataclasses
 import itertools
 import json
 import warnings
-from typing import NamedTuple, Optional, Self
+from typing import NamedTuple, Self
 
 import networkx as nx
 import numpy as np
@@ -44,6 +44,8 @@ class Point:
         The coordinates (NZTM) of the point source.
     length_m : float
         Length used to approximate the point source as a small planar patch (metres).
+    width_m : float
+        Width used to approximate the point source as a small planar patch (metres).
     strike : float
         The strike angle of the point source in degrees.
     dip : float
@@ -56,6 +58,7 @@ class Point:
     bounds: np.ndarray
     # used to approximate point source as a small planar patch (metres).
     length_m: float
+    width_m: float
     # The usual strike, dip, dip direction, etc cannot be calculated
     # from a point source and so must be provided by the user.
     strike: float
@@ -90,11 +93,6 @@ class Point:
     def length(self) -> float:  # numpydoc ignore=RT01
         """float: The length of the approximating planar patch (in kilometres)."""
         return self.length_m / _KM_TO_M
-
-    @property
-    def width_m(self) -> float:  # numpydoc ignore=RT01
-        """float: The width of the approximating planar patch (in metres)."""
-        return self.length_m
 
     @property
     def width(self) -> float:  # numpydoc ignore=RT01
@@ -456,8 +454,8 @@ class Plane:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dip_dir: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
@@ -551,12 +549,12 @@ class Plane:
         dip: float,
         length: float,
         width: float,
-        dtop: Optional[float] = None,
-        dbottom: Optional[float] = None,
-        strike: Optional[float] = None,
-        dip_dir: Optional[float] = None,
-        strike_nztm: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dtop: float | None = None,
+        dbottom: float | None = None,
+        strike: float | None = None,
+        dip_dir: float | None = None,
+        strike_nztm: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -574,17 +572,17 @@ class Plane:
             The length of the fault plane (in km).
         width : float
             The width of the fault plane (in km).
-        dtop : Optional[float]
+        dtop : float | None
             The top depth of the plane (in km).
-        dbottom : Optional[float]
+        dbottom : float | None
             The bottom depth of the plane (in km).
-        strike : Optional[float]
+        strike : float | None
             The WGS84 strike bearing of the fault (in degrees).
-        dip_dir : Optional[float]
+        dip_dir : float | None
             The WGS84 dip direction bearing of the fault (in degrees). If None, this is assumed to be strike + 90 degrees.
-        strike_nztm : Optional[float]
+        strike_nztm : float | None
             The NZTM strike of the fault (in degrees).
-        dip_dir_nztm : Optional[float]
+        dip_dir_nztm : float | None
             The NZTM dip direction of the fault (in degrees).
 
         Returns
@@ -1078,8 +1076,8 @@ class Fault:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dip_dir: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Construct a fault from the trace points of the fault.
 

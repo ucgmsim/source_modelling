@@ -1,7 +1,6 @@
 import itertools
 import json
 from pathlib import Path
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -20,7 +19,7 @@ DATA_PATH = Path("tests") / "data"
 np.random.seed(0)
 
 
-def coordinate(lat: float, lon: float, depth: Optional[float] = None) -> np.ndarray:
+def coordinate(lat: float, lon: float, depth: float | None = None) -> np.ndarray:
     """Create a coordinate array from latitude, longitude, and optional depth."""
     if depth is not None:
         return np.array([lat, lon, depth])
@@ -40,6 +39,7 @@ def valid_coordinates(point_coordinates: np.ndarray) -> bool:
         depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    width_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
     dip=st.floats(0, 180),
     dip_dir=st.floats(0, 360),
@@ -47,6 +47,7 @@ def valid_coordinates(point_coordinates: np.ndarray) -> bool:
 def test_point_construction(
     point_coordinates: np.ndarray,
     length_m: float,
+    width_m: float,
     strike: float,
     dip: float,
     dip_dir: float,
@@ -54,10 +55,16 @@ def test_point_construction(
     """Test the construction of a Point object from latitude, longitude, and depth."""
     assume(valid_coordinates(point_coordinates))
     point = sources.Point.from_lat_lon_depth(
-        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+        point_coordinates,
+        length_m=length_m,
+        width_m=width_m,
+        strike=strike,
+        dip=dip,
+        dip_dir=dip_dir,
     )
     assert np.allclose(point.coordinates, point_coordinates)
-    assert point.length == point.width == length_m / 1000
+    assert point.length == length_m / 1000
+    assert point.width == width_m / 1000
     assert np.allclose(
         shapely.get_coordinates(point.geometry, include_z=True),
         np.atleast_2d(point.bounds),
@@ -74,6 +81,7 @@ def test_point_construction(
         depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    width_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
     dip=st.floats(0, 180),
     dip_dir=st.floats(0, 360),
@@ -84,6 +92,7 @@ def test_point_construction(
 def test_point_coordinate_system(
     point_coordinates: np.ndarray,
     length_m: float,
+    width_m: float,
     strike: float,
     dip: float,
     dip_dir: float,
@@ -93,7 +102,12 @@ def test_point_coordinate_system(
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
-        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+        point_coordinates,
+        length_m=length_m,
+        width_m=width_m,
+        strike=strike,
+        dip=dip,
+        dip_dir=dip_dir,
     )
     # NOTE: cannot assert invertibility coordinate mapping is not bijective
     assert np.allclose(
@@ -110,6 +124,7 @@ def test_point_coordinate_system(
         depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    width_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
     dip=st.floats(0, 180),
     dip_dir=st.floats(0, 360),
@@ -120,6 +135,7 @@ def test_point_coordinate_system(
 def test_point_coordinate_inversion(
     point_coordinates: np.ndarray,
     length_m: float,
+    width_m: float,
     strike: float,
     dip: float,
     dip_dir: float,
@@ -129,7 +145,12 @@ def test_point_coordinate_inversion(
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
-        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+        point_coordinates,
+        length_m=length_m,
+        width_m=width_m,
+        strike=strike,
+        dip=dip,
+        dip_dir=dip_dir,
     )
     # NOTE: cannot assert invertibility coordinate mapping is not bijective
     assert np.allclose(
@@ -148,6 +169,7 @@ def test_point_coordinate_inversion(
         depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    width_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
     dip=st.floats(0, 180),
     dip_dir=st.floats(0, 360),
@@ -161,6 +183,7 @@ def test_point_coordinate_inversion(
 def test_point_rrup(
     point_coordinates: np.ndarray,
     length_m: float,
+    width_m: float,
     strike: float,
     dip: float,
     dip_dir: float,
@@ -169,7 +192,12 @@ def test_point_rrup(
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
-        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+        point_coordinates,
+        length_m=length_m,
+        width_m=width_m,
+        strike=strike,
+        dip=dip,
+        dip_dir=dip_dir,
     )
     assert np.isclose(
         point.rrup_distance(other_point),
@@ -187,6 +215,7 @@ def test_point_rrup(
         depth=st.floats(0, 100),
     ),
     length_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
+    width_m=st.floats(1e-16, allow_nan=False, allow_infinity=False),
     strike=st.floats(0, 360),
     dip=st.floats(0, 180),
     dip_dir=st.floats(0, 360),
@@ -195,6 +224,7 @@ def test_point_rrup(
 def test_point_rjb(
     point_coordinates: np.ndarray,
     length_m: float,
+    width_m: float,
     strike: float,
     dip: float,
     dip_dir: float,
@@ -203,7 +233,12 @@ def test_point_rjb(
     assume(valid_coordinates(point_coordinates))
 
     point = sources.Point.from_lat_lon_depth(
-        point_coordinates, length_m=length_m, strike=strike, dip=dip, dip_dir=dip_dir
+        point_coordinates,
+        length_m=length_m,
+        width_m=width_m,
+        strike=strike,
+        dip=dip,
+        dip_dir=dip_dir,
     )
     buffer = shapely.buffer(point.geometry, distance * 1000)
     for other_point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
@@ -574,11 +609,11 @@ def test_from_centroid_strike_dip_failure_cases(
     centroid: np.ndarray,
     strike: float,
     dip: float,
-    dip_dir: Optional[float],
+    dip_dir: float | None,
     length: float,
     width: float,
-    dtop: Optional[float],
-    dbottom: Optional[float],
+    dtop: float | None,
+    dbottom: float | None,
 ):
     with pytest.raises(ValueError):
         Plane.from_centroid_strike_dip(
@@ -608,11 +643,11 @@ def test_from_centroid_strike_dip_dtop_dbottom_derivation(
     centroid: np.ndarray,
     strike: float,
     dip: float,
-    dip_dir: Optional[float],
+    dip_dir: float | None,
     length: float,
     width: float,
-    dtop: Optional[float],
-    dbottom: Optional[float],
+    dtop: float | None,
+    dbottom: float | None,
     expected_dtop: float,
     expected_dbottom: float,
 ):

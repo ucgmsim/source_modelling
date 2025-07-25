@@ -1,6 +1,5 @@
 import collections
 import random
-from typing import Optional
 
 import hypothesis_networkx as hnx
 import networkx as nx
@@ -388,9 +387,15 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
         # Test case 1: Simple sources map with equal initial source distribution
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             None,
             None,
@@ -400,9 +405,15 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
         # Test case 2: Simple sources map with skewed initial source distribution
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             None,
             {"A": 0.1, "B": 0.2, "C": 0.7},
@@ -412,9 +423,15 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
         # Test case 3: Initial source given
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             "A",
             None,
@@ -425,8 +442,8 @@ def test_tree_nodes_in_order(tree: rupture_propagation.Tree):
 )
 def test_sample_rupture_propagation(
     sources_map: dict[str, sources.Point],
-    initial_source: Optional[str],
-    initial_source_distribution: Optional[dict[str, float]],
+    initial_source: str | None,
+    initial_source_distribution: dict[str, float] | None,
     jump_impossibility_limit_distance: int,
     expected_root_distribution: dict[str, float],
 ):
@@ -498,9 +515,15 @@ def test_sample_rupture_propagation(
         # Test case 1: Simple rupture causality tree
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             {"A": None, "B": "A", "C": "B"},
             {
@@ -515,9 +538,15 @@ def test_sample_rupture_propagation(
         # Test case 2: Another simple rupture causality tree
         (
             {
-                "A": sources.Point(np.array([-41.2865, 174.7762, 0]), 1000, 0, 0, 0),
-                "B": sources.Point(np.array([-41.2865, 174.7862, 0]), 1000, 0, 0, 0),
-                "C": sources.Point(np.array([-41.2865, 174.7962, 0]), 1000, 0, 0, 0),
+                "A": sources.Point(
+                    np.array([-41.2865, 174.7762, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "B": sources.Point(
+                    np.array([-41.2865, 174.7862, 0]), 1000, 1000, 0, 0, 0
+                ),
+                "C": sources.Point(
+                    np.array([-41.2865, 174.7962, 0]), 1000, 1000, 0, 0, 0
+                ),
             },
             {"A": None, "B": "A", "C": "A"},
             {
@@ -533,7 +562,7 @@ def test_sample_rupture_propagation(
 )
 def test_jump_points_from_rupture_tree(
     source_map: dict[str, sources.Point],
-    rupture_causality_tree: dict[str, Optional[str]],
+    rupture_causality_tree: dict[str, str | None],
     expected_jump_points: dict[str, rupture_propagation.JumpPair],
 ):
     result_jump_points = rupture_propagation.jump_points_from_rupture_tree(
