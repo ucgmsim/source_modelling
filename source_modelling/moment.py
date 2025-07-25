@@ -141,8 +141,6 @@ def moment_to_magnitude(moment: float) -> float:
 def magnitude_to_moment(magnitude: float) -> float:
     """Convert magnitude to moment.
 
-    NOTE: the qcore mag_scaling module does not have this expression.
-
     Parameters
     ----------
     magnitude : float

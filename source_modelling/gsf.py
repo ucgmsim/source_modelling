@@ -115,7 +115,7 @@ def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
         'lon', 'lat', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', and 'loc_rake'.
     gsf_filepath : Path
         The path to the GSF file to write.
-    """    
+    """
 
     if "init_time" not in gsf_df:
         gsf_df["init_time"] = -1
