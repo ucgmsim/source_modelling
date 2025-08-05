@@ -24,7 +24,7 @@ from enum import Enum, Flag, auto
 from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import fiona
 import geopandas as gpd
@@ -233,11 +233,11 @@ class CommunityFault:
     """The neotectonic domain of the fault."""
     dip_range: Range
     """The dip range of the fault."""
-    dip_dir: Optional[CompassDirection]
+    dip_dir: CompassDirection | None
     """The dip direction of the fault."""
     sense: MovementSense
     """The primary movement sense of the fault."""
-    secondary_sense: Optional[MovementSense]
+    secondary_sense: MovementSense | None
     """The secondary movement sense of the fault."""
     rake_range: Range
     """The rake range of the fault."""
@@ -245,7 +245,7 @@ class CommunityFault:
     """The slip rate of the fault."""
     slip_rate_timeframe_pref: int
     """The preferred slip rate timeframe."""
-    slip_rate_timeframe_unit: Optional[int]
+    slip_rate_timeframe_unit: int | None
     """The unit of the slip rate timeframe."""
     down_dip_depth90: float
     """Not sure!"""
@@ -261,7 +261,7 @@ class CommunityFault:
     """The quality code of the fault."""
     reference: str
     """The reference for the fault data."""
-    comments: Optional[str]
+    comments: str | None
     """Additional comments about the fault."""
 
 
@@ -377,7 +377,7 @@ def community_fault_model_as_geodataframe() -> gpd.GeoDataFrame:
     ).set_index("name")
 
 
-def parse_timeframe_unit(unit: str) -> Optional[int]:
+def parse_timeframe_unit(unit: str) -> int | None:
     """Parse the timeframe unit from a string.
 
     Parameters
@@ -387,7 +387,7 @@ def parse_timeframe_unit(unit: str) -> Optional[int]:
 
     Returns
     -------
-    Optional[int]
+    int | None
         The parsed unit as an integer, or None if not applicable.
     """
     if not unit:

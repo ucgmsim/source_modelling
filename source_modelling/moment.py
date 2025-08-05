@@ -128,7 +128,7 @@ def moment_to_magnitude(moment: float) -> float:
     Parameters
     ----------
     moment : float
-        The moment of the rupture.
+        The moment of the rupture in Nm.
 
     Returns
     -------
@@ -136,6 +136,22 @@ def moment_to_magnitude(moment: float) -> float:
         Rupture magnitude
     """
     return 2 / 3 * np.log10(moment) - 6.03333
+
+
+def magnitude_to_moment(magnitude: float) -> float:
+    """Convert magnitude to moment.
+
+    Parameters
+    ----------
+    magnitude : float
+        The magnitude of the rupture.
+
+    Returns
+    -------
+    float
+        Rupture moment in Nm.
+    """
+    return 10 ** ((magnitude + 6.03333) * 3 / 2)
 
 
 def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFrame:
@@ -163,3 +179,66 @@ def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFr
             "moment": integrate_f(np.arange(len(moment_rate_df))),
         }
     ).set_index("t")
+
+
+def dyne_cm_to_newton_metre(dyne_cm: float) -> float:
+    """Convert dyne-cm units to standard SI units Nm.
+
+    Parameters
+    ----------
+    dyne_cm : float
+        Force in dyne-cm.
+
+    Returns
+    -------
+    float
+        Force in Nm.
+    """
+    _dyne_to_newton = 1e-5
+    _cm_to_m = 1e-2
+    return dyne_cm * _dyne_to_newton * _cm_to_m
+
+
+def point_source_slip(
+    moment_newton_metre: float,
+    fault_area_km2: float,
+    velocity_model_df: pd.DataFrame,
+    source_depth_km: float,
+) -> float:
+    """Calculate slip for a point source.
+
+    This calculation is based on the old workflow:
+    https://github.com/ucgmsim/Pre-processing/blob/6572ea8be0963da4f7ac6a503ab07dd2519296e5/srf_generation/input_file_generation/realisation_to_srf.py#L321C9-L321C57
+
+    Parameters
+    ----------
+    moment_newton_metre : float
+        The seismic moment in newton-metre.
+    fault_area_km2 : float
+        The area of the fault in square kilometers.
+    velocity_model_df : pd.DataFrame
+      columns:
+        - "depth_km": The depth in kilometers.
+        - "rho_g_per_cm3": The density of the fault in grams per cubic centimeter.
+        - "vs_km_per_s": The shear wave velocity in kilometers per second.
+    source_depth_km : float
+        The depth of the source in kilometers.
+
+    Returns
+    -------
+    float
+        The calculated slip in cm.
+    """
+
+    # Find the index of the closest depth in the velocity model
+    idx = np.argmin(np.abs(velocity_model_df["depth_km"] - source_depth_km))
+    vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
+    rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]
+
+    vs_m_per_s = vs_km_per_s * 1e3  # Convert km/s to m/s
+    rho_kg_per_m3 = rho_g_per_cm3 * 1e3  # Convert g/cm³ to kg/m³
+    fault_area_m2 = fault_area_km2 * 1e6  # Convert km² to m²
+
+    slip_m = moment_newton_metre / (fault_area_m2 * rho_kg_per_m3 * vs_m_per_s**2)
+
+    return slip_m * 1e2  # Convert m to cm

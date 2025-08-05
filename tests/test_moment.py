@@ -1,6 +1,7 @@
 from unittest.mock import create_autospec, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 import scipy as sp
 from hypothesis import given
@@ -115,3 +116,70 @@ def test_find_connected_faults(
             faults,
         )
         assert ds.connected("A", "B") == expected_connected
+
+
+@pytest.fixture
+def velocity_model_df():
+    """Subset of rows of the 1D velocity model for testing"""
+    return pd.DataFrame(
+        {
+            "depth_km": [0.05, 2, 1038.9999],
+            "thickness": [0.05, 0.2, 999.9999],
+            "Vp": [1.8, 3.27, 8.1],
+            "Vs": [0.5, 1.64, 4.6],
+            "rho": [1.81, 2.28, 3.33],
+            "Qp": [38, 164, 460],
+            "Qs": [19, 82, 230],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "source_depth_km, fault_area_km2, magnitude, expected_slip",
+    [
+        (0.01, 100.0, 5.0, 78.41089598165419),
+        (2.0, 100.0, 5.0, 5.785920431607016),
+        (1040.0, 100.0, 5.0, 0.5035413073522274),
+    ],
+)
+def test_point_source_slip(
+    velocity_model_df: pd.DataFrame,
+    source_depth_km: float,
+    fault_area_km2: float,
+    magnitude: float,
+    expected_slip: float,
+):
+    """Test the point_source_slip function with different source depths."""
+    moment_newton_metre = moment.magnitude_to_moment(magnitude)
+
+    calculated_slip = moment.point_source_slip(
+        moment_newton_metre=moment_newton_metre,
+        fault_area_km2=fault_area_km2,
+        velocity_model_df=velocity_model_df,
+        source_depth_km=source_depth_km,
+    )
+
+    assert calculated_slip == pytest.approx(expected_slip)
+
+
+def test_point_source_slip_bad_dataframe():
+    """Test that point_source_slip crashes with a DataFrame missing required columns."""
+    # Create a DataFrame missing the required columns
+    bad_velocity_model_df = pd.DataFrame(
+        {
+            "bad_column1": [0.05, 2, 1038.9999],
+            "bad_column2": [0.5, 1.64, 4.6],
+            "bad_column3": [1.81, 2.28, 3.33],
+        }
+    )
+
+    moment_newton_metre = moment.magnitude_to_moment(5.0)
+
+    # Should raise KeyError when trying to access missing columns
+    with pytest.raises(KeyError):
+        moment.point_source_slip(
+            moment_newton_metre=moment_newton_metre,
+            fault_area_km2=100.0,
+            velocity_model_df=bad_velocity_model_df,
+            source_depth_km=2.0,
+        )
