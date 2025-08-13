@@ -390,9 +390,9 @@ def distance_between(
     """
     global_point_a = source_a.fault_coordinates_to_wgs_depth_coordinates(source_a_point)
     global_point_b = source_b.fault_coordinates_to_wgs_depth_coordinates(source_b_point)
-    return coordinates.distance_between_wgs_depth_coordinates(
+    return float(coordinates.distance_between_wgs_depth_coordinates(
         global_point_a, global_point_b
-    )
+    ))
 
 
 def sample_rupture_propagation(

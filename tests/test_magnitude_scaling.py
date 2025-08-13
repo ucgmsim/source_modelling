@@ -2,7 +2,7 @@ import functools
 import itertools
 import random
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 from unittest.mock import patch
 
 import hypothesis.strategies as st
@@ -248,6 +248,12 @@ def test_monotonicity_mag_to_area(
     assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)
 
 
+class RandomFunction(Protocol):
+    def __call__(
+        self, x: float, random: bool = False, rake: float | None = None
+    ) -> float: ...
+
+
 @pytest.mark.parametrize(
     "area_to_mag, area",
     list(
@@ -262,9 +268,7 @@ def test_monotonicity_mag_to_area(
     ),
 )
 @seed(1)
-def test_normal_error_contreras_interface(
-    area_to_mag: Callable[[float], float], area: float
-):
+def test_normal_error_contreras_interface(area_to_mag: RandomFunction, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
     samples = [area_to_mag(area, random=True) for _ in range(300)]
     result = sp.stats.goodness_of_fit(
@@ -291,7 +295,7 @@ def test_normal_error_contreras_interface(
 )
 @seed(1)
 def test_normal_error_contreras_interface_aspect_ratio(
-    aspect_ratio: Callable[[float], float], magnitude: float
+    aspect_ratio: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
     samples = np.array([aspect_ratio(magnitude, random=True) for _ in range(100)])
@@ -321,7 +325,7 @@ def test_normal_error_contreras_interface_aspect_ratio(
 )
 @seed(1)
 def test_normal_error_contreras_interface_mag_to_area(
-    mag_to_area: Callable[[float], float], magnitude: float
+    mag_to_area: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on mag_to_area and check that it approximates the value with random = False."""
     samples = [mag_to_area(magnitude, random=True) for _ in range(100)]
@@ -348,7 +352,7 @@ def test_normal_error_contreras_interface_mag_to_area(
     ),
 )
 @seed(1)
-def test_normal_error_strasser_slab(area_to_mag: Callable[[float], float], area: float):
+def test_normal_error_strasser_slab(area_to_mag: RandomFunction, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
     samples = [area_to_mag(area, random=True) for _ in range(100)]
     result = sp.stats.goodness_of_fit(
@@ -373,7 +377,7 @@ def test_normal_error_strasser_slab(area_to_mag: Callable[[float], float], area:
 )
 @seed(1)
 def test_normal_error_strasser_slab_mag_to_area(
-    mag_to_area: Callable[[float], float], magnitude: float
+    mag_to_area: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on mag_to_area and check that it approximates the value with random = False."""
     samples = [mag_to_area(magnitude, random=True) for _ in range(100)]
@@ -400,7 +404,7 @@ def test_normal_error_strasser_slab_mag_to_area(
 )
 @seed(1)
 def test_normal_error_contreras_slab_aspect_ratio(
-    aspect_ratio: Callable[[float], float], magnitude: float
+    aspect_ratio: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
     samples = np.array([aspect_ratio(magnitude, random=True) for _ in range(100)])
@@ -429,9 +433,7 @@ def test_normal_error_contreras_slab_aspect_ratio(
     ),
 )
 @seed(1)
-def test_normal_error_leonard(
-    area_to_mag: Callable[[float], float], rake: float, area: float
-):
+def test_normal_error_leonard(area_to_mag: RandomFunction, rake: float, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
     samples = [area_to_mag(area, rake=rake, random=True) for _ in range(100)]
     result = sp.stats.goodness_of_fit(
@@ -460,7 +462,7 @@ def test_normal_error_leonard(
     ),
 )
 def test_area_preservation_lw(
-    relations: tuple[Callable[[float], tuple[float, float]], Callable[[float], float]],
+    relations: tuple[Callable[[float], tuple[float, float]], RandomFunction],
     magnitude: float,
 ):
     """Test that the area is preserved when converting between area and length/width."""

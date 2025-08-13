@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 import scipy as sp
 import shapely
@@ -356,7 +357,7 @@ def test_general_invalid_input():
 
 
 def trace(
-    start_trace_nztm: np.ndarray[float], length: float, strike: float
+    start_trace_nztm: npt.NDArray[float], length: float, strike: float
 ) -> np.ndarray:
     # Do this in NZTM to prevent any issues with the coordinate system conversions
     strike_vec = np.array([np.cos(np.radians(strike)), np.sin(np.radians(strike))])
