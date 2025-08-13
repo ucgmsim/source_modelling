@@ -10,17 +10,16 @@ readme = "README.md"
 requires-python = ">=3.11"
 dynamic = ["version"]
 dependencies = [
-  "numpy",
   "fiona",
-  "qcore @ git+https://github.com/ucgmsim/qcore.git",
   "geopandas",
   "networkx",
+  "numpy",
   "pandas",
   "parse",
-  "shapely",
+  "qcore @ git+https://github.com/ucgmsim/qcore.git",
   "scipy",
+  "shapely",
   "xarray[io]",
-  "networkx",
 ]
 
 [project.optional-dependencies]
