@@ -163,10 +163,20 @@ fn write_srf_points(
     let row_array = row_ptr.as_slice()?;
     let data_array = data.as_slice()?;
     let mut buffer = [0u8; BUFFER_SIZE];
-
+    let summary_length = 8;
     for (i, row) in metadata_array.outer_iter().enumerate() {
         // Write all but last element
-        for v in row.iter().take(row.len() - 1) {
+        for v in row.iter().take(summary_length) {
+            let slice = lexical_core::write(*v, &mut buffer);
+            buffered_writer
+                .write_all(slice)
+                .or_else(marshall_os_error)?;
+            buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+        }
+        buffered_writer
+            .write_all(b"\n")
+            .or_else(marshall_os_error)?;
+        for v in row.iter().drop(summary_length) {
             let slice = lexical_core::write(*v, &mut buffer);
             buffered_writer
                 .write_all(slice)
@@ -186,8 +196,8 @@ fn write_srf_points(
             .or_else(marshall_os_error)?;
         if nt > 0 {
             buffered_writer
-              .write_all(b"\n")
-              .or_else(marshall_os_error)?;
+                .write_all(b"\n")
+                .or_else(marshall_os_error)?;
             for v in &data_array[row_idx..next_row_idx] {
                 let slice = lexical_core::write(*v, &mut buffer);
                 buffered_writer
