@@ -176,7 +176,7 @@ fn write_srf_points(
         buffered_writer
             .write_all(b"\n")
             .or_else(marshall_os_error)?;
-        for v in row.iter().drop(summary_length) {
+        for v in row.iter().skip(summary_length) {
             let slice = lexical_core::write(*v, &mut buffer);
             buffered_writer
                 .write_all(slice)
