@@ -21,7 +21,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "requirements**.txt"
 
       - name: Install project with types
         run: uv sync --all-extras --dev
