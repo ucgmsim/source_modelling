@@ -9,9 +9,10 @@ jobs:
       - uses: actions/checkout@v4
       # Setup the minimum required python distribution
       - uses: actions/setup-python@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+      - run: uv sync
       # Install deptry
-      - run: pip install deptry
-      # Install requirements
-      - run: pip install -e .
+      - run: uv pip install deptry
       # Run deptry to check that all dependencies are present.
-      - run: deptry . -ddg test -ddg types
+      - run: uv run deptry . -ddg test -ddg types
