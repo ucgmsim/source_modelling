@@ -180,9 +180,9 @@ class Point:
         float
             The rrup distance (in metres) between the point and the fault geometry.
         """
-        return coordinates.distance_between_wgs_depth_coordinates(
+        return float(coordinates.distance_between_wgs_depth_coordinates(
             self.coordinates, point
-        )
+        ))
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.
@@ -353,7 +353,7 @@ class Plane:
     @property
     def area(self) -> float:  # numpydoc ignore=RT01
         """float: The area of the plane (in km^2)."""
-        return (
+        return float(
             0.5
             * np.linalg.norm(
                 np.cross(
@@ -450,7 +450,7 @@ class Plane:
     @classmethod
     def from_nztm_trace(
         cls,
-        trace_points_nztm: np.ndarray[float],
+        trace_points_nztm: npt.NDArray[float],
         dtop: float,
         dbottom: float,
         dip: float,
@@ -653,7 +653,7 @@ class Plane:
             strike = coordinates.great_circle_bearing_to_nztm_bearing(
                 centroid[:2],
                 length / 2,
-                strike,
+                strike, # type: ignore
             )
         else:
             strike = strike_nztm
@@ -684,8 +684,8 @@ class Plane:
             centroid[:2],
             strike,
             dip_dir,
-            dtop,
-            dbottom,
+            dtop, # type: ignore
+            dbottom, # type: ignore
             length,
             projected_width,
         )
@@ -1499,14 +1499,14 @@ def closest_points_beneath(
 
     # The minimum dip coordinate is found via similar triangles.
     dip_coordinate_a = np.clip(
-        (min_depth - source_a.planes[0].top_m)
-        / (source_a.planes[0].bottom_m - source_a.planes[0].top_m),
+        (min_depth - source_a.top_m)
+        / (source_a.bottom_m - source_a.top_m),
         0,
         0.99,
     )
     dip_coordinate_b = np.clip(
-        (min_depth - source_b.planes[0].top_m)
-        / (source_b.planes[0].bottom_m - source_b.planes[0].top_m),
+        (min_depth - source_b.top_m)
+        / (source_b.bottom_m - source_b.top_m),
         0,
         0.99,
     )

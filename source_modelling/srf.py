@@ -180,7 +180,7 @@ class SrfFile:
     slipt1_array: sp.sparse.csr_array
 
     @classmethod
-    def from_file(cls, srf_ffp: Path) -> Self:
+    def from_file(cls, srf_ffp: Path | str) -> Self:
         """Read an srf file from a filepath.
 
         Parameters
@@ -234,7 +234,7 @@ class SrfFile:
             point_count = int(points_count_match.group(1))
             position = srf_file_handle.tell()
 
-        points_metadata, slipt1_array = srf_parser.parse_srf(
+        points_metadata, slipt1_array = srf_parser.parse_srf( # type: ignore
             str(srf_ffp), position, point_count
         )
 
@@ -290,7 +290,7 @@ class SrfFile:
 
             srf_file_handle.write(f"POINTS {len(self.points)}\n")
 
-        srf_parser.write_srf_points(
+        srf_parser.write_srf_points( # type: ignore
             str(srf_ffp),
             self.points.values.astype(np.float32),
             self.slip.indptr,
@@ -344,7 +344,7 @@ class SrfFile:
         header_data = {
             var_name[len("plane_") :]: ds[var_name].values
             for var_name in ds.data_vars
-            if var_name.startswith("plane_")
+            if isinstance(var_name, str) and var_name.startswith("plane_")
         }
         header_df = pd.DataFrame(header_data)
         header_df[["nstk", "ndip"]] = header_df[["nstk", "ndip"]].astype(int)
@@ -352,7 +352,7 @@ class SrfFile:
         points_data = {
             col: ds[col].values
             for col in ds.data_vars
-            if not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
+            if isinstance(col, str) and not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
         }
         points_df = pd.DataFrame(points_data)
 
@@ -578,7 +578,7 @@ class SrfFile:
         return planes
 
 
-def read_srf(srf_ffp: Path) -> SrfFile:
+def read_srf(srf_ffp: Path | str) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
     Parameters
