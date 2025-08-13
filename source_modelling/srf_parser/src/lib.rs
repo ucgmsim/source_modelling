@@ -46,23 +46,19 @@ fn marshall_value_error<T>(e: lexical_core::Error) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
 }
 
-fn space_index(data: &[u8]) -> Result<usize, lexical_core::Error> {
-    let nonwhitespace = data
-        .iter()
-        .enumerate()
-        .find(|&(_, &x)| !x.is_ascii_whitespace())
-        .map(|(idx, _)| idx);
-    match nonwhitespace {
-        Some(x) => Ok(x),
-        _ => Err(lexical_core::Error::InvalidDigit(0)),
+fn space_index(data: &[u8]) -> usize {
+    let mut index = 0;
+    while index < data.len() && data[index].is_ascii_whitespace() {
+        index += 1;
     }
+    index
 }
 
 fn parse_value<T: lexical_core::FromLexical>(
     data: &[u8],
     index: &mut usize,
 ) -> Result<T, lexical_core::Error> {
-    *index += space_index(&data[*index..])?;
+    *index += space_index(&data[*index..]);
     let (val, read) = lexical_core::parse_partial(&data[*index..])?;
     *index += read;
     Ok(val)
@@ -163,10 +159,24 @@ fn write_srf_points(
     let row_array = row_ptr.as_slice()?;
     let data_array = data.as_slice()?;
     let mut buffer = [0u8; BUFFER_SIZE];
-
+    let summary_length = 8;
     for (i, row) in metadata_array.outer_iter().enumerate() {
         // Write all but last element
-        for v in row.iter().take(row.len() - 1) {
+        for v in row.iter().take(summary_length) {
+            let slice = lexical_core::write(*v, &mut buffer);
+            buffered_writer
+                .write_all(slice)
+                .or_else(marshall_os_error)?;
+            buffered_writer.write_all(b" ").or_else(marshall_os_error)?;
+        }
+        buffered_writer
+            .write_all(b"\n")
+            .or_else(marshall_os_error)?;
+        for v in row
+            .iter()
+            .skip(summary_length)
+            .take(row.len() - 1 - summary_length)
+        {
             let slice = lexical_core::write(*v, &mut buffer);
             buffered_writer
                 .write_all(slice)
@@ -186,8 +196,8 @@ fn write_srf_points(
             .or_else(marshall_os_error)?;
         if nt > 0 {
             buffered_writer
-              .write_all(b"\n")
-              .or_else(marshall_os_error)?;
+                .write_all(b"\n")
+                .or_else(marshall_os_error)?;
             for v in &data_array[row_idx..next_row_idx] {
                 let slice = lexical_core::write(*v, &mut buffer);
                 buffered_writer
