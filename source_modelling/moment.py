@@ -18,7 +18,7 @@ def find_connected_faults(
     separation_distance: float = 2.0,
     dip_delta: float = 20.0,
     min_connected_depth: float = 5.0,
-) -> DisjointSet[str]:
+) -> "DisjointSet[str]":
     """Identify groups of connected faults based on proximity and dip angle.
 
     Faults are considered connected if this distance is within a specified
