@@ -407,7 +407,7 @@ def test_planes_nstk_1_ndip_gt_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,
+        slipt1_array=None,  # type: ignore
     )
 
     planes = mock_srf.planes
@@ -450,7 +450,7 @@ def test_planes_nstk_1_ndip_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,
+        slipt1_array=None,  # type: ignore
     )
 
     planes = mock_srf.planes
@@ -500,6 +500,6 @@ def test_hdf5_read_write():
             original_srf.slipt1_array.indptr, reconstructed_srf.slipt1_array.indptr
         ), "slipt1_array indptr mismatch"
 
-        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (
+        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # type: ignore
             "slipt1_array content mismatch"
         )
