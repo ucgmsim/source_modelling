@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm", "cython", "numpy"]
+requires = ["setuptools", "setuptools-scm",  "setuptools-rust>=1.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "source_modelling"
 authors = [{ name = "QuakeCoRE" }]
 description = "Source modelling library"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic = ["version"]
 dependencies = [
    "numpy",
@@ -19,6 +19,7 @@ dependencies = [
    "parse",
    "shapely",
    "scipy",
+   "xarray[io]",
    "networkx"
 ]
 
@@ -119,3 +120,8 @@ exclude = [  # don't report on objects that match any of these regex
     '\.undocumented_method$',
     '\.__repr__$',
 ]
+
+
+[tool.maturin]
+bindings = "pyo3"
+path = "source_modelling/srf_parser"

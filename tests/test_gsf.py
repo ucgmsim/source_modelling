@@ -12,7 +12,12 @@ from source_modelling.sources import Fault, Plane, Point
 
 def test_point_gsf():  # Use tmp_path fixture
     point_source = Point.from_lat_lon_depth(
-        np.array([-43.0, 172.0, 500.0]), strike=45, dip=90, dip_dir=25, length_m=1e4
+        np.array([-43.0, 172.0, 500.0]),
+        strike=45,
+        dip=90,
+        dip_dir=25,
+        length_m=1e4,
+        width_m=1e4,
     )
     gsf_df = gsf.source_to_gsf_dataframe(point_source, 1.0)
     assert len(gsf_df) == 1
@@ -79,7 +84,6 @@ def test_write_gsf(tmp_path: Path):
 
 
 def test_write_bad_df():
-
     df = pd.DataFrame(
         {
             "lon": [1, 2, 3],
@@ -94,7 +98,7 @@ def test_write_bad_df():
             "seg_no": [0, 0, 0],
         }
     )
-    filepath = "test.gsf"
+    filepath = Path("test.gsf")
     with pytest.raises(
         ValueError, match="The DataFrame must have a 'loc_rake' column."
     ):

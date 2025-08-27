@@ -1,6 +1,6 @@
 """Parsing utilities for space-separated file formats."""
 
-from typing import Optional, TextIO
+from typing import TextIO
 
 
 class ParseError(Exception):
@@ -24,14 +24,14 @@ def _is_seperator(char: str) -> bool:
     return char.isspace() or not char
 
 
-def read_float(handle: TextIO, label: Optional[str] = None) -> float:
+def read_float(handle: TextIO, label: str | None = None) -> float:
     """Read a float from an file.
 
     Parameters
     ----------
     handle : TextIO
         The file to read from.
-    label : Optional[str]
+    label : str | None
         A human friendly label for the floating point (for debugging
         purposes), or None for no label. Defaults to None.
 
@@ -59,7 +59,7 @@ def read_float(handle: TextIO, label: Optional[str] = None) -> float:
             raise ParseError(f'Expecting float, got: "{float_str}"')
 
 
-def read_int(handle: TextIO, label: Optional[str] = None) -> int:
+def read_int(handle: TextIO, label: str | None = None) -> int:
     """Read a int from an file.
 
     Parameters

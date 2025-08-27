@@ -42,19 +42,19 @@ Example
 """
 
 import dataclasses
-import functools
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TextIO
+from typing import Self
 
 import numpy as np
 import pandas as pd
 import scipy as sp
 import shapely
+import xarray as xr
 
 from qcore import coordinates
-from source_modelling import parse_utils, srf_reader
+from source_modelling import parse_utils, srf_parser
 from source_modelling.sources import Plane
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
@@ -135,7 +135,7 @@ class SrfFile:
         The columns of the header are:
 
         - elon: The centre longitude of the plane.
-        - elot: The centre latitude of the plane.
+        - elat: The centre latitude of the plane.
         - nstk: The number of patches along strike for the plane.
         - ndip: The number of patches along dip for the plane.
         - len: The length of the plane (in km).
@@ -158,19 +158,16 @@ class SrfFile:
         - dip: local dip.
         - area: area of the patch (in cm^2).
         - tinit: initial rupture time for this patch (in seconds).
-        - dt: the timestep for all slipt* columns (in seconds).
+        - dt: the timestep for all slipt columns (in seconds).
         - rake: local rake.
-        - slip1: total slip in the first component.
-        - slip2: total slip in the second component.
-        - slip3: total slip in the third component.
         - slip: total slip.
 
         The final two columns are computed from the SRF and are not saved to
         disk. See the linked documentation on the SRF format for more details.
 
-    slipt{i}_array : csr_array
-        A sparse array containing the ith component of slip for each point and at each timestep, where
-        slipt{i}_array[i, j] is the slip for the ith patch at time t = j * dt. See also: SRFFile.slip.
+    slipt1_array : csr_array
+        A sparse array containing the slip for each point and at each timestep, where
+        slipt1_array[i, j] is the slip for the ith patch at time t = j * dt.
 
     References
     ----------
@@ -181,18 +178,260 @@ class SrfFile:
     header: pd.DataFrame
     points: pd.DataFrame
     slipt1_array: sp.sparse.csr_array
-    slipt2_array: sp.sparse.csr_array
-    slipt3_array: sp.sparse.csr_array
+
+    @classmethod
+    def from_file(cls, srf_ffp: Path) -> Self:
+        """Read an srf file from a filepath.
+
+        Parameters
+        ----------
+        srf_ffp : Path
+            The path to the srf file.
+
+        Returns
+        -------
+        Self
+            The SRFFile instance for this path.
+        """
+        with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
+            version = srf_file_handle.readline().strip()
+
+            plane_count_line = srf_file_handle.readline().strip()
+            plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
+            if not plane_count_match:
+                raise parse_utils.ParseError(
+                    f'Expecting PLANE header line, got: "{plane_count_line}"'
+                )
+            plane_count = int(plane_count_match.group(1))
+            segments = []
+
+            for _ in range(plane_count):
+                segments.append(
+                    {
+                        "elon": parse_utils.read_float(srf_file_handle),
+                        "elat": parse_utils.read_float(srf_file_handle),
+                        "nstk": parse_utils.read_int(srf_file_handle),
+                        "ndip": parse_utils.read_int(srf_file_handle),
+                        "len": parse_utils.read_float(srf_file_handle),
+                        "wid": parse_utils.read_float(srf_file_handle),
+                        "stk": parse_utils.read_float(srf_file_handle),
+                        "dip": parse_utils.read_float(srf_file_handle),
+                        "dtop": parse_utils.read_float(srf_file_handle),
+                        "shyp": parse_utils.read_float(srf_file_handle),
+                        "dhyp": parse_utils.read_float(srf_file_handle),
+                    }
+                )
+            headers = pd.DataFrame(segments)
+            headers["nstk"] = headers["nstk"].astype(int)
+            headers["ndip"] = headers["ndip"].astype(int)
+
+            points_count_line = srf_file_handle.readline().strip()
+            points_count_match = re.match(POINT_COUNT_RE, points_count_line)
+            if not points_count_match:
+                raise parse_utils.ParseError(
+                    f'Expecting POINTS header line, got: "{points_count_line}"'
+                )
+            point_count = int(points_count_match.group(1))
+            position = srf_file_handle.tell()
+
+        points_metadata, slipt1_array = srf_parser.parse_srf(
+            str(srf_ffp), position, point_count
+        )
+
+        points_df = pd.DataFrame(
+            points_metadata.reshape((-1, 11)),
+            columns=[
+                "lon",
+                "lat",
+                "dep",
+                "stk",
+                "dip",
+                "area",
+                "tinit",
+                "dt",
+                "rake",
+                "slip",
+                "rise",
+            ],
+        )
+
+        return cls(
+            version,
+            headers,
+            points_df,
+            slipt1_array,
+        )
+
+    def write_srf(self, srf_ffp: Path) -> None:
+        """Write an SRFFile object to a file.
+
+        Parameters
+        ----------
+        srf_ffp : Path
+            The path to the output SRF.
+
+        """
+
+        with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
+            srf_file_handle.write("1.0\n")
+            srf_file_handle.write(f"PLANE {len(self.header)}\n")
+            # Cannot use self.header.to_string because the newline separating headers is significant!
+            # This is ok because the number of headers is typically very small (< 100)
+            for _, plane in self.header.iterrows():
+                srf_file_handle.write(
+                    "\n".join(
+                        [
+                            f"{plane['elon']:.6f} {plane['elat']:.6f} {int(plane['nstk'])} {int(plane['ndip'])} {plane['len']:.4f} {plane['wid']:.4f}",
+                            f"{plane['stk']:.4f} {plane['dip']:.4f} {plane['dtop']:.4f} {plane['shyp']:.4f} {plane['dhyp']:.4f}",
+                            "",
+                        ]
+                    )
+                )
+
+            srf_file_handle.write(f"POINTS {len(self.points)}\n")
+
+        srf_parser.write_srf_points(
+            str(srf_ffp),
+            self.points.values.astype(np.float32),
+            self.slip.indptr,
+            self.slip.data,
+        )
+
+    def write_hdf5(
+        self, hdf5_ffp: Path, include_slip_time_function: bool = True
+    ) -> None:
+        """Write an SRFFile to disk in an HDF5 format using xarray's to_netcdf.
+
+        Parameters
+        ----------
+        hdf5_ffp : Path
+            The path to the HDF5 file to save to.
+        include_slip_time_function : bool
+            If True, include the slip time function in the HDF5
+            output. Slower and outputs larger files.
+        """
+
+        self.to_xarray(include_slip_time_function=include_slip_time_function).to_netcdf(
+            hdf5_ffp,
+            engine="h5netcdf",
+            encoding={
+                # Apply compression to the 'data' variable of the sparse array
+                "data": {"compression": "zlib", "complevel": 9},
+                # Apply compression to the 'indices' variable of the sparse array
+                "indices": {"compression": "zlib", "complevel": 9},
+            }
+            if include_slip_time_function
+            else None,
+        )
+
+    @classmethod
+    def from_hdf5(cls, hdf5_ffp: Path) -> Self:
+        """
+        Reads an SRFFile object from an HDF5 file.
+
+        Parameters
+        ----------
+        hdf5_ffp : Path
+            The file path to the HDF5 file.
+
+        Returns
+        -------
+        SrfFile
+            An instance of the SrfFile class reconstructed from the HDF5 data.
+        """
+        ds = xr.open_dataset(hdf5_ffp, engine="h5netcdf")
+
+        header_data = {
+            var_name[len("plane_") :]: ds[var_name].values
+            for var_name in ds.data_vars
+            if var_name.startswith("plane_")
+        }
+        header_df = pd.DataFrame(header_data)
+        header_df[["nstk", "ndip"]] = header_df[["nstk", "ndip"]].astype(int)
+
+        points_data = {
+            col: ds[col].values
+            for col in ds.data_vars
+            if not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
+        }
+        points_df = pd.DataFrame(points_data)
+
+        data = ds["data"].values
+        indices = ds["indices"].values
+        indptr_saved = ds["indptr"].values
+        reconstructed_indptr = np.append(indptr_saved, len(data))
+
+        slipt1_array = sp.sparse.csr_array((data, indices, reconstructed_indptr))
+
+        return cls(
+            version=ds.attrs["version"],
+            header=header_df,
+            points=points_df,
+            slipt1_array=slipt1_array,
+        )
+
+    def to_xarray(self, include_slip_time_function: bool = True) -> xr.Dataset:
+        """Convert an SRFFile into an xarray dataset.
+
+        Parameters
+        ----------
+        include_slip_time_function : bool, default False
+            If True, include the slip time functions as well as the
+            slip summaries in the SRF. Slower.
+
+        Returns
+        -------
+        xr.Dataset
+            An xarray dataset containing the information from an SRF
+            file.
+        """
+        # Prepare data variables and coordinates for the header Dataset
+        header_data_vars = {
+            f"plane_{col}": ("segment", self.header[col].values)
+            for col in self.header.columns
+        }
+        header_coords = {"segment": np.arange(len(self.header))}
+        header_ds = xr.Dataset(header_data_vars, coords=header_coords)
+
+        points_data_vars = {
+            col: ("patch", self.points[col].values) for col in self.points.columns
+        }
+        points_coords = {"patch": np.arange(len(self.points))}
+        points_ds = xr.Dataset(points_data_vars, coords=points_coords)
+
+        datasets = [header_ds, points_ds]
+        if include_slip_time_function:
+            n_patches, n_timesteps = self.slipt1_array.shape
+            slip_ds = xr.Dataset(
+                {
+                    "data": (("nz_idx",), self.slipt1_array.data),
+                    "indices": (("nz_idx",), self.slipt1_array.indices),
+                    "indptr": (
+                        ("row",),
+                        self.slipt1_array.indptr[:-1],
+                    ),  # Apply slicing to the data
+                },
+                coords={
+                    "row": np.arange(n_patches),
+                    "col": np.arange(n_timesteps),
+                },
+                attrs={
+                    "sparse_format": "csr",
+                    "original_shape": self.slipt1_array.shape,
+                    "units": "cm",
+                    "description": "Slip for each patch at each timestep",
+                },
+            )
+            datasets.append(slip_ds)
+        ds = xr.merge(datasets)
+        ds.attrs["version"] = self.version
+
+        return ds
 
     @property
     def slip(self):  # numpydoc ignore=RT01
-        """csr_array: sparse array representing slip in all components."""
-        slip_array = self.slipt1_array.power(2)
-        if self.slipt2_array:
-            slip_array += self.slipt2_array.power(2)
-        if self.slipt3_array:
-            slip_array += self.slipt3_array.power(2)
-        return slip_array.sqrt()
+        "csr_array: A sparse array containing slip-time functions for each point."
+        return self.slipt1_array
 
     @property
     def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
@@ -352,162 +591,7 @@ def read_srf(srf_ffp: Path) -> SrfFile:
     SrfFile
         The filepath of the SRF file.
     """
-    with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
-        version = srf_file_handle.readline().strip()
-
-        plane_count_line = srf_file_handle.readline().strip()
-        plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
-        if not plane_count_match:
-            raise parse_utils.ParseError(
-                f'Expecting PLANE header line, got: "{plane_count_line}"'
-            )
-        plane_count = int(plane_count_match.group(1))
-        segments = []
-
-        for _ in range(plane_count):
-            segments.append(
-                {
-                    "elon": parse_utils.read_float(srf_file_handle),
-                    "elat": parse_utils.read_float(srf_file_handle),
-                    "nstk": parse_utils.read_int(srf_file_handle),
-                    "ndip": parse_utils.read_int(srf_file_handle),
-                    "len": parse_utils.read_float(srf_file_handle),
-                    "wid": parse_utils.read_float(srf_file_handle),
-                    "stk": parse_utils.read_float(srf_file_handle),
-                    "dip": parse_utils.read_float(srf_file_handle),
-                    "dtop": parse_utils.read_float(srf_file_handle),
-                    "shyp": parse_utils.read_float(srf_file_handle),
-                    "dhyp": parse_utils.read_float(srf_file_handle),
-                }
-            )
-        headers = pd.DataFrame(segments)
-        headers["nstk"] = headers["nstk"].astype(int)
-        headers["ndip"] = headers["ndip"].astype(int)
-
-        points_count_line = srf_file_handle.readline().strip()
-        points_count_match = re.match(POINT_COUNT_RE, points_count_line)
-        if not points_count_match:
-            raise parse_utils.ParseError(
-                f'Expecting POINTS header line, got: "{points_count_line}"'
-            )
-        point_count = int(points_count_match.group(1))
-
-        points_metadata, slipt1_array, slipt2_array, slipt3_array = (
-            srf_reader.read_srf_points(srf_file_handle, point_count)
-        )
-        points_df = pd.DataFrame(
-            data=points_metadata,
-            columns=[
-                "lon",
-                "lat",
-                "dep",
-                "stk",
-                "dip",
-                "area",
-                "tinit",
-                "dt",
-                "rake",
-                "slip1",
-                "slip2",
-                "slip3",
-                "rise",
-            ],
-        )
-
-        points_df["slip"] = np.sqrt(
-            points_df["slip1"] ** 2 + points_df["slip2"] ** 2 + points_df["slip3"] ** 2
-        )
-        return SrfFile(
-            version, headers, points_df, slipt1_array, slipt2_array, slipt3_array
-        )
-
-
-def write_slip(srf_file: TextIO, slips: np.ndarray) -> None:
-    """Write out slip values to an SRF file.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to write to.
-    slips : np.ndarray
-        The slip values to write.
-    """
-    for i in range(0, len(slips), 6):
-        srf_file.write(
-            "  "
-            + "  ".join(f"{slips[j]:.5E}" for j in range(i, min(len(slips), i + 6)))
-            + "\n"
-        )
-
-
-def write_srf_point(srf_file: TextIO, srf: SrfFile, point: pd.Series) -> None:
-    """Write out a single SRF point.
-
-    Parameters
-    ----------
-    srf_file : TextIO
-        The SRF file to write to.
-    srf : SrfFile
-        The SRF file object to write.
-    point : pd.Series
-        The point to write.
-    """
-    index = int(point["point_index"])
-    # We need to get the raw slip values for the slip arrays to write out to the SRF.
-    # The slip values for the ith point in the SRF are stored in the ith row of the slip array.
-    # The indptr array contains the indices for each row in the slip array, so:
-    #
-    # - indptr[i] is the start index in the data array for the ith row and
-    # - indptr[i + 1] is the start index in the data array for the (i + 1)th row.
-    #
-    # Hence, data[indptr[i]:indptr[i+1]] collects the slip values for the ith row.
-    # Note we cannot use standard multi-dimensional array indexing arr[i, :]
-    # because scipy sparse arrays do not support this kind of indexing.
-    #
-    # Visually:
-    #
-    # +----+-----+----+---+---+--+
-    # |    |     |    |   |   |  | indptr
-    # +----+---\-+----+---+-\-+--+
-    #           \            \
-    #            \            \
-    # +----------+\-----------+\----------+-------------+
-    # |   ...    |    row i   | row i + 1 |     ...     | data
-    # +----------+------------+-----------+-------------+
-    #            row_i = data[indptr[i]:indptr[i+1]]
-    slipt1 = (
-        srf.slipt1_array.data[
-            srf.slipt1_array.indptr[index] : srf.slipt1_array.indptr[index + 1]
-        ]
-        if srf.slipt1_array is not None
-        else None
-    )
-    slipt2 = (
-        srf.slipt2_array.data[
-            srf.slipt2_array.indptr[index] : srf.slipt2_array.indptr[index + 1]
-        ]
-        if srf.slipt2_array is not None
-        else None
-    )
-    slipt3 = (
-        srf.slipt3_array.data[
-            srf.slipt3_array.indptr[index] : srf.slipt3_array.indptr[index + 1]
-        ]
-        if srf.slipt3_array is not None
-        else None
-    )
-    srf_file.write(
-        f"{point['lon']:.6f} {point['lat']:.6f} {point['dep']:g} {point['stk']:g} {point['dip']:g} {point['area']:.4E} {point['tinit']:.4f} {point['dt']:.6E}\n"
-    )
-    srf_file.write(
-        f"{point['rake']:g} {point['slip1']:.4f} {len(slipt1) if slipt1 is not None else 0} {point['slip2']:.4f} {len(slipt2) if slipt2 is not None else 0} {point['slip3']:.4f} {len(slipt3) if slipt3 is not None else 0}\n"
-    )
-    if slipt1 is not None:
-        write_slip(srf_file, slipt1)
-    if slipt2 is not None:
-        write_slip(srf_file, slipt2)
-    if slipt3 is not None:
-        write_slip(srf_file, slipt3)
+    return SrfFile.from_file(srf_ffp)
 
 
 def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
@@ -520,26 +604,4 @@ def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
     srf : SrfFile
         The SRF object.
     """
-    with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
-        srf_file_handle.write("1.0\n")
-        srf_file_handle.write(f"PLANE {len(srf.header)}\n")
-        # Cannot use srf.header.to_string because the newline separating headers is significant!
-        # This is ok because the number of headers is typically very small (< 100)
-        for _, plane in srf.header.iterrows():
-            srf_file_handle.write(
-                "\n".join(
-                    [
-                        f"{plane['elon']:.6f} {plane['elat']:.6f} {int(plane['nstk'])} {int(plane['ndip'])} {plane['len']:.4f} {plane['wid']:.4f}",
-                        f"{plane['stk']:.4f} {plane['dip']:.4f} {plane['dtop']:.4f} {plane['shyp']:.4f} {plane['dhyp']:.4f}",
-                        "",
-                    ]
-                )
-            )
-
-        srf_file_handle.write(f"POINTS {len(srf.points)}\n")
-        srf.points["point_index"] = np.arange(len(srf.points))
-
-        srf.points.apply(
-            functools.partial(write_srf_point, srf_file_handle, srf), axis=1
-        )
-        srf.points = srf.points.drop(columns="point_index")
+    srf.write_srf(srf_ffp)

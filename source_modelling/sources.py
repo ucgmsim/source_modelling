@@ -21,7 +21,7 @@ import dataclasses
 import itertools
 import json
 import warnings
-from typing import NamedTuple, Optional, Self
+from typing import NamedTuple, Self
 
 import networkx as nx
 import numpy as np
@@ -44,6 +44,8 @@ class Point:
         The coordinates (NZTM) of the point source.
     length_m : float
         Length used to approximate the point source as a small planar patch (metres).
+    width_m : float
+        Width used to approximate the point source as a small planar patch (metres).
     strike : float
         The strike angle of the point source in degrees.
     dip : float
@@ -56,6 +58,7 @@ class Point:
     bounds: np.ndarray
     # used to approximate point source as a small planar patch (metres).
     length_m: float
+    width_m: float
     # The usual strike, dip, dip direction, etc cannot be calculated
     # from a point source and so must be provided by the user.
     strike: float
@@ -90,11 +93,6 @@ class Point:
     def length(self) -> float:  # numpydoc ignore=RT01
         """float: The length of the approximating planar patch (in kilometres)."""
         return self.length_m / _KM_TO_M
-
-    @property
-    def width_m(self) -> float:  # numpydoc ignore=RT01
-        """float: The width of the approximating planar patch (in metres)."""
-        return self.length_m
 
     @property
     def width(self) -> float:  # numpydoc ignore=RT01
@@ -355,7 +353,15 @@ class Plane:
     @property
     def area(self) -> float:  # numpydoc ignore=RT01
         """float: The area of the plane (in km^2)."""
-        return self.length * self.width
+        return (
+            0.5
+            * np.linalg.norm(
+                np.cross(
+                    self.bounds[2] - self.bounds[0], self.bounds[1] - self.bounds[3]
+                )
+            )
+            / _KM_TO_M**2
+        )
 
     @property
     def projected_width_m(self) -> float:  # numpydoc ignore=RT01
@@ -448,8 +454,8 @@ class Plane:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dip_dir: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Create a fault plane from the surface trace, depth parameters,
         dip and dip direction.
@@ -543,12 +549,12 @@ class Plane:
         dip: float,
         length: float,
         width: float,
-        dtop: Optional[float] = None,
-        dbottom: Optional[float] = None,
-        strike: Optional[float] = None,
-        dip_dir: Optional[float] = None,
-        strike_nztm: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dtop: float | None = None,
+        dbottom: float | None = None,
+        strike: float | None = None,
+        dip_dir: float | None = None,
+        strike_nztm: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Create a fault plane from the centroid, strike, dip_dir, top, bottom, length, and width.
 
@@ -566,17 +572,17 @@ class Plane:
             The length of the fault plane (in km).
         width : float
             The width of the fault plane (in km).
-        dtop : Optional[float]
+        dtop : float | None
             The top depth of the plane (in km).
-        dbottom : Optional[float]
+        dbottom : float | None
             The bottom depth of the plane (in km).
-        strike : Optional[float]
+        strike : float | None
             The WGS84 strike bearing of the fault (in degrees).
-        dip_dir : Optional[float]
+        dip_dir : float | None
             The WGS84 dip direction bearing of the fault (in degrees). If None, this is assumed to be strike + 90 degrees.
-        strike_nztm : Optional[float]
+        strike_nztm : float | None
             The NZTM strike of the fault (in degrees).
-        dip_dir_nztm : Optional[float]
+        dip_dir_nztm : float | None
             The NZTM dip direction of the fault (in degrees).
 
         Returns
@@ -1023,6 +1029,16 @@ class Fault:
                 )
 
     @property
+    def top_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The top-depth of the fault"""
+        return self.planes[0].top_m
+
+    @property
+    def bottom_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The bottom-depth of the fault"""
+        return self.planes[0].bottom_m
+
+    @property
     def dip(self) -> float:  # numpydoc ignore=RT01
         """float: The dip angle of the fault."""
         return self.planes[0].dip
@@ -1060,12 +1076,12 @@ class Fault:
         dtop: float,
         dbottom: float,
         dip: float,
-        dip_dir: Optional[float] = None,
-        dip_dir_nztm: Optional[float] = None,
+        dip_dir: float | None = None,
+        dip_dir_nztm: float | None = None,
     ) -> Self:
         """Construct a fault from the trace points of the fault.
 
-        This assumes that the fault is a series of connected planes, 
+        This assumes that the fault is a series of connected planes,
         and that the planes have the same dtop, dbottom, dip and dip_dir.
 
         Parameters
@@ -1115,7 +1131,7 @@ class Fault:
         float
             The area of the fault.
         """
-        return self.width * np.sum(self.lengths)
+        return sum(plane.area for plane in self.planes)
 
     @property
     def lengths(self) -> np.ndarray:  # numpydoc ignore=RT01
@@ -1419,9 +1435,20 @@ def closest_point_between_sources(
         source_b_coordinate_bounds[2:]
     )
 
+    initial_point_a = (
+        (source_a_coordinate_bounds.min_strike + source_a_coordinate_bounds.max_strike)
+        / 2,
+        (source_a_coordinate_bounds.min_dip + source_a_coordinate_bounds.max_dip) / 2,
+    )
+    initial_point_b = (
+        (source_b_coordinate_bounds.min_strike + source_b_coordinate_bounds.max_strike)
+        / 2,
+        (source_b_coordinate_bounds.min_dip + source_b_coordinate_bounds.max_dip) / 2,
+    )
+
     res = sp.optimize.least_squares(
         fault_coordinate_distance,
-        np.array([1 / 2, 1 / 2, 1 / 2, 1 / 2]),
+        np.array([*initial_point_a, *initial_point_b]),
         bounds=(min_bounds, max_bounds),
         gtol=1e-5,
         ftol=1e-5,
@@ -1433,6 +1460,66 @@ def closest_point_between_sources(
             f"Optimisation failed to converge for provided sources: {res.message} with x = {res.x}"
         )
     return res.x[:2], res.x[2:]
+
+
+def closest_points_beneath(
+    source_a: Fault | Plane, source_b: Fault | Plane, min_depth: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Find the closest points between two sources beneath a minimum depth.
+
+    Parameters
+    ----------
+    source_a : fault or plane
+        The first source.
+    source_b : fault or plane
+        The second source.
+    min_depth : float
+        The minimum depth to compare between the faults, in kilometres.
+
+    Returns
+    -------
+    source_a_coordinates : np.ndarray
+        The source-local coordinates of the closest point on source a.
+    source_b_coordinates : np.ndarray
+        The source-local coordinates of the closest point on source b.
+
+    Raises
+    ------
+    ValueError
+        If `min_depth` is below the bottom depth of either `source_a` or `source_b`.
+    """
+
+    min_depth *= _KM_TO_M
+
+    if min_depth >= min(source_a.bottom_m, source_b.bottom_m):
+        raise ValueError(
+            "The specified minimum depth exceeds the bottom depth of at least one of the sources "
+            f"{min_depth=}m {source_a.bottom_m=}m {source_b.bottom_m=}m."
+        )
+
+    # The minimum dip coordinate is found via similar triangles.
+    dip_coordinate_a = np.clip(
+        (min_depth - source_a.planes[0].top_m)
+        / (source_a.planes[0].bottom_m - source_a.planes[0].top_m),
+        0,
+        0.99,
+    )
+    dip_coordinate_b = np.clip(
+        (min_depth - source_b.planes[0].top_m)
+        / (source_b.planes[0].bottom_m - source_b.planes[0].top_m),
+        0,
+        0.99,
+    )
+
+    source_a_coordinate_bounds = CoordinateBounds(
+        min_strike=0, max_strike=1, min_dip=dip_coordinate_a, max_dip=1
+    )
+    source_b_coordinate_bounds = CoordinateBounds(
+        min_strike=0, max_strike=1, min_dip=dip_coordinate_b, max_dip=1
+    )
+    return closest_point_between_sources(
+        source_a, source_b, source_a_coordinate_bounds, source_b_coordinate_bounds
+    )
 
 
 def absorb_planes(plane: Plane, other: Plane) -> Plane:

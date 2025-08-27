@@ -24,7 +24,7 @@ import io
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import IO, Optional
+from typing import IO
 
 import numpy as np
 import numpy.typing as npt
@@ -48,7 +48,7 @@ SVF : {slip_velocity_function} (type of slip-velocity function used)
 """
 
 
-def _normalise_value(value: float) -> Optional[float]:
+def _normalise_value(value: float) -> float | None:
     """Normalise an FSP parameter value.
 
     Parameters
@@ -58,7 +58,7 @@ def _normalise_value(value: float) -> Optional[float]:
 
     Returns
     -------
-    Optional[float]
+    float | None
         None if value is 999 or less than zero.
     """
     return None if value == 999 or value < 0 else value
@@ -74,25 +74,25 @@ class FSPParseError(Exception):
 class Segment:
     """A representation of a segment in an FSP file."""
 
-    strike: Optional[float] = None
+    strike: float | None = None
     """The strike of the segment."""
-    dip: Optional[float] = None
+    dip: float | None = None
     """The dip of the segment."""
-    length: Optional[float] = None
+    length: float | None = None
     """The length of the segment."""
-    width: Optional[float] = None
+    width: float | None = None
     """The width of the segment."""
-    dtop: Optional[float] = None
+    dtop: float | None = None
     """The top depth of the segment."""
-    top_centre: Optional[np.ndarray] = None
+    top_centre: np.ndarray | None = None
     """The top centre of the segment."""
-    hypocentre: Optional[np.ndarray] = None
+    hypocentre: np.ndarray | None = None
     """The hypocentre of the segment."""
-    dx: Optional[float] = None
+    dx: float | None = None
     """The length of the subfaults."""
-    dz: Optional[float] = None
+    dz: float | None = None
     """The width of the subfaults."""
-    subfaults: Optional[int] = None
+    subfaults: int | None = None
     """The number of subfaults in the segment."""
 
     def as_plane(self) -> Plane:
@@ -218,10 +218,10 @@ class FSPFile:
     latitude: float
     longitude: float
     depth: float
-    hypx: Optional[float]
-    hypz: Optional[float]
+    hypx: float | None
+    hypz: float | None
 
-    velocity_model: Optional[pd.DataFrame | float]
+    velocity_model: pd.DataFrame | float | None
 
     # Fault and parameters
     length: float
@@ -234,24 +234,24 @@ class FSPFile:
     # Rupture parameters
     magnitude: float
     moment: float
-    average_rise_time: Optional[float]
-    average_rupture_speed: Optional[float]
+    average_rise_time: float | None
+    average_rupture_speed: float | None
     slip_velocity_function: str
 
     # Model subfault sizes
-    nx: Optional[int]
-    nz: Optional[int]
-    dx: Optional[float]
-    dz: Optional[float]
+    nx: int | None
+    nz: int | None
+    dx: float | None
+    dz: float | None
 
     # Inversion parameters
-    fmin: Optional[float]
-    fmax: Optional[float]
+    fmin: float | None
+    fmax: float | None
 
     # Time window parameters
-    time_window_count: Optional[float]
-    time_window_length: Optional[float]
-    time_shift: Optional[float]
+    time_window_count: float | None
+    time_window_length: float | None
+    time_shift: float | None
 
     # Number of segments (== len(data))
     segment_count: int
@@ -548,7 +548,7 @@ def _parse_segment_slip(
 
 def _parse_velocity_density_structure(
     fsp_file_handle: IO[str],
-) -> Optional[pd.DataFrame | float]:
+) -> pd.DataFrame | float | None:
     """Parse the velocity-density structure from an FSP file.
 
     Parameters
@@ -558,7 +558,7 @@ def _parse_velocity_density_structure(
 
     Returns
     -------
-    Optional[pd.DataFrame | float]
+    pd.DataFrame | float | None
         - If a velocity model table is found, returns a DataFrame with columns:
           ["DEPTH", "P-VEL", "S-VEL", "QP", "QS"].
         - If a shear modulus value is found, returns it as a float.
