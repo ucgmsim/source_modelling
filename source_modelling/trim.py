@@ -103,7 +103,7 @@ def autocorrelation_dimension(
     float
         The autocorrelation dimension of the slip array.
     """
-    slip_function = slip_array.sum(axis=int(not bool(axis)))
+    slip_function = slip_array.sum(axis=1 - axis)
 
     # Calculate the autocorrelation of the slip array
     autocorrelation = sp.signal.correlate(slip_function, slip_function, mode="full")
@@ -152,7 +152,7 @@ def trim_array_to_target_length(
     """
 
     keep_threshold = slip_array.max() / 3
-    slip_function = slip_array.max(axis=int(not axis))
+    slip_function = slip_array.max(axis=1 - axis)
     left = 0
     right = len(slip_function)
     while (
