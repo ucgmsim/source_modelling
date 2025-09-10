@@ -163,12 +163,13 @@ def trim_array_to_target_length(
         )
         and abs((right - left) * dx - target_length) > 2 * dx
     ):
-        if (
-            slip_function[left] < slip_function[right - 1]
-            and slip_function[left] < keep_threshold
-        ):
+        # Here at least one of slip_function[left] < keep_threshold or
+        # slip_function[right - 1] < keep_threshold is true. Hence, we
+        # just need to check which smallest, as that one *definitely*
+        # is below the keep threshold.
+        if slip_function[left] < slip_function[right - 1]:
             left += 1
-        elif slip_function[right - 1] < keep_threshold:
+        else:
             right -= 1
 
     while left > 0 and slip_function[left] >= keep_threshold:
