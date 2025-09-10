@@ -25,7 +25,7 @@ def trim_mask_somervile(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np.
 
     Returns
     -------
-    mask : array of bools
+    array of bools
         Boolean mask of the same shape as `slip_array`. True indicates
         regions retained, False indicates trimmed regions.
 
@@ -215,7 +215,7 @@ def trim_mask_thingbaijam(
 
     Returns
     -------
-    mask : array of bools
+    array of bools
         Boolean mask of the same shape as `slip_array`. True indicates
         regions retained, False indicates trimmed regions.
 
