@@ -301,10 +301,11 @@ def test_fault_to_gsf(fault: Fault):
     )
     if fault.dip != 90:
         for _, point in gsf_df.iterrows():
-            assert fault.geometry.contains(
+            assert shapely.contains(
+                fault.geometry,
                 shapely.Point(
                     coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
-                )
+                ),
             )
 
 

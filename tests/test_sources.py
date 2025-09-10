@@ -924,8 +924,8 @@ def test_fault_construction(fault: Fault):
     assert fault.dip == fault.planes[0].dip
     assert fault.corners.shape == (4 * len(fault.planes), 3)
     assert np.isclose(fault.area(), np.sum([plane.area for plane in fault.planes]))
-    assert fault.geometry.equals(
-        shapely.union_all([plane.geometry for plane in fault.planes])
+    assert shapely.equals(
+        fault.geometry, shapely.union_all([plane.geometry for plane in fault.planes])
     )
     assert fault.trace_geometry.equals(
         shapely.union_all([plane.trace_geometry for plane in fault.planes])

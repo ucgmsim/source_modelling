@@ -180,9 +180,9 @@ class Point:
         float
             The rrup distance (in metres) between the point and the fault geometry.
         """
-        return float(coordinates.distance_between_wgs_depth_coordinates(
-            self.coordinates, point
-        ))
+        return float(
+            coordinates.distance_between_wgs_depth_coordinates(self.coordinates, point)
+        )
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.
@@ -653,7 +653,7 @@ class Plane:
             strike = coordinates.great_circle_bearing_to_nztm_bearing(
                 centroid[:2],
                 length / 2,
-                strike, # type: ignore
+                strike,  # type: ignore
             )
         else:
             strike = strike_nztm
@@ -684,8 +684,8 @@ class Plane:
             centroid[:2],
             strike,
             dip_dir,
-            dtop, # type: ignore
-            dbottom, # type: ignore
+            dtop,  # type: ignore
+            dbottom,  # type: ignore
             length,
             projected_width,
         )
@@ -1171,7 +1171,7 @@ class Fault:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.
@@ -1499,14 +1499,12 @@ def closest_points_beneath(
 
     # The minimum dip coordinate is found via similar triangles.
     dip_coordinate_a = np.clip(
-        (min_depth - source_a.top_m)
-        / (source_a.bottom_m - source_a.top_m),
+        (min_depth - source_a.top_m) / (source_a.bottom_m - source_a.top_m),
         0,
         0.99,
     )
     dip_coordinate_b = np.clip(
-        (min_depth - source_b.top_m)
-        / (source_b.bottom_m - source_b.top_m),
+        (min_depth - source_b.top_m) / (source_b.bottom_m - source_b.top_m),
         0,
         0.99,
     )
