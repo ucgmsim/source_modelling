@@ -11,7 +11,7 @@ import scipy as sp
 _SOMERVILLE_SLIP_THRESHOLD = 0.3
 
 
-def trim_mask_somervile(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np.bool_]:
+def trim_mask_somerville(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np.bool_]:
     """Generate a mask for a slip array using the Somerville trimming method [0]_.
 
     Iteratively removes rows and columns from the edges of the array where
