@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 import scipy as sp
 import shapely
@@ -356,7 +357,7 @@ def test_general_invalid_input():
 
 
 def trace(
-    start_trace_nztm: np.ndarray[float], length: float, strike: float
+    start_trace_nztm: npt.NDArray[float], length: float, strike: float
 ) -> np.ndarray:
     # Do this in NZTM to prevent any issues with the coordinate system conversions
     strike_vec = np.array([np.cos(np.radians(strike)), np.sin(np.radians(strike))])
@@ -1324,21 +1325,13 @@ def test_closest_points_beneath(
     expected_dip_a: float,
     expected_dip_b: float,
 ):
-    plane_a = MagicMock()
-    plane_a.top_m = top_a
-    plane_a.bottom_m = bottom_a
-
-    plane_b = MagicMock()
-    plane_b.top_m = top_b
-    plane_b.bottom_m = bottom_b
-
     source_a = MagicMock()
+    source_a.top_m = top_a
     source_a.bottom_m = bottom_a
-    source_a.planes = [plane_a]
 
     source_b = MagicMock()
+    source_b.top_m = top_b
     source_b.bottom_m = bottom_b
-    source_b.planes = [plane_b]
 
     with patch("source_modelling.sources.closest_point_between_sources") as mock_cpbs:
         mock_cpbs.return_value = ("mock_a", "mock_b")
@@ -1363,7 +1356,7 @@ def test_closest_points_beneath(
         assert b_bounds.min_strike == 0
         assert b_bounds.max_strike == 1
 
-        assert a_bounds.min_dip == pytest.approx(expected_dip_a)
+        assert float(a_bounds.min_dip) == pytest.approx(expected_dip_a)
         assert a_bounds.max_dip == 1
-        assert b_bounds.min_dip == pytest.approx(expected_dip_b)
+        assert float(b_bounds.min_dip) == pytest.approx(expected_dip_b)
         assert b_bounds.max_dip == 1

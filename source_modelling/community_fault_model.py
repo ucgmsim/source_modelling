@@ -514,7 +514,7 @@ def line_segment_strike(point_a: npt.ArrayLike, point_b: npt.ArrayLike) -> float
     return float(
         coordinates.nztm_bearing_to_great_circle_bearing(
             coordinates.nztm_to_wgs_depth(point_a),
-            np.linalg.norm(point_b - point_a) / 1000,
+            float(np.linalg.norm(point_b - point_a) / 1000),
             geo.oriented_bearing_wrt_normal(
                 np.array([1, 0, 0]),
                 np.append(

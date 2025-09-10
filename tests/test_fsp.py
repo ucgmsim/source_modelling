@@ -123,6 +123,7 @@ def test_kanto_fsp():
             {"depth": 19.00, "Vp": 6.80, "Vs": 4.00, "density": 3.00},
         ]
     )
+    assert isinstance(fsp_file.velocity_model, pd.DataFrame)
     pd.testing.assert_frame_equal(fsp_file.velocity_model, expected_velocity_model)
 
 
@@ -254,13 +255,14 @@ def test_loads_srcmod_fsp(fsp_path: Path):
         assert fsp_file.dz > 0, f"dz should be positive, got {fsp_file.dz}"
 
     # Inversion parameters bounds
-    if fsp_file.fmin is not None:
-        assert fsp_file.fmin >= 0, f"fmin should be positive, got {fsp_file.fmin}"
-    if fsp_file.fmax is not None:
-        assert fsp_file.fmax >= 0, f"fmax should be positive, got {fsp_file.fmax}"
+    if fsp_file.fmax is not None and fsp_file.fmin is not None:
         assert (
-            fsp_file.fmin <= fsp_file.fmax
+            0 <= fsp_file.fmin <= fsp_file.fmax
         ), f"fmin should be no more than fmax, got fmin={fsp_file.fmin} and fmax={fsp_file.fmax}"
+    elif fsp_file.fmin is not None:
+        assert fsp_file.fmin >= 0, f"fmin should be positive, got {fsp_file.fmin}"
+    elif fsp_file.fmax is not None:
+        assert fsp_file.fmax >= 0, f"fmax should be positive, got {fsp_file.fmax}"
 
     # Time window parameters bounds
     if fsp_file.time_window_count is not None:
