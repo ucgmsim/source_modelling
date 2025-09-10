@@ -7,9 +7,9 @@ from hypothesis.extra.numpy import arrays
 from source_modelling import trim
 
 
-def test_trim_mask_sommervile_basic() -> None:
+def test_trim_mask_somervile_basic() -> None:
     slip = np.array([[0, 0, 0], [0, 1, 0], [0, 0, 0]])
-    mask = trim.trim_mask_sommervile(slip)
+    mask = trim.trim_mask_somervile(slip)
     expected_mask = np.array(
         [[False, False, False], [False, True, False], [False, False, False]]
     )
@@ -62,8 +62,8 @@ def test_trim_slip_array_keep_top_true() -> None:
 
 
 @given(arr=arrays(dtype=float, shape=(5, 5), elements=st.floats(0, 10)))
-def test_trim_mask_sommervile_shape(arr: npt.NDArray[np.floating]) -> None:
-    mask = trim.trim_mask_sommervile(arr)
+def test_trim_mask_somervile_shape(arr: npt.NDArray[np.floating]) -> None:
+    mask = trim.trim_mask_somervile(arr)
     assert mask.shape == arr.shape
     assert mask.dtype == bool
 

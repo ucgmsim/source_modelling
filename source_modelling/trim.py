@@ -8,9 +8,11 @@ import numpy as np
 import numpy.typing as npt
 import scipy as sp
 
+_SOMERVILLE_SLIP_THRESHOLD = 0.3
 
-def trim_mask_sommervile(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np.bool_]:
-    """Generate a mask for a slip array using the Sommerville trimming method [0]_.
+
+def trim_mask_somervile(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np.bool_]:
+    """Generate a mask for a slip array using the Somerville trimming method [0]_.
 
     Iteratively removes rows and columns from the edges of the array where
     slip values are significantly lower than the average slip, based on a
@@ -36,7 +38,7 @@ def trim_mask_sommervile(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np
     """
     top = left = 0
     bottom, right = slip_array.shape
-    _somerville_criterion = 0.3
+
     mask = np.ones_like(slip_array, dtype=np.bool_)
     while top < bottom and left < right:
         slip_avg = slip_array[top:bottom, left:right].mean()
@@ -57,7 +59,9 @@ def trim_mask_sommervile(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np
             ("right", right_mean),
         ]
         edges = [
-            (name, val) for name, val in edges if val < _somerville_criterion * slip_avg
+            (name, val)
+            for name, val in edges
+            if val < _SOMERVILLE_SLIP_THRESHOLD * slip_avg
         ]
 
         if not edges:
