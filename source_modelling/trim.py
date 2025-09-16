@@ -11,7 +11,7 @@ import scipy as sp
 _SOMERVILLE_SLIP_THRESHOLD = 0.3
 
 
-def trim_dims_someroville(
+def trim_dims_somerville(
     slip_array: npt.NDArray[np.floating],
 ) -> tuple[int, int, int, int]:
     """Generate masking dimensions for a slip array using the Somerville trimming method [0]_.
@@ -80,7 +80,7 @@ def trim_dims_someroville(
     return top, bottom, left, right
 
 
-def trim_mask_someroville(
+def trim_mask_somerville(
     slip_array: npt.NDArray[np.floating],
 ) -> npt.NDArray[np.bool_]:
     """Generate a mask for a slip array using the Somerville trimming method [0]_.
@@ -107,7 +107,7 @@ def trim_mask_someroville(
            crustal earthquake slip models for the prediction of strong ground
            motion. Seismological Research Letters, 70(1), 59-80.
     """
-    top, bottom, left, right = trim_dims_someroville(slip_array)
+    top, bottom, left, right = trim_dims_somerville(slip_array)
     mask = np.zeros_like(slip_array, dtype=np.bool_)
     mask[top:bottom, left:right] = True
     return mask
