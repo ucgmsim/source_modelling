@@ -11,8 +11,10 @@ import scipy as sp
 _SOMERVILLE_SLIP_THRESHOLD = 0.3
 
 
-def trim_mask_somerville(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np.bool_]:
-    """Generate a mask for a slip array using the Somerville trimming method [0]_.
+def trim_dims_someroville(
+    slip_array: npt.NDArray[np.floating],
+) -> tuple[int, int, int, int]:
+    """Generate masking dimensions for a slip array using the Somerville trimming method [0]_.
 
     Iteratively removes rows and columns from the edges of the array where
     slip values are significantly lower than the average slip, based on a
@@ -25,9 +27,8 @@ def trim_mask_somerville(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np
 
     Returns
     -------
-    array of bools
-        Boolean mask of the same shape as `slip_array`. True indicates
-        regions retained, False indicates trimmed regions.
+    tuple of ints
+        The (top, bottom, left, right) indices of the trim boundaries.
 
     References
     ----------
@@ -39,7 +40,6 @@ def trim_mask_somerville(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np
     top = left = 0
     bottom, right = slip_array.shape
 
-    mask = np.ones_like(slip_array, dtype=np.bool_)
     while top < bottom and left < right:
         slip_avg = slip_array[top:bottom, left:right].mean()
         # Find the smallest column of top, left, bottom, right with less than 30% of slip avg
@@ -69,18 +69,47 @@ def trim_mask_somerville(slip_array: npt.NDArray[np.floating]) -> npt.NDArray[np
 
         edge, _ = min(edges, key=lambda x: x[1])
         if edge == "top":
-            mask[top, :] = False
             top += 1
         elif edge == "bottom":
-            mask[bottom - 1, :] = False
             bottom -= 1
         elif edge == "left":
-            mask[:, left] = False
             left += 1
         elif edge == "right":
-            mask[:, right - 1] = False
             right -= 1
 
+    return top, bottom, left, right
+
+
+def trim_mask_someroville(
+    slip_array: npt.NDArray[np.floating],
+) -> npt.NDArray[np.bool_]:
+    """Generate a mask for a slip array using the Somerville trimming method [0]_.
+
+    Iteratively removes rows and columns from the edges of the array where
+    slip values are significantly lower than the average slip, based on a
+    threshold fraction (default 30%) of the array mean.
+
+    Parameters
+    ----------
+    slip_array : array of floats
+        2D array representing slip values.
+
+    Returns
+    -------
+    array of bools
+        Boolean mask of the same shape as `slip_array`. True indicates
+        regions retained, False indicates trimmed regions.
+
+    References
+    ----------
+    .. [0] Somerville, P., Irikura, K., Graves, R., Sawada, S., Wald,
+           D., Abrahamson, N., ... & Kowada, A. (1999). Characterizing
+           crustal earthquake slip models for the prediction of strong ground
+           motion. Seismological Research Letters, 70(1), 59-80.
+    """
+    top, bottom, left, right = trim_dims_someroville(slip_array)
+    mask = np.zeros_like(slip_array, dtype=np.bool_)
+    mask[top:bottom, left:right] = True
     return mask
 
 
@@ -193,6 +222,51 @@ def trim_array_to_target_length(
     return left, right
 
 
+def trim_dims_thingbaijam(
+    slip_array: npt.NDArray[np.floating], dx: float, dz: float, keep_top: bool = True
+) -> tuple[int, int, int, int]:
+    """Generate trimming dimensions for a slip array, removing regions of low slip.
+
+    Uses the autocorrelation dimension along each axis to determine a
+    characteristic length scale, then trims the array along both axes
+    based on this scale to exclude low-asperity regions. Uses the
+    method of Thingbaijam and Mai [0]_.
+
+    Parameters
+    ----------
+    slip_array : array of floats
+        2D array representing slip values.
+    dx : float
+        Subfault length along the horizontal axis.
+    dz : float
+        Subfault width along the vertical axis.
+    keep_top : bool, optional
+        Whether to prioritise keeping the upper rows when trimming (default True).
+
+    Returns
+    -------
+    tuple of ints
+        The (top, bottom, left, right) indices of the trim boundaries.
+
+    References
+    ----------
+    .. [0] Thingbaijam, K. K., & Martin Mai, P. (2016). Evidence for
+           truncated exponential probability distribution of earthquake slip.
+           Bulletin of the Seismological Society of America, 106(4),
+           1802-1816.
+    """
+    autocorrelation_length = autocorrelation_dimension(slip_array, dx, axis=1)
+
+    autocorrelation_width = autocorrelation_dimension(slip_array, dz, axis=0)
+    left, right = trim_array_to_target_length(
+        slip_array, dx, autocorrelation_length, axis=1
+    )
+    top, bottom = trim_array_to_target_length(
+        slip_array, dz, autocorrelation_width, trim_left=not keep_top
+    )
+    return top, bottom, left, right
+
+
 def trim_mask_thingbaijam(
     slip_array: npt.NDArray[np.floating], dx: float, dz: float, keep_top: bool = True
 ) -> npt.NDArray[np.bool_]:
@@ -227,15 +301,7 @@ def trim_mask_thingbaijam(
            Bulletin of the Seismological Society of America, 106(4),
            1802-1816.
     """
-    autocorrelation_length = autocorrelation_dimension(slip_array, dx, axis=1)
-
-    autocorrelation_width = autocorrelation_dimension(slip_array, dz, axis=0)
+    top, bottom, left, right = trim_dims_thingbaijam(slip_array, dx, dz, keep_top)
     mask = np.zeros_like(slip_array, dtype=np.bool_)
-    left, right = trim_array_to_target_length(
-        slip_array, dx, autocorrelation_length, axis=1
-    )
-    top, bottom = trim_array_to_target_length(
-        slip_array, dz, autocorrelation_width, trim_left=not keep_top
-    )
     mask[top:bottom, left:right] = True
     return mask
