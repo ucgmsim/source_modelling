@@ -9,7 +9,7 @@ setup(
             "source_modelling.srf_parser",
             "source_modelling/srf_parser/Cargo.toml",
             binding=Binding.PyO3,
-            native=True,
+            native=False,
         )
     ],
     include_package_data=True,
