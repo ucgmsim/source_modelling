@@ -51,6 +51,9 @@ jobs:
           # See https://cibuildwheel.pypa.io/en/stable/platforms/#linux-containers
           CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env"
           CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
+          # Required to build wheels with Rust extensions on macOS
+          # See https://cibuildwheel.pypa.io/en/stable/platforms/#macos-version-compatibility
+          MACOSX_DEPLOYMENT_TARGET: "10.12"
 
       - name: Build source distribution (Linux only)
         if: matrix.os == 'ubuntu-latest'
