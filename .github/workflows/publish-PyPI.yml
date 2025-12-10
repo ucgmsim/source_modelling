@@ -89,7 +89,8 @@ jobs:
       with:
         pattern: python-package-distributions-*
         merge-multiple: true
-        path: dist/
         
     - name: Publish distribution to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: .
