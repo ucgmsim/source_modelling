@@ -41,6 +41,8 @@ jobs:
           CIBW_ARCHS_MACOS: "x86_64 arm64"  # Build for Intel and Apple Silicon
           CIBW_ARCHS_WINDOWS: "AMD64"
           CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_ENVIRONMENT_MACOS: "CARGO_BUILD_TARGET='${{ matrix.os == 'macos-latest' && 'universal2-apple-darwin' || '' }}'"
+          CIBW_BEFORE_BUILD_MACOS: "rustup target add x86_64-apple-darwin aarch64-apple-darwin"
 
       - name: Build source distribution (Linux only)
         if: matrix.os == 'ubuntu-latest'
