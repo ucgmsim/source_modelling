@@ -3,11 +3,11 @@ requires = ["setuptools", "setuptools-scm", "setuptools-rust>=1.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "source_modelling"
-authors = [{ name = "QuakeCoRE" }]
+name = "source-modelling"
+authors = [{ name = "ucgmsim" }]
 description = "Source modelling library"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dynamic = ["version"]
 dependencies = [
   "fiona",
@@ -16,7 +16,7 @@ dependencies = [
   "numpy",
   "pandas",
   "parse",
-  "qcore @ git+https://github.com/ucgmsim/qcore.git",
+  "qcore-utils",
   "scipy",
   "shapely",
   "xarray[io]",
