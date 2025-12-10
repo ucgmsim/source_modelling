@@ -47,6 +47,10 @@ jobs:
           CIBW_ARCHS_MACOS: "x86_64 arm64"  # Build for Intel and Apple Silicon
           CIBW_ARCHS_WINDOWS: "AMD64"
           CIBW_ARCHS_LINUX: "x86_64"
+          # This is needed as for linux the wheel build process happens inside a container instead of the Github runner
+          # See https://cibuildwheel.pypa.io/en/stable/platforms/#linux-containers
+          CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env"
+          CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
 
       - name: Build source distribution (Linux only)
         if: matrix.os == 'ubuntu-latest'
