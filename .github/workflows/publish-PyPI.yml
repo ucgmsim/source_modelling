@@ -53,7 +53,7 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
           # Required to build wheels with Rust extensions on macOS
           # See https://cibuildwheel.pypa.io/en/stable/platforms/#macos-version-compatibility
-          MACOSX_DEPLOYMENT_TARGET: "10.12"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
 
       - name: Build source distribution (Linux only)
         if: matrix.os == 'ubuntu-latest'
@@ -89,7 +89,16 @@ jobs:
       with:
         pattern: python-package-distributions-*
         merge-multiple: true
-        path: dist/
+        path: artifacts/
+        
+    - name: Collect all distributions into dist/
+      run: |
+        mkdir -p dist/
+        find artifacts/ -name '*.whl' -exec cp {} dist/ \;
+        find artifacts/ -name '*.tar.gz' -exec cp {} dist/ \;
+        ls -la dist/
         
     - name: Publish distribution to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: dist
