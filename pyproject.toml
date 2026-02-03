@@ -42,6 +42,11 @@ dev = ["ty", "ruff", "deptry"]
 [tool.deptry]
 pep621_dev_dependency_groups = ["test", "dev", "types"]
 
+
+[tool.ty.rules]
+# Downgraded to warning because operators -,+,*,/ are too annoying to type properly
+unsupported-operator = "warn"
+
 [tool.setuptools.package-data]
 source_modelling = ['NZ_CFM/*']
 

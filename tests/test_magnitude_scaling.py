@@ -117,7 +117,7 @@ def test_inversion(
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
         area_to_mag = AREA_TO_MAGNITUDE[scaling_relation]
-    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)
+    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)  # type: ignore[missing-argument]
 
 
 @pytest.mark.parametrize(
@@ -246,7 +246,7 @@ def test_monotonicity_mag_to_area(
         mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
-    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)
+    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)  # type: ignore[missing-argument]
 
 
 class RandomFunction(Protocol):
@@ -668,7 +668,7 @@ def test_scaling_output_types(
     if "leonard" in func.__name__:
         kwargs["rake"] = 0.0
 
-    result = func(input_data, **kwargs)
+    result = func(input_data, **kwargs)  # type: ignore[invalid-argument-type]
     if isinstance(result, tuple):
         a, b = result
         assert isinstance(a, expected_type) and isinstance(b, expected_type)

@@ -1,6 +1,7 @@
 """Magnitude scaling relationships for fault dimensions."""
 
 import functools
+import typing
 import warnings
 from enum import Enum, StrEnum, auto
 from typing import Any, TypeVar
@@ -75,11 +76,13 @@ def _coerce_array_types(like: TArray, value: Any) -> TArray:
         The value coerced to have the same type as ``like``.
     """
     if isinstance(like, float):
-        return float(value)
+        coerced = float(value)
     elif isinstance(like, np.ndarray):
-        return np.asarray(value)
-    elif isinstance(like, pd.Series):
-        return pd.Series(value, index=like.index)
+        coerced = np.asarray(value)
+    else:
+        assert isinstance(like, pd.Series)
+        coerced = pd.Series(value, index=like.index)
+    return typing.cast(TArray, coerced)
 
 
 # Purpose of this function is to limit the number of ways that values
@@ -173,18 +176,18 @@ def leonard_area_to_magnitude(
     """
 
     if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
-        return np.log10(area) + (
+        magnitude = np.log10(area) + (
             _sample_distribution(sp.stats.norm(loc=3.99, scale=0.26), _get_size(area))
             if random
             else 3.99
         )
-
-    # Leonard quotes asymmetric uncertainties for the other rake types.
-    return np.log10(area) + (
-        _sample_distribution(sp.stats.norm(loc=4.03, scale=0.3), _get_size(area))
-        if random
-        else 4.0
-    )
+    else:
+        magnitude = np.log10(area) + (
+            _sample_distribution(sp.stats.norm(loc=4.03, scale=0.3), _get_size(area))
+            if random
+            else 4.0
+        )
+    return _coerce_array_types(area, magnitude)
 
 
 def leonard_magnitude_to_area(
@@ -221,7 +224,7 @@ def leonard_magnitude_to_area(
            (2014): 2953-2965.
     """
     if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
-        return 10 ** (
+        area = 10 ** (
             magnitude
             - (
                 _sample_distribution(
@@ -232,17 +235,19 @@ def leonard_magnitude_to_area(
             )
         )
 
-    # Leonard quotes asymmetric uncertainties for the other rake types.
-    return 10 ** (
-        magnitude
-        - (
-            _sample_distribution(
-                sp.stats.norm(loc=4.03, scale=0.3), _get_size(magnitude)
+    else:
+        # Leonard quotes asymmetric uncertainties for the other rake types.
+        area = 10 ** (
+            magnitude
+            - (
+                _sample_distribution(
+                    sp.stats.norm(loc=4.03, scale=0.3), _get_size(magnitude)
+                )
+                if random
+                else 4.0
             )
-            if random
-            else 4.0
         )
-    )
+    return _coerce_array_types(magnitude, area)
 
 
 def leonard_magnitude_to_length(
@@ -283,25 +288,24 @@ def leonard_magnitude_to_length(
     b_strike_slip_small = 1.667
     a_strike_slip_large = 5.27
     b_strike_slip_large = 1.0
-    length: TArray
     if rake_type(rake) == RakeType.STRIKE_SLIP:
-        length = 10 ** ((magnitude - a_strike_slip_small) / b_strike_slip_small)
+        length_small = 10 ** ((magnitude - a_strike_slip_small) / b_strike_slip_small)
         length = np.where(
-            length > 45.0,
+            length_small > 45.0,
             10 ** ((magnitude - a_strike_slip_large) / b_strike_slip_large),
-            length,
-        )
+            length_small,
+        )  # type: ignore[invalid-assignment]
     else:
         a_dip_slip_small = 4
         b_dip_slip_small = 2
         a_dip_slip_large = 4.24
         b_dip_slip_large = 1.667
 
-        length = 10 ** ((magnitude - a_dip_slip_small) / b_dip_slip_small)
+        length_small = 10 ** ((magnitude - a_dip_slip_small) / b_dip_slip_small)
         length = np.where(
-            length > 5.4,
+            length_small > 5.4,
             10 ** ((magnitude - a_dip_slip_large) / b_dip_slip_large),
-            length,
+            length_small,
         )
 
     # Because of np.where, floats are helpfully "upgraded" to numpy arrays

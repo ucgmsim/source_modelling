@@ -154,7 +154,7 @@ def test_random_sampling_root(graph: nx.Graph, n: int):
     random.seed(1)
     probability_of_spanning_trees = 0.0
     tree_probabilities: dict[str, float] = {}
-    for tree in mst.SpanningTreeIterator(graph):
+    for tree in mst.SpanningTreeIterator(graph):  # type: ignore[invalid-argument-type]
         p_tree = 1.0
         for u, v in graph.edges:
             if tree.has_edge(u, v):
@@ -450,7 +450,7 @@ def test_sample_rupture_propagation(
     n_samples = 100
     sampled_trees = [
         rupture_propagation.sample_rupture_propagation(
-            sources_map,
+            sources_map,  # type: ignore[invalid-argument-type]
             initial_source=initial_source,
             initial_source_distribution=initial_source_distribution,
             jump_impossibility_limit_distance=jump_impossibility_limit_distance,
@@ -566,7 +566,8 @@ def test_jump_points_from_rupture_tree(
     expected_jump_points: dict[str, rupture_propagation.JumpPair],
 ):
     result_jump_points = rupture_propagation.jump_points_from_rupture_tree(
-        source_map, rupture_causality_tree
+        source_map,  # type: ignore[invalid-argument-type]
+        rupture_causality_tree,
     )
 
     # Check if the jump points match the expected values

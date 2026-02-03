@@ -110,7 +110,7 @@ class Point:
         return shapely.Point(self.bounds)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
+    def geojson(self) -> str:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
@@ -198,8 +198,8 @@ class Point:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        return shapely.distance(
+            self.geometry, shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
 
 
@@ -438,7 +438,7 @@ class Plane:
         return shapely.LineString(self.trace)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
+    def geojson(self) -> str:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
@@ -450,7 +450,7 @@ class Plane:
     @classmethod
     def from_nztm_trace(
         cls,
-        trace_points_nztm: npt.NDArray[float],
+        trace_points_nztm: npt.NDArray[np.floating],
         dtop: float,
         dbottom: float,
         dip: float,
@@ -523,6 +523,7 @@ class Plane:
                 (trace_points_nztm, np.array([dbottom, dbottom]))
             )
         else:
+            assert dip_dir_nztm is not None
             dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
             proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
 
@@ -846,8 +847,8 @@ class Plane:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        return shapely.distance(
+            self.geometry, shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
 
 
@@ -992,8 +993,9 @@ class Fault:
                 points_into_relation[j].append(i)  # Plane i points into plane j
 
         # This relation can now be used to identify if the list of planes given is a line.
-        points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation, create_using=nx.DiGraph
+        points_into_graph = nx.from_dict_of_lists(
+            points_into_relation,  # type: ignore[invalid-argument-type]
+            create_using=nx.DiGraph,
         )
         try:
             self._validate_fault_plane_connectivity(points_into_graph)
@@ -1247,7 +1249,7 @@ class Fault:
         raise ValueError("Given coordinates are not on fault.")
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
+    def geojson(self) -> str:  # numpydoc ignore=RT01
         """dict: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
@@ -1326,8 +1328,8 @@ class Fault:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        return shapely.distance(
+            self.geometry, shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
 
 
