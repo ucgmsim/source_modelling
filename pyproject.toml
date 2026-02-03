@@ -36,8 +36,8 @@ types = [
   "scipy-stubs",
   "pandas-stubs",
   "types-networkx",
+  "ty",
 ]
-dev = ["ty", "ruff", "deptry"]
 
 
 [tool.setuptools.package-data]
