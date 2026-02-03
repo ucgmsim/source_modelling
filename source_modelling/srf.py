@@ -102,7 +102,7 @@ class Segments(Sequence[pd.DataFrame]):
 
         Returns
         -------
-        int
+        pd.DataFrame
             The nth segment in the SRF.
         """
         if not isinstance(index, int):
