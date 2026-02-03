@@ -112,7 +112,7 @@ def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) ->
 
 
 def leonard_magnitude_to_area(
-    magnitude: TArray, rake: TArray, random: bool = False
+    magnitude: TArray, rake: float, random: bool = False
 ) -> TArray:
     """Convert magnitude to area using the Leonard scaling relationship [0]_.
 
@@ -120,7 +120,7 @@ def leonard_magnitude_to_area(
     ----------
     magnitude : TArray
         Moment magnitude of the fault.
-    rake : TArray
+    rake : float
         Rake of the fault (degrees).
     random : bool, optional
         If True, sample parameters according to uncertainties in the
@@ -149,7 +149,7 @@ def leonard_magnitude_to_area(
             magnitude - (sp.stats.norm(loc=3.99, scale=0.26).rvs() if random else 3.99)
         )
 
-    # Leonard quotes assymetric uncertainties for the other rake types.
+    # Leonard quotes asymmetric uncertainties for the other rake types.
     return 10 ** (
         magnitude - (sp.stats.norm(loc=4.03, scale=0.3).rvs() if random else 4.0)
     )
@@ -157,7 +157,7 @@ def leonard_magnitude_to_area(
 
 def leonard_magnitude_to_length(
     magnitude: TArray,
-    rake: TArray,
+    rake: float,
     random: bool = False,
 ) -> TArray:
     """Convert magnitude to length using the Leonard scaling relationship [0]_.
@@ -166,7 +166,7 @@ def leonard_magnitude_to_length(
     ----------
     magnitude : TArray
             Moment magnitude of the fault.
-    rake : TArray
+    rake : float
             Rake of the fault (degrees).
     random : bool, optional
             If True, sample parameters according to uncertainties in the
@@ -192,9 +192,11 @@ def leonard_magnitude_to_length(
     length: TArray
     if rake_type(rake) == RakeType.STRIKE_SLIP:
         length = 10 ** ((magnitude - a_strike_slip_small) / b_strike_slip_small)
-
-        if length > 45.0:
-            length = 10 ** ((magnitude - a_strike_slip_large) / b_strike_slip_large)
+        length = np.where(
+            length > 45.0,
+            10 ** ((magnitude - a_strike_slip_large) / b_strike_slip_large),
+            length,
+        )
     else:
         a_dip_slip_small = 4
         b_dip_slip_small = 2
@@ -202,15 +204,18 @@ def leonard_magnitude_to_length(
         b_dip_slip_large = 1.667
 
         length = 10 ** ((magnitude - a_dip_slip_small) / b_dip_slip_small)
-        if length > 5.4:
-            length = 10 ** ((magnitude - a_dip_slip_large) / b_dip_slip_large)
+        length = np.where(
+            length > 5.4,
+            10 ** ((magnitude - a_dip_slip_large) / b_dip_slip_large),
+            length,
+        )
 
     return length
 
 
 def leonard_magnitude_to_width(
     magnitude: TArray,
-    rake: TArray,
+    rake: float,
     random: bool = False,
 ) -> TArray:
     """Convert magnitude to width using the Leonard scaling relationship [0]_.
@@ -219,7 +224,7 @@ def leonard_magnitude_to_width(
     ----------
     magnitude : TArray
             Moment magnitude of the fault.
-    rake : TArray
+    rake : float
             Rake of the fault (degrees).
     random : bool, optional
             If True, sample parameters according to uncertainties in the
@@ -250,13 +255,13 @@ def leonard_magnitude_to_width(
     width: TArray
     if rake_type(rake) == RakeType.STRIKE_SLIP:
         width = 10 ** ((magnitude - a_strike_slip_small) / b_strike_slip_small)
-        if width > 19.0 or width < 3.4:
+        if np.any((width > 19.0) | (width < 3.4)):
             warnings.warn("Width out of range for Leonard model.")
     else:
         a_dip_slip_small = sp.stats.norm(loc=3.67, scale=0.06).rvs() if random else 3.63
         b_dip_slip_small = 2.5
         width = 10 ** ((magnitude - a_dip_slip_small) / b_dip_slip_small)
-        if width <= 5.4:
+        if np.any(width <= 5.4):
             warnings.warn("Width out of range for Leonard model.")
 
     return width
@@ -264,7 +269,7 @@ def leonard_magnitude_to_width(
 
 def leonard_magnitude_to_length_width(
     magnitude: TArray,
-    rake: TArray,
+    rake: float,
     random: bool = False,
 ) -> tuple[TArray, TArray]:
     """Convert magnitude to length and width using the Leonard scaling relationship [0]_.
@@ -273,7 +278,7 @@ def leonard_magnitude_to_length_width(
     ----------
     magnitude : TArray
         Moment magnitude of the fault.
-    rake : TArray
+    rake : float
         Rake of the fault (degrees).
     random : bool, optional
         If True, sample parameters according to uncertainties in the
@@ -354,7 +359,7 @@ def contreras_interface_area_to_magnitude(area: TArray, random: bool = False) ->
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
     """
-    if area < 137.76:
+    if np.any(area < 137.76):
         warnings.warn(
             "Area out of range for Contreras model, minimum area is 137.76 km^2"
         )
@@ -400,7 +405,7 @@ def contreras_interface_magnitude_to_area(
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
     """
-    if magnitude < 6:
+    if np.any(magnitude < 6):
         warnings.warn(
             "Magnitude out of range for Contreras model, minimum magnitude is 6"
         )
@@ -514,7 +519,7 @@ def strasser_slab_area_to_magnitude(area: TArray, random: bool = False) -> TArra
     # lower bound and upper bound for the area are estimated from the minimum and maximum magnitude of the Strasser model.
     lower_bound = 130
     upper_bound = 5212
-    if not (lower_bound <= area <= upper_bound):
+    if np.any((area < lower_bound) | (area > upper_bound)):
         warnings.warn(
             f"Area out of range for Strasser model, area must be between {lower_bound} and {upper_bound} km^2."
         )
@@ -556,7 +561,7 @@ def strasser_slab_magnitude_to_area(magnitude: TArray, random: bool = False) -> 
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
     """
-    if not (5.9 <= magnitude <= 7.8):
+    if np.any((magnitude < 5.9) | (magnitude > 7.8)):
         warnings.warn(
             "Magnitude out of range for Strasser model, magnitude must be between 5.9 and 7.8"
         )
@@ -597,7 +602,7 @@ def contreras_slab_magnitude_to_aspect_ratio(
            Engineering Research Center (PEER).
            https://doi.org/10.55461/RDWC6463
     """
-    if magnitude < 5:
+    if np.any(magnitude < 5):
         warnings.warn(
             "Magnitude out of range for Contreras model, minimum magnitude is 5"
         )
@@ -605,12 +610,17 @@ def contreras_slab_magnitude_to_aspect_ratio(
     m_1 = 6.5
     sigma_1 = 0.24
     sigma_2 = 0.38
-    if magnitude < m_1:
-        return np.exp(sp.stats.norm(loc=0, scale=sigma_1).rvs() if random else 0)
-
-    return np.exp(
-        a_3 * (magnitude - m_1)
-        + (sp.stats.norm(loc=0, scale=sigma_2).rvs() if random else 0)
+    return np.where(
+        magnitude < m_1,
+        np.exp(
+            sp.stats.norm(loc=0, scale=sigma_1).rvs(size=magnitude.size)
+            if random
+            else 0
+        ),
+        np.exp(
+            a_3 * (magnitude - m_1)
+            + (sp.stats.norm(loc=0, scale=sigma_2).rvs(magnitude.size) if random else 0)
+        ),
     )
 
 
@@ -647,7 +657,7 @@ def contreras_slab_magnitude_to_length_width(
 def magnitude_to_length_width(
     scaling_relation: ScalingRelation,
     magnitude: TArray,
-    rake: TArray | None = None,
+    rake: float | None = None,
     random: bool = False,
 ) -> tuple[TArray, TArray]:
     """Convert magnitude to length and width using a scaling relationship.
@@ -658,7 +668,7 @@ def magnitude_to_length_width(
         Scaling relation to use.
     magnitude : TArray
         Moment magnitude of the fault.
-    rake : TArray, optional
+    rake : float, optional
         Rake of the fault (degrees). Required for Leonard scaling.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
@@ -688,7 +698,7 @@ def magnitude_to_length_width(
 def magnitude_to_area(
     scaling_relation: ScalingRelation,
     magnitude: TArray,
-    rake: TArray | None = None,
+    rake: float | None = None,
     random: bool = False,
 ) -> TArray:
     """Convert magnitude to area using a scaling relationship.
@@ -699,7 +709,7 @@ def magnitude_to_area(
         Scaling relation to use.
     magnitude : TArray
         Moment magnitude of the fault.
-    rake : TArray, optional
+    rake : float, optional
         Rake of the fault (degrees). Required for Leonard scaling.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
@@ -712,7 +722,7 @@ def magnitude_to_area(
 
     Returns
     -------
-    tuple[TArray, TArray]
+    TArray
         Area of the fault estimated by the scaling relation.
     """
     if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
@@ -734,7 +744,7 @@ def magnitude_to_area(
 def area_to_magnitude(
     scaling_relation: ScalingRelation,
     area: TArray,
-    rake: TArray | None = None,
+    rake: float | None = None,
     random: bool = False,
 ) -> TArray:
     """Convert area to magnitude using a scaling relationship.
@@ -745,7 +755,7 @@ def area_to_magnitude(
         Scaling relation to use.
     area : TArray
         Area of the fault (km^2).
-    rake : TArray, optional
+    rake : float, optional
         Rake of the fault (degrees). Required for Leonard scaling.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
