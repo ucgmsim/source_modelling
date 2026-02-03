@@ -45,7 +45,7 @@ import dataclasses
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Self
+from typing import Self, overload
 
 import numpy as np
 import pandas as pd
@@ -61,7 +61,7 @@ PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
 
 
-class Segments(Sequence):
+class Segments(Sequence[pd.DataFrame]):
     """A read-only view for SRF segments.
 
     Parameters
@@ -85,6 +85,13 @@ class Segments(Sequence):
         self._header = header
         self._points = points
 
+    @overload
+    def __getitem__(self, index: int) -> pd.DataFrame: ...  # numpydoc ignore=GL08
+    @overload
+    def __getitem__(
+        self, index: slice
+    ) -> Sequence[pd.DataFrame]: ...  # numpydoc ignore=GL08
+
     def __getitem__(self, index: int) -> pd.DataFrame:
         """Get the nth segment in the SRF.
 
@@ -95,7 +102,7 @@ class Segments(Sequence):
 
         Returns
         -------
-        int
+        pd.DataFrame
             The nth segment in the SRF.
         """
         if not isinstance(index, int):
@@ -104,6 +111,7 @@ class Segments(Sequence):
             raise TypeError(
                 "Segment index must an integer, not slice or tuple"
             )  # pragma: no cover
+
         points_offset = (self._header["nstk"] * self._header["ndip"]).cumsum()
         if index == 0:
             return self._points.iloc[: points_offset.iloc[index]]
@@ -234,7 +242,7 @@ class SrfFile:
             point_count = int(points_count_match.group(1))
             position = srf_file_handle.tell()
 
-        points_metadata, slipt1_array = srf_parser.parse_srf( # type: ignore
+        points_metadata, slipt1_array = srf_parser.parse_srf(  # type: ignore
             str(srf_ffp), position, point_count
         )
 
@@ -290,7 +298,7 @@ class SrfFile:
 
             srf_file_handle.write(f"POINTS {len(self.points)}\n")
 
-        srf_parser.write_srf_points( # type: ignore
+        srf_parser.write_srf_points(  # type: ignore
             str(srf_ffp),
             self.points.values.astype(np.float32),
             self.slip.indptr,
@@ -352,7 +360,9 @@ class SrfFile:
         points_data = {
             col: ds[col].values
             for col in ds.data_vars
-            if isinstance(col, str) and not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
+            if isinstance(col, str)
+            and not col.startswith("plane_")
+            and col not in {"data", "indices", "indptr"}
         }
         points_df = pd.DataFrame(points_data)
 
@@ -594,14 +604,14 @@ def read_srf(srf_ffp: Path | str) -> SrfFile:
     return SrfFile.from_file(srf_ffp)
 
 
-def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
+def write_srf(srf_ffp: Path | str, srf: SrfFile) -> None:
     """Write an SRF object to a filepath.
 
     Parameters
     ----------
-    srf_ffp : Path
+    srf_ffp : Path | str
         The filepath to write the srf object to.
     srf : SrfFile
         The SRF object.
     """
-    srf.write_srf(srf_ffp)
+    srf.write_srf(Path(srf_ffp))

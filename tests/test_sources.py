@@ -357,7 +357,7 @@ def test_general_invalid_input():
 
 
 def trace(
-    start_trace_nztm: npt.NDArray[float], length: float, strike: float
+    start_trace_nztm: npt.NDArray[np.floating], length: float, strike: float
 ) -> np.ndarray:
     # Do this in NZTM to prevent any issues with the coordinate system conversions
     strike_vec = np.array([np.cos(np.radians(strike)), np.sin(np.radians(strike))])
@@ -1259,7 +1259,7 @@ def test_simplify_fault(fault: Fault):
     ),
 )
 def test_sources_as_geojson(faults: list[Fault]):
-    geojson = json.loads(sources.sources_as_geojson_features(faults))
+    geojson = json.loads(sources.sources_as_geojson_features(faults))  # type: ignore[invalid-argument-type]
     assert geojson["type"] == "FeatureCollection"
     assert len(geojson["features"]) == len(faults)
     for feature in geojson["features"]:

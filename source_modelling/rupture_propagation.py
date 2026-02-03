@@ -16,7 +16,7 @@ import random
 import warnings
 from collections import defaultdict, namedtuple
 from collections.abc import Generator
-from typing import Literal
+from typing import Literal, overload
 
 import networkx as nx
 import numpy as np
@@ -59,7 +59,7 @@ def spanning_tree_with_probabilities(
     trees = []
     probabilities = []
 
-    for tree in mst.SpanningTreeIterator(graph):
+    for tree in mst.SpanningTreeIterator(graph):  # type: ignore[invalid-argument-type]
         p_tree = 1.0
         for u, v in graph.edges:
             if tree.has_edge(u, v):
@@ -70,6 +70,18 @@ def spanning_tree_with_probabilities(
         probabilities.append(p_tree)
 
     return trees, probabilities
+
+
+@overload
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: int = 1
+) -> nx.Graph: ...  # numpydoc ignore=GL08
+
+
+@overload
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: int = ...
+) -> list[nx.Graph]: ...  # numpydoc ignore=GL08
 
 
 def sampled_spanning_tree(
@@ -209,7 +221,7 @@ def select_top_spanning_trees(
     cumulative_tree_weight = 0.0
     spanning_trees = []
 
-    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):
+    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):  # type: ignore[invalid-argument-type]
         spanning_trees.append(spanning_tree)
         tree_log_probability = sum(
             spanning_tree[node_u][node_v]["weight"]
@@ -320,7 +332,7 @@ def prune_distance_graph(distances: DistanceGraph, cutoff: float) -> DistanceGra
 
 def probability_graph(
     distances: DistanceGraph, d0: float = 3, delta: float = 1
-) -> nx.DiGraph:
+) -> nx.Graph:
     """
     Convert a distance graph into a probability graph.
 
@@ -339,7 +351,7 @@ def probability_graph(
 
     Returns
     -------
-    nx.DiGraph
+    nx.Graph
         A directed graph where edges are weighted by probabilities of rupture
         propagation between faults.
     """
@@ -390,9 +402,11 @@ def distance_between(
     """
     global_point_a = source_a.fault_coordinates_to_wgs_depth_coordinates(source_a_point)
     global_point_b = source_b.fault_coordinates_to_wgs_depth_coordinates(source_b_point)
-    return float(coordinates.distance_between_wgs_depth_coordinates(
-        global_point_a, global_point_b
-    ))
+    return float(
+        coordinates.distance_between_wgs_depth_coordinates(
+            global_point_a, global_point_b
+        )
+    )
 
 
 def sample_rupture_propagation(
