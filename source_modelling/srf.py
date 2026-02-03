@@ -112,13 +112,6 @@ class Segments(Sequence[pd.DataFrame]):
                 "Segment index must an integer, not slice or tuple"
             )  # pragma: no cover
 
-        if index < 0:
-            index += len(
-                self
-            )  # handles the negative indexing in the usual expectation of __getitem__.
-        if index < 0 or index >= len(self):
-            raise IndexError("Segment index out of range")
-
         points_offset = (self._header["nstk"] * self._header["ndip"]).cumsum()
         if index == 0:
             return self._points.iloc[: points_offset.iloc[index]]
