@@ -662,7 +662,7 @@ def test_scaling_output_types(
     input_data: magnitude_scaling.Array,
     expected_type: type,
 ) -> None:
-    """Checks all single-output functions for type preservation.
+    """Checks all functions for type preservation.
 
     Ideally when you give a float, numpy array, pandas series you
     should get back the *same type*. It is annoying when this doesn't
