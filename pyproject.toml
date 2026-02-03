@@ -39,6 +39,8 @@ types = [
 ]
 dev = ["ty", "ruff", "deptry"]
 
+[tool.deptry]
+pep621_dev_dependency_groups = ["test", "dev", "types"]
 
 [tool.setuptools.package-data]
 source_modelling = ['NZ_CFM/*']
