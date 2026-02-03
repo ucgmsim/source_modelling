@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import hypothesis.strategies as st
 import numpy as np
+import pandas as pd
 import pytest
 import scipy as sp
 from hypothesis import assume, given
@@ -249,8 +250,13 @@ def test_monotonicity_mag_to_area(
 
 
 class RandomFunction(Protocol):
+    __name__: str
+
     def __call__(
-        self, x: float, random: bool = False, rake: float | None = None
+        self,
+        x: magnitude_scaling.Array,
+        random: bool = False,
+        rake: float | None = None,
     ) -> float: ...
 
 
@@ -270,7 +276,7 @@ class RandomFunction(Protocol):
 @seed(1)
 def test_normal_error_contreras_interface(area_to_mag: RandomFunction, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
-    samples = [area_to_mag(area, random=True) for _ in range(300)]
+    samples = area_to_mag(np.full(300, area), random=True)
     result = sp.stats.goodness_of_fit(
         sp.stats.norm,
         samples,
@@ -298,7 +304,7 @@ def test_normal_error_contreras_interface_aspect_ratio(
     aspect_ratio: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
-    samples = np.array([aspect_ratio(magnitude, random=True) for _ in range(100)])
+    samples = aspect_ratio(np.full(100, magnitude), random=True)
     sigma = 0.32 if magnitude < 7.25 else 0.47
     result = sp.stats.goodness_of_fit(
         sp.stats.norm,
@@ -328,7 +334,7 @@ def test_normal_error_contreras_interface_mag_to_area(
     mag_to_area: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on mag_to_area and check that it approximates the value with random = False."""
-    samples = [mag_to_area(magnitude, random=True) for _ in range(100)]
+    samples = mag_to_area(np.full(100, magnitude), random=True)
 
     result = sp.stats.goodness_of_fit(
         sp.stats.lognorm,
@@ -354,7 +360,7 @@ def test_normal_error_contreras_interface_mag_to_area(
 @seed(1)
 def test_normal_error_strasser_slab(area_to_mag: RandomFunction, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
-    samples = [area_to_mag(area, random=True) for _ in range(100)]
+    samples = area_to_mag(np.full(100, area), random=True)
     result = sp.stats.goodness_of_fit(
         sp.stats.norm,
         samples,
@@ -380,7 +386,7 @@ def test_normal_error_strasser_slab_mag_to_area(
     mag_to_area: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on mag_to_area and check that it approximates the value with random = False."""
-    samples = [mag_to_area(magnitude, random=True) for _ in range(100)]
+    samples = mag_to_area(np.full(100, magnitude), random=True)
     result = sp.stats.goodness_of_fit(
         sp.stats.lognorm,
         samples,
@@ -407,7 +413,7 @@ def test_normal_error_contreras_slab_aspect_ratio(
     aspect_ratio: RandomFunction, magnitude: float
 ):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
-    samples = np.array([aspect_ratio(magnitude, random=True) for _ in range(100)])
+    samples = aspect_ratio(np.full(100, magnitude), random=True)
     sigma = 0.24 if magnitude < 6.5 else 0.38
     result = sp.stats.goodness_of_fit(
         sp.stats.norm,
@@ -435,7 +441,7 @@ def test_normal_error_contreras_slab_aspect_ratio(
 @seed(1)
 def test_normal_error_leonard(area_to_mag: RandomFunction, rake: float, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
-    samples = [area_to_mag(area, rake=rake, random=True) for _ in range(100)]
+    samples = area_to_mag(np.full(100, area), rake=rake, random=True)
     result = sp.stats.goodness_of_fit(
         sp.stats.norm,
         samples,
@@ -620,3 +626,51 @@ def test_area_to_magnitude_calls_correct_function(
             mock_func.assert_called_once_with(area, rake=rake, random=random)
         else:
             mock_func.assert_called_once_with(area, random=random)
+
+
+RETURN_TYPE_FUNCS = [
+    magnitude_scaling.leonard_area_to_magnitude,
+    magnitude_scaling.leonard_magnitude_to_area,
+    magnitude_scaling.leonard_magnitude_to_length,
+    magnitude_scaling.leonard_magnitude_to_width,
+    magnitude_scaling.contreras_interface_area_to_magnitude,
+    magnitude_scaling.contreras_interface_magnitude_to_area,
+    magnitude_scaling.contreras_interface_magnitude_to_aspect_ratio,
+    magnitude_scaling.strasser_slab_area_to_magnitude,
+    magnitude_scaling.strasser_slab_magnitude_to_area,
+    magnitude_scaling.contreras_slab_magnitude_to_aspect_ratio,
+    magnitude_scaling.leonard_magnitude_to_length_width,
+    magnitude_scaling.contreras_interface_magnitude_to_length_width,
+    magnitude_scaling.contreras_slab_magnitude_to_length_width,
+]
+
+
+@pytest.mark.parametrize("func", RETURN_TYPE_FUNCS)
+@pytest.mark.parametrize("random", [True, False], ids=["randomised", "mean"])
+@pytest.mark.parametrize(
+    "input_data, expected_type",
+    [
+        (7.0, float),
+        (np.array([6.5, 7.5]), np.ndarray),
+        (pd.Series([6.5, 7.5]), pd.Series),
+    ],
+    ids=["float", "numpy array", "pandas series"],
+)
+def test_scaling_output_types(
+    func: RandomFunction,
+    random: bool,
+    input_data: tuple[magnitude_scaling.Array, type],
+    expected_type: type,
+) -> None:
+    """Checks all single-output functions for type preservation."""
+    # Leonard functions require 'rake', others do not.
+    kwargs = {"random": random}
+    if "leonard" in func.__name__:
+        kwargs["rake"] = 0.0
+
+    result = func(input_data, **kwargs)
+    if isinstance(result, tuple):
+        a, b = result
+        assert isinstance(a, expected_type) and isinstance(b, expected_type)
+    else:
+        assert isinstance(result, expected_type)
