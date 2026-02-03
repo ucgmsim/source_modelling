@@ -75,9 +75,7 @@ def _coerce_array_types(like: TArray, value: Any) -> TArray:
     TArray
         The value coerced to have the same type as ``like``.
     """
-    if isinstance(like, int):
-        coerced = int(value)
-    if isinstance(like, float):
+    if isinstance(like, float | int):
         coerced = float(value)
     elif isinstance(like, np.ndarray):
         coerced = np.asarray(value)

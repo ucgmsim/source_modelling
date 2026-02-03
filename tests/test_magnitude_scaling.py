@@ -668,8 +668,7 @@ def test_scaling_output_types(
     should get back the *same type*. It is annoying when this doesn't
     happen and you do something like call ``.sum`` on a float, or
     ``.hex`` on an array. The purpose of this test is to exhaustively
-    check all valid input types.
-
+    check that all valid input types produce the same output types.
     """
     # Leonard functions require 'rake', others do not.
     kwargs = {"random": random}
