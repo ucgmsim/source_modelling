@@ -662,7 +662,15 @@ def test_scaling_output_types(
     input_data: magnitude_scaling.Array,
     expected_type: type,
 ) -> None:
-    """Checks all single-output functions for type preservation."""
+    """Checks all single-output functions for type preservation.
+
+    Ideally when you give a float, numpy array, pandas series you
+    should get back the *same type*. It is annoying when this doesn't
+    happen and you do something like call ``.sum`` on a float, or
+    ``.hex`` on an array. The purpose of this test is to exhaustively
+    check all valid input types.
+
+    """
     # Leonard functions require 'rake', others do not.
     kwargs = {"random": random}
     if "leonard" in func.__name__:
