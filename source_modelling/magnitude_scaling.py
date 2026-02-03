@@ -36,7 +36,7 @@ MAGNITUDE_BOUNDS = {
     ScalingRelation.CONTRERAS_SLAB2020: (5.9, 7.8),
 }
 
-Array = float | npt.NDArray[np.floating] | pd.Series
+Array = int | float | npt.NDArray[np.floating] | pd.Series
 TArray = TypeVar("TArray", bound=Array)
 
 
@@ -75,6 +75,8 @@ def _coerce_array_types(like: TArray, value: Any) -> TArray:
     TArray
         The value coerced to have the same type as ``like``.
     """
+    if isinstance(like, int):
+        coerced = int(value)
     if isinstance(like, float):
         coerced = float(value)
     elif isinstance(like, np.ndarray):

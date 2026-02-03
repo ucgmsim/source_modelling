@@ -659,7 +659,7 @@ RETURN_TYPE_FUNCS = [
 def test_scaling_output_types(
     func: RandomFunction,
     random: bool,
-    input_data: tuple[magnitude_scaling.Array, type],
+    input_data: magnitude_scaling.Array,
     expected_type: type,
 ) -> None:
     """Checks all single-output functions for type preservation."""
@@ -668,7 +668,7 @@ def test_scaling_output_types(
     if "leonard" in func.__name__:
         kwargs["rake"] = 0.0
 
-    result = func(input_data, **kwargs)  # type: ignore[invalid-argument-type]
+    result = func(input_data, **kwargs)
     if isinstance(result, tuple):
         a, b = result
         assert isinstance(a, expected_type) and isinstance(b, expected_type)
