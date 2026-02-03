@@ -254,10 +254,14 @@ class RandomFunction(Protocol):
 
     def __call__(
         self,
-        x: magnitude_scaling.Array,
+        x: magnitude_scaling.TArray,
         random: bool = False,
         rake: float | None = None,
-    ) -> float: ...
+        # white lie: Some functions in the module return a tuple, but then
+        # we have to handle that "edge case" for a ton of tests where the
+        # function to test returns a single array. Given that this is just
+        # for testing purposes we take the pragmatic choice.
+    ) -> magnitude_scaling.TArray: ...
 
 
 @pytest.mark.parametrize(
