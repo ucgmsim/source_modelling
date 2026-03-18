@@ -34,6 +34,80 @@ from qcore import coordinates, geo, grid
 _KM_TO_M = 1000
 
 
+def segment_rx_ry(
+    bounds: np.ndarray, points: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    bounds = np.atleast_3d(bounds).reshape((-1, 2, 2))
+    points = np.atleast_2d(points)
+
+    q = bounds[:, 0, :]
+    r = bounds[:, 1, :]
+
+    qr = (r - q)[:, np.newaxis, :]
+
+    qp = points[np.newaxis, :, :] - q[:, np.newaxis, :]
+
+    dot_qp_qr = np.vecdot(qp, qr)
+    dot_qr_qr = np.vecdot(qr, qr)
+
+    t = dot_qp_qr / dot_qr_qr
+
+    closest_point = q[:, np.newaxis, :] + t[:, :, np.newaxis] * qr
+
+    rx = np.linalg.norm(points[np.newaxis, :, :] - closest_point, axis=-1)
+
+    sign = np.sign(qp[..., 0] * qr[..., 1] - qp[..., 1] * qr[..., 0])
+    rx *= sign
+
+    ry = t * np.sqrt(dot_qr_qr)
+
+    return rx, ry
+
+
+def segment_weights(
+    trace_lengths: np.ndarray, rx: np.ndarray, ry: np.ndarray
+) -> np.ndarray:
+    trace_lengths = trace_lengths[:, np.newaxis]
+
+    mask_zero = np.isclose(rx, 0.0)
+
+    theta = np.arctan(
+        np.divide(trace_lengths - ry, rx, where=~mask_zero, out=np.zeros_like(rx))
+    ) - np.arctan(np.divide(-ry, rx, where=~mask_zero, out=np.zeros_like(rx)))
+
+    w = np.divide(theta, rx, where=~mask_zero, out=np.zeros_like(rx))
+
+    if np.any(mask_zero):
+        special_case = np.divide(
+            1.0,
+            ry - trace_lengths,
+            where=(ry != trace_lengths),
+            out=np.full_like(w, np.nan),
+        ) - np.divide(1.0, ry, where=(ry != 0), out=np.full_like(w, np.nan))
+
+        w = np.where(mask_zero, special_case, w)
+
+    return w
+
+
+def generalised_t_u_coordinates(
+    trace_lengths: np.ndarray, rx: np.ndarray, ry: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    w = segment_weights(trace_lengths, rx, ry)
+
+    segment_shifts = np.cumulative_sum(trace_lengths[:-1], include_initial=True)
+    ry_global = ry + segment_shifts
+
+    t = sp.stats.hmean(rx, weights=w)
+
+    # Handle edge case where site is on the trace (T should be 0)
+    t[np.any(np.isclose(rx, 0.0), axis=0)] = 0.0
+
+    u = np.average(ry_global, axis=0, weights=w)
+
+    return t, u
+
+
 @dataclasses.dataclass
 class Point:
     """A representation of a point source.
@@ -850,6 +924,18 @@ class Plane:
             shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
 
+    def rx_ry_distance(self, point: np.ndarray) -> np.ndarray:
+        trace = self.bounds[:2, :2]
+        point = coordinates.wgs_depth_to_nztm(point)[..., :2]
+        rx, ry = segment_rx_ry(trace, point)
+        return rx.squeeze(), ry.squeeze()
+
+    def rx_distance(self, point: np.ndarray) -> np.ndarray:
+        return self.rx_ry_distance(point)[0]
+
+    def ry_distance(self, point: np.ndarray) -> np.ndarray:
+        return self.rx_ry_distance(point)[1]
+
 
 @dataclasses.dataclass
 class Fault:
@@ -1329,6 +1415,16 @@ class Fault:
         return self.geometry.distance(
             shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
+
+    def rx_ry_distance(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        trace = self.trace[:, :2].reshape((-1, 2, 2))
+        points = coordinates.wgs_depth_to_nztm(points)[..., :2]
+
+        rx, ry = segment_rx_ry(trace, points)
+        p_start = trace[:, 0, :]
+        p_end = trace[:, 1, :]
+        trace_lengths = np.linalg.norm(p_end - p_start, axis=-1)
+        return generalised_t_u_coordinates(trace_lengths, rx, ry)
 
 
 IsSource = Plane | Fault | Point
