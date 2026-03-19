@@ -1344,6 +1344,20 @@ class Fault:
         )
 
     def rx_ry_distance(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate the rx and ry distance between the fault and a given set of pointsn.
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
         trace = self.trace[:, :2].reshape((-1, 2, 2))
         points = coordinates.wgs_depth_to_nztm(points)[..., :2]
 
@@ -1356,7 +1370,26 @@ class Fault:
         return t.squeeze(), u.squeeze()
 
 
-def multi_fault_rx_ry_distance(faults: list[Fault | Plane], points: np.ndarray):
+def multi_fault_rx_ry_distance(
+    faults: list[Fault | Plane], points: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate the rx-ry distance between a set of (possibly disconnected) faults and a set of points.
+
+    Parameters
+    ----------
+    faults : list[Fault | Plane]
+        Faults to calculate distances from.
+    points : np.ndarray
+        Points to calculate to, has shape (n, 2).
+
+    Returns
+    -------
+    rx : np.ndarray
+        The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+    ry : np.ndarray
+        The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+    """
+    points = coordinates.wgs_depth_to_nztm(points[:, :2])
     traces = [fault.trace[:, :2] for fault in faults]
     trace_points = np.concatenate(traces, axis=0)
     trace_indices = np.cumulative_sum(
