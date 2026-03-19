@@ -1,4 +1,14 @@
-"""Implementation of gc2 distance metrics from NGA-West-3."""
+"""Implementation of gc2 distance metrics from NGA-West-3.
+
+All functions from this module are derived from the following paper:
+
+Spudich, P. A., & Chiou, B. (2015). Strike-parallel and strike-normal
+coordinate system around geometrically complicated rupture traces: Use
+by NGA-West2 and further improvements (No. 2015-1028). US Geological
+Survey.
+
+All referenced pages and equations are in this paper.
+"""
 
 import itertools
 
@@ -58,6 +68,8 @@ def segment_weights(
     trace_lengths: np.ndarray, rx: np.ndarray, ry: np.ndarray
 ) -> np.ndarray:
     """Calculate segment weights from trace lengths.
+
+    Segment weights implement Equation (1) of Section 3.4.
 
     Parameters
     ----------
@@ -167,8 +179,8 @@ def calculate_gc2_u_origins(
 ) -> np.ndarray:
     """Calculates shifted origins for GC2 Rx/Ry calculations in multi-trace systems.
 
-    Follows Equation (12) of the GC2 distance metric specification to transform
-    local segment distances into a globalized U-coordinate system.
+    Follows Equation (12), page 6 of the GC2 distance metric specification to transform
+    local segment distances into a globalised U-coordinate system.
 
     Parameters
     ----------
@@ -189,7 +201,7 @@ def calculate_gc2_u_origins(
 
     Returns
     -------
-    u_origins : np.ndarray
+    np.ndarray
         The cumulative U-coordinate distance at the start of each segment
         relative to p_origin, shape (m,).
     """
@@ -210,8 +222,7 @@ def generalised_t_u_coordinates(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Generalised rx and ry calculations for multiple segments.
 
-    Calculates a weighted average of rx and ry distances using the
-    inverse square weighting from ``segment_weights``.
+    Implements Equations (3) and (9) of page 4.
 
     Parameters
     ----------
@@ -289,6 +300,8 @@ def antipodal_points(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def trial_strike_vector(trace_endpoints: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Calculate a trial strike vector between all trace endpoints.
 
+    Implements the algorithm described in page 6.
+
     Parameters
     ----------
     trace_endpoints : np.ndarray
@@ -310,7 +323,9 @@ def trial_strike_vector(trace_endpoints: np.ndarray) -> tuple[np.ndarray, np.nda
 def strike_corrected_directions(
     trace_directions: np.ndarray, trial_unit_vector: np.ndarray
 ) -> np.ndarray:
-    """Correct strike directions by reversing dischordant strikes.
+    """Correct strike directions by reversing discordant strikes.
+
+    Implements the algorithm described in page 6.
 
     Parameters
     ----------
@@ -373,13 +388,18 @@ def multi_trace_rx_ry(
     p_origin, p_end = trial_strike_vector(trace_endpoints)
     trial_unit_vector = p_end - p_origin
     trial_unit_vector /= np.linalg.norm(trial_unit_vector)
+    direction_vectors = strike_corrected_directions(
+        direction_vectors, trial_unit_vector
+    )
+    b_hat = np.sum(direction_vectors, axis=0)
+    b_hat /= np.linalg.norm(b_hat)
 
     u_shift_origins = calculate_gc2_u_origins(
         segment_lengths,
         trace_direction_start_indices,
         trace_starts,
         p_origin,
-        trial_unit_vector,
+        b_hat,
     )
 
     return generalised_t_u_coordinates(segment_lengths, rx, ry, u_shift_origins)

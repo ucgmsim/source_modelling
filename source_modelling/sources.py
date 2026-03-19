@@ -1344,7 +1344,7 @@ class Fault:
         )
 
     def rx_ry_distance(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Calculate the rx and ry distance between the fault and a given set of pointsn.
+        """Calculate the rx and ry distance between the fault and a given set of points
 
         Parameters
         ----------
