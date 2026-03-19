@@ -359,7 +359,7 @@ def multi_trace_rx_ry(
     direction_vectors = diff_reduction(trace_points, trace_indices)
     segment_lengths = np.linalg.norm(direction_vectors, axis=1)
 
-    directions_per_trace = np.diff(trace_indices) - 1
+    directions_per_trace = np.diff(trace_indices) // 2
     directions_per_trace = directions_per_trace.astype(np.int64, casting="unsafe")
     trace_direction_start_indices = np.cumulative_sum(
         directions_per_trace, include_initial=True
