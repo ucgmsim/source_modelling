@@ -47,6 +47,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Self
 
+import h5py
 import numpy as np
 import pandas as pd
 import scipy as sp
@@ -59,6 +60,47 @@ from source_modelling.sources import Plane
 
 PLANE_COUNT_RE = r"PLANE (\d+)"
 POINT_COUNT_RE = r"POINTS (\d+)"
+
+SW4_PLANE_DTYPE = np.dtype(
+    [
+        ("ELON", "f4"),
+        ("ELAT", "f4"),
+        ("NSTK", "i4"),
+        ("NDIP", "i4"),
+        ("LEN", "f4"),
+        ("WID", "f4"),
+        ("STK", "f4"),
+        ("DIP", "f4"),
+        ("DTOP", "f4"),
+        ("SHYP", "f4"),
+        ("DHYP", "f4"),
+    ]
+)
+
+SW4_POINTS_DTYPE = np.dtype(
+    [
+        ("LON", "f4"),
+        ("LAT", "f4"),
+        ("DEP", "f4"),
+        ("STK", "f4"),
+        ("DIP", "f4"),
+        ("AREA", "f4"),
+        ("TINIT", "f4"),
+        ("DT", "f4"),
+        ("VS", "f4"),
+        ("DEN", "f4"),
+        ("RAKE", "f4"),
+        ("SLIP1", "f4"),
+        ("NT1", "i4"),
+        ("SLIP2", "f4"),
+        ("NT2", "i4"),
+        ("SLIP3", "f4"),
+        ("NT3", "i4"),
+    ]
+)
+
+_SW4_POINTS_COL_OVERRIDES = {"SLIP1": "slip"}
+_SW4_POINTS_EXTERNAL_FIELDS = {"VS", "DEN", "NT1", "SLIP2", "NT2", "SLIP3", "NT3"}
 
 
 class Segments(Sequence):
@@ -234,7 +276,7 @@ class SrfFile:
             point_count = int(points_count_match.group(1))
             position = srf_file_handle.tell()
 
-        points_metadata, slipt1_array = srf_parser.parse_srf( # type: ignore
+        points_metadata, slipt1_array = srf_parser.parse_srf(  # type: ignore
             str(srf_ffp), position, point_count
         )
 
@@ -290,12 +332,71 @@ class SrfFile:
 
             srf_file_handle.write(f"POINTS {len(self.points)}\n")
 
-        srf_parser.write_srf_points( # type: ignore
+        srf_parser.write_srf_points(  # type: ignore
             str(srf_ffp),
             self.points.values.astype(np.float32),
             self.slip.indptr,
             self.slip.data,
         )
+
+    def write_sw4_hdf5(
+        self,
+        output_ffp: Path,
+        vs: float | np.ndarray = 0.0,
+        den: float | np.ndarray = 0.0,
+        include_slip_time_function: bool = True,
+    ) -> None:
+        """Write the SRF file in SW4's SRF-HDF5 format.
+
+        Parameters
+        ----------
+        output_ffp : Path
+            The path to the output HDF5 file.
+        vs : float or np.ndarray
+            Shear wave velocity (m/s). A scalar broadcasts to all points,
+            or provide a per-point array of shape (npoints,). The Version 1.0
+            SRF format does not include this field; defaults to 0.0.
+        den : float or np.ndarray
+            Density (kg/m^3). A scalar broadcasts to all points,
+            or provide a per-point array of shape (npoints,). The Version 1.0
+            SRF format does not include this field; defaults to 0.0.
+        include_slip_time_function : bool
+            If True, include the SR1 slip rate time series dataset.
+        """
+        # Build PLANE structured array (header has one row per fault plane)
+        plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
+        for field in SW4_PLANE_DTYPE.names:
+            plane_data[field] = self.header[field.lower()].values.astype(
+                SW4_PLANE_DTYPE[field].type
+            )
+
+        # Build POINTS structured array
+        points_data = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
+        for field in SW4_POINTS_DTYPE.names:
+            if field in _SW4_POINTS_EXTERNAL_FIELDS:
+                continue
+            srf_col = _SW4_POINTS_COL_OVERRIDES.get(field, field.lower())
+            points_data[field] = self.points[srf_col].values.astype(
+                SW4_POINTS_DTYPE[field].type
+            )
+
+        points_data["VS"] = np.float32(vs)
+        points_data["DEN"] = np.float32(den)
+
+        if include_slip_time_function:
+            points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+
+        with h5py.File(output_ffp, "w") as h5file:
+            h5file.attrs.create("VERSION", np.float32(self.version))
+            h5file.attrs.create(
+                "PLANE", plane_data, plane_data.shape, SW4_PLANE_DTYPE
+            )
+            h5file.create_dataset("POINTS", data=points_data)
+
+            if include_slip_time_function:
+                h5file.create_dataset(
+                    "SR1", data=self.slipt1_array.data.astype(np.float32)
+                )
 
     def write_hdf5(
         self, hdf5_ffp: Path, include_slip_time_function: bool = True
@@ -352,7 +453,9 @@ class SrfFile:
         points_data = {
             col: ds[col].values
             for col in ds.data_vars
-            if isinstance(col, str) and not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
+            if isinstance(col, str)
+            and not col.startswith("plane_")
+            and col not in {"data", "indices", "indptr"}
         }
         points_df = pd.DataFrame(points_data)
 
