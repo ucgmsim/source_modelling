@@ -512,7 +512,7 @@ def test_sw4_hdf5_read_write():
     original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
 
     with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_file:
-        original_srf.write_sw4_hdf5(tmp_file.name)
+        original_srf.write_sw4_hdf5(Path(tmp_file.name))
 
         with h5py.File(tmp_file.name, "r") as h5file:
             # VERSION
