@@ -512,23 +512,22 @@ def test_sw4_hdf5_read_write():
     original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
 
     with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_file:
-        output_path = Path(tmp_file.name)
-        original_srf.write_sw4_hdf5(output_path)
+        original_srf.write_sw4_hdf5(tmp_file.name)
 
-        with h5py.File(output_path, "r") as h5file:
+        with h5py.File(tmp_file.name, "r") as h5file:
             # VERSION
             assert h5file.attrs["VERSION"] == np.float32(1.0)
 
-            # PLANE — compare every field against original header
+            # PLANE -- compare every field against original header
             plane = h5file.attrs["PLANE"]
             assert plane.shape == (len(original_srf.header),)
-            for i, (_, row) in enumerate(original_srf.header.iterrows()):
+            for idx, row in original_srf.header.iterrows():
                 for field in srf.SW4_PLANE_DTYPE.names:
-                    assert plane[i][field] == pytest.approx(
+                    assert plane[idx][field] == pytest.approx(
                         row[field.lower()], abs=1e-3
                     )
 
-            # POINTS — compare each DataFrame-sourced field directly
+            # POINTS -- compare each DataFrame-sourced field directly
             points = h5file["POINTS"]
             assert points.shape == (len(original_srf.points),)
             for field in ("LON", "LAT", "DEP", "STK", "DIP", "AREA", "TINIT", "DT", "RAKE"):
@@ -548,8 +547,10 @@ def test_sw4_hdf5_read_write():
             np.testing.assert_array_equal(points["DEN"], 0.0)
 
             # NT1 from slipt1_array.indptr
-            expected_nt1 = np.diff(original_srf.slipt1_array.indptr).astype(np.int32)
-            np.testing.assert_array_equal(points["NT1"], expected_nt1)
+            np.testing.assert_array_equal(
+                points["NT1"],
+                np.diff(original_srf.slipt1_array.indptr).astype(np.int32),
+            )
 
             # SR1 slip-time function data
             np.testing.assert_array_almost_equal(

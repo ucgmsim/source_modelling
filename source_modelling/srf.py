@@ -99,7 +99,6 @@ SW4_POINTS_DTYPE = np.dtype(
     ]
 )
 
-_SW4_POINTS_COL_OVERRIDES = {"SLIP1": "slip"}
 _SW4_POINTS_EXTERNAL_FIELDS = {"VS", "DEN", "NT1", "SLIP2", "NT2", "SLIP3", "NT3"}
 
 
@@ -375,10 +374,9 @@ class SrfFile:
         for field in SW4_POINTS_DTYPE.names:
             if field in _SW4_POINTS_EXTERNAL_FIELDS:
                 continue
-            srf_col = _SW4_POINTS_COL_OVERRIDES.get(field, field.lower())
-            points_data[field] = self.points[srf_col].values.astype(
-                SW4_POINTS_DTYPE[field].type
-            )
+            points_data[field] = self.points[
+                "slip" if field == "SLIP1" else field.lower()
+            ].values.astype(SW4_POINTS_DTYPE[field].type)
 
         points_data["VS"] = np.float32(vs)
         points_data["DEN"] = np.float32(den)
@@ -388,9 +386,7 @@ class SrfFile:
 
         with h5py.File(output_ffp, "w") as h5file:
             h5file.attrs.create("VERSION", np.float32(self.version))
-            h5file.attrs.create(
-                "PLANE", plane_data, plane_data.shape, SW4_PLANE_DTYPE
-            )
+            h5file.attrs.create("PLANE", plane_data)
             h5file.create_dataset("POINTS", data=points_data)
 
             if include_slip_time_function:
