@@ -379,8 +379,8 @@ class SrfFile:
                 "slip" if field == "SLIP1" else field.lower()
             ].values.astype(SW4_POINTS_DTYPE[field].type)
 
-        points_data["VS"] = np.float32(vs)
-        points_data["DEN"] = np.float32(den)
+        points_data["VS"] = np.asarray(vs, dtype=np.float32)
+        points_data["DEN"] = np.asarray(den, dtype=np.float32)
 
         if include_slip_time_function:
             points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
