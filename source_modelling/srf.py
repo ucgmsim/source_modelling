@@ -47,7 +47,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Self
 
-import h5py
 import numpy as np
 import pandas as pd
 import scipy as sp
@@ -362,6 +361,8 @@ class SrfFile:
         include_slip_time_function : bool
             If True, include the SR1 slip rate time series dataset.
         """
+        import h5py
+
         # Build PLANE structured array (header has one row per fault plane)
         plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
         for field in SW4_PLANE_DTYPE.names:

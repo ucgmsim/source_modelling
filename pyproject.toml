@@ -12,6 +12,7 @@ dynamic = ["version"]
 dependencies = [
   "fiona",
   "geopandas",
+  "h5py",
   "networkx",
   "numpy",
   "pandas",
