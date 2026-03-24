@@ -5,16 +5,11 @@ as well as representing their contents.
 See http://equake-rc.info/SRCMOD/fileformats/fsp/
 for details on the FSP format.
 
-Classes
--------
-- FSPFile: Representation of an FSP file.
+Classes: ``FSPFile`` (representation of an FSP file).
+Exceptions: ``FSPParseError`` (raised for errors in parsing FSP files).
 
-Exceptions
-----------
-- FSPParseError: Exception raised for errors in parsing FSP files.
-
-Example
--------
+Examples
+--------
 >>> fsp_file = FSPFile.read_from_file(fsp_ffp)
 >>> (fsp_file.data['trup'] + fsp_file.data['rise']).max() # Get time of final rise for subfaults.
 """

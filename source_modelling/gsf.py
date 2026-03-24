@@ -1,13 +1,8 @@
 """This module provides functions for working with and generating GSF files.
 
-Functions
----------
-source_to_gsf_dataframe(gsf_filepath, source, resolution)
-    Generates a pandas DataFrame suitable for writing to a GSF file from a source object.
-write_gsf(gsf_df, gsf_filepath)
-    Writes a pandas DataFrame to a GSF file.
-read_gsf(gsf_filepath)
-    Parses a GSF file into a pandas DataFrame.
+Functions: ``source_to_gsf_dataframe`` (generate a DataFrame from a source object),
+``write_gsf`` (write a DataFrame to a GSF file), ``read_gsf`` (parse a GSF file into
+a DataFrame).
 
 References
 ----------

@@ -21,17 +21,13 @@ You should use `qcore.srf` if you do not eventually intend to read all
 points of the SRF file (it is memory efficient), or you are working
 with code that already uses `qcore.srf`.
 
-Classes
--------
-- SrfFile: Representation of an SRF file.
+Classes: ``SrfFile`` (representation of an SRF file).
 
-Functions
----------
-- read_srf: Read an SRF file into memory.
-- write_srf: Write an SRF object to a filepath.
+Functions: ``read_srf`` (read an SRF file into memory), ``write_srf`` (write an SRF
+object to a filepath).
 
-Example
--------
+Examples
+--------
 >>> srf_file = srf.read_srf('/path/to/srf')
 >>> srf_file.points['tinit'].max() # get the last time any point in the SRF ruptures
 >>> srf_file.points['tinit'] += 1 # delay all points by one second

@@ -4,16 +4,8 @@ This module provides classes and functions for representing fault planes and
 faults, along with methods for calculating various properties such as
 dimensions, orientation, and coordinate transformations.
 
-Classes
--------
-Point:
-    A representation of a point source.
-
-Plane:
-    A representation of a single plane of a Fault.
-
-Fault:
-    A representation of a fault, consisting of one or more Planes.
+Classes: ``Point`` (a point source), ``Plane`` (a single fault plane),
+``Fault`` (a fault consisting of one or more planes).
 """
 
 import copy

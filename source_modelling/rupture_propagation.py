@@ -4,8 +4,8 @@ Rupture Propagation Module
 This module provides functions for computing likely rupture paths from
 information about the distances between faults.
 
-Reference
----------
+References
+----------
 To understand the purpose and implementation of the algorithms in the
 'Rupture Propagation' page[0] on the source modelling wiki.
 
@@ -74,16 +74,32 @@ def spanning_tree_with_probabilities(
 
 @overload
 def sampled_spanning_tree(graph: nx.Graph, n_samples: Literal[1] = ...) -> nx.Graph:
-    """Sample a single spanning tree from a graph."""
+    """Sample a single spanning tree from a graph.
+
+    Parameters
+    ----------
+    graph : nx.Graph
+        The graph to sample from.
+    n_samples : Literal[1], optional
+        Number of trees to sample. Default is 1.
+    """
     ...
 
 
 @overload
-def sampled_spanning_tree(
-    graph: nx.Graph, n_samples: int
-) -> list[nx.Graph] | nx.Graph:
-    """Sample one or more spanning trees from a graph."""
+def sampled_spanning_tree(graph: nx.Graph, n_samples: int) -> list[nx.Graph] | nx.Graph:
+    """Sample one or more spanning trees from a graph.
+
+    Parameters
+    ----------
+    graph : nx.Graph
+        The graph to sample from.
+    n_samples : int
+        Number of trees to sample.
+    """
     ...
+
+
 def sampled_spanning_tree(
     graph: nx.Graph, n_samples: int = 1
 ) -> list[nx.Graph] | nx.Graph:
