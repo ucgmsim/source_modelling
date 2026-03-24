@@ -5,8 +5,8 @@ as well as representing their contents.
 See https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+On+GM
 for details on the SRF format.
 
-Why Not qcore.srf?
-------------------
+**Why not qcore.srf?**
+
 You might use this module instead of the `qcore.srf` module because:
 
 1. The `qcore.srf` module does not support writing SRF files.

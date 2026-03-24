@@ -73,11 +73,17 @@ def spanning_tree_with_probabilities(
 
 
 @overload
-def sampled_spanning_tree(graph: nx.Graph, n_samples: Literal[1] = ...) -> nx.Graph: ...
+def sampled_spanning_tree(graph: nx.Graph, n_samples: Literal[1] = ...) -> nx.Graph:
+    """Sample a single spanning tree from a graph."""
+    ...
+
+
 @overload
 def sampled_spanning_tree(
     graph: nx.Graph, n_samples: int
-) -> list[nx.Graph] | nx.Graph: ...
+) -> list[nx.Graph] | nx.Graph:
+    """Sample one or more spanning trees from a graph."""
+    ...
 def sampled_spanning_tree(
     graph: nx.Graph, n_samples: int = 1
 ) -> list[nx.Graph] | nx.Graph:
