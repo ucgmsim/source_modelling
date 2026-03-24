@@ -1180,7 +1180,7 @@ class Fault:
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(
+        return shapely.normalize(  # ty: ignore[invalid-return-type] - shapely.normalize and union_all are typed to return BaseGeometry, but the result is always Polygon or LineString for plane geometries
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 
