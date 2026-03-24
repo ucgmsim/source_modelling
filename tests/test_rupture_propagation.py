@@ -11,7 +11,7 @@ from networkx.algorithms.tree import mst
 
 from source_modelling import rupture_propagation, sources
 
-random_strongly_connected_graph = hnx.graph_builder(
+random_strongly_connected_graph = hnx.graph_builder(  # ty: ignore[missing-argument] - hypothesis_networkx has no stubs; ty can't resolve ParamSpec through the decorator
     graph_type=nx.Graph,
     node_keys=st.text(
         alphabet=st.characters(
@@ -450,7 +450,7 @@ def test_sample_rupture_propagation(
     n_samples = 100
     sampled_trees = [
         rupture_propagation.sample_rupture_propagation(
-            sources_map,
+            sources_map,  # ty: ignore[invalid-argument-type] - dict invariance: Point satisfies IsSource but dict[str, Point] is not assignable to dict[str, IsSource]
             initial_source=initial_source,
             initial_source_distribution=initial_source_distribution,
             jump_impossibility_limit_distance=jump_impossibility_limit_distance,
@@ -566,7 +566,8 @@ def test_jump_points_from_rupture_tree(
     expected_jump_points: dict[str, rupture_propagation.JumpPair],
 ):
     result_jump_points = rupture_propagation.jump_points_from_rupture_tree(
-        source_map, rupture_causality_tree
+        source_map,  # ty: ignore[invalid-argument-type] - dict invariance: Point satisfies IsSource but dict[str, Point] is not assignable to dict[str, IsSource]
+        rupture_causality_tree,
     )
 
     # Check if the jump points match the expected values

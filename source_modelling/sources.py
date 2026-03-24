@@ -21,6 +21,7 @@ import dataclasses
 import itertools
 import json
 import warnings
+from collections.abc import Sequence
 from typing import NamedTuple, Self
 
 import networkx as nx
@@ -110,8 +111,8 @@ class Point:
         return shapely.Point(self.bounds)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -438,8 +439,8 @@ class Plane:
         return shapely.LineString(self.trace)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -450,7 +451,7 @@ class Plane:
     @classmethod
     def from_nztm_trace(
         cls,
-        trace_points_nztm: npt.NDArray[float],
+        trace_points_nztm: npt.NDArray[np.float64],
         dtop: float,
         dbottom: float,
         dip: float,
@@ -523,6 +524,8 @@ class Plane:
                 (trace_points_nztm, np.array([dbottom, dbottom]))
             )
         else:
+            # Non-None guaranteed by validation above; assert narrows type for ty.
+            assert dip_dir_nztm is not None
             dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
             proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
 
@@ -1247,8 +1250,8 @@ class Fault:
         raise ValueError("Given coordinates are not on fault.")
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -1334,12 +1337,12 @@ class Fault:
 IsSource = Plane | Fault | Point
 
 
-def sources_as_geojson_features(sources: list[IsSource]) -> str:
+def sources_as_geojson_features(sources: Sequence[IsSource]) -> str:
     """Convert a list of sources to a GeoJSON FeatureCollection.
 
     Parameters
     ----------
-    sources : list[IsSource]
+    sources : Sequence[IsSource]
             The sources to convert.
 
     Returns

@@ -372,7 +372,7 @@ def community_fault_model_as_geodataframe() -> gpd.GeoDataFrame:
     # Transform the trace to WGS84
     for fault in model:
         fault.trace = shapely.transform(fault.trace, lambda coord: coord[:, ::-1])
-    return gpd.GeoDataFrame(
+    return gpd.GeoDataFrame(  # type: ignore # set_index returns pd.DataFrame which ty flags as not being a GeoDataFrame
         [vars(fault) for fault in model], geometry="trace", crs="EPSG:2193"
     ).set_index("name")
 

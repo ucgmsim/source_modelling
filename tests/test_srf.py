@@ -407,7 +407,7 @@ def test_planes_nstk_1_ndip_gt_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # type: ignore
+        slipt1_array=None,
     )
 
     planes = mock_srf.planes
@@ -450,7 +450,7 @@ def test_planes_nstk_1_ndip_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # type: ignore
+        slipt1_array=None,
     )
 
     planes = mock_srf.planes
@@ -500,7 +500,7 @@ def test_hdf5_read_write():
             original_srf.slipt1_array.indptr, reconstructed_srf.slipt1_array.indptr
         ), "slipt1_array indptr mismatch"
 
-        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # type: ignore
+        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (
             "slipt1_array content mismatch"
         )
 
@@ -521,6 +521,9 @@ def test_sw4_hdf5_read_write():
             # PLANE -- compare every field against original header
             plane = h5file.attrs["PLANE"]
             assert plane.shape == (len(original_srf.header),)
+            assert (
+                srf.SW4_PLANE_DTYPE.names is not None
+            )  # always has names as it is a structured dtype, but ty needs a type guard
             for idx, row in original_srf.header.iterrows():
                 for field in srf.SW4_PLANE_DTYPE.names:
                     assert plane[idx][field] == pytest.approx(
@@ -530,7 +533,17 @@ def test_sw4_hdf5_read_write():
             # POINTS -- compare each DataFrame-sourced field directly
             points = h5file["POINTS"]
             assert points.shape == (len(original_srf.points),)
-            for field in ("LON", "LAT", "DEP", "STK", "DIP", "AREA", "TINIT", "DT", "RAKE"):
+            for field in (
+                "LON",
+                "LAT",
+                "DEP",
+                "STK",
+                "DIP",
+                "AREA",
+                "TINIT",
+                "DT",
+                "RAKE",
+            ):
                 np.testing.assert_array_almost_equal(
                     points[field],
                     original_srf.points[field.lower()].values,

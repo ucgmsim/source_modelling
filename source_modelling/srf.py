@@ -125,7 +125,9 @@ class Segments(Sequence):
         self._header = header
         self._points = points
 
-    def __getitem__(self, index: int) -> pd.DataFrame:
+    # ty: slice overload missing to satisfy Sequence LSP; fix by adding
+    # @overload stubs for int and slice once slice support is implemented.
+    def __getitem__(self, index: int) -> pd.DataFrame:  # ty: ignore[invalid-method-override]
         """Get the nth segment in the SRF.
 
         Parameters
@@ -302,7 +304,7 @@ class SrfFile:
             slipt1_array,
         )
 
-    def write_srf(self, srf_ffp: Path) -> None:
+    def write_srf(self, srf_ffp: str | Path) -> None:
         """Write an SRFFile object to a file.
 
         Parameters
@@ -365,6 +367,9 @@ class SrfFile:
 
         # Build PLANE structured array (header has one row per fault plane)
         plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
+        assert (
+            SW4_PLANE_DTYPE.names is not None
+        )  # always has names as it is a structured dtype, but ty needs a type guard
         for field in SW4_PLANE_DTYPE.names:
             plane_data[field] = self.header[field.lower()].values.astype(
                 SW4_PLANE_DTYPE[field].type
@@ -372,6 +377,9 @@ class SrfFile:
 
         # Build POINTS structured array
         points_data = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
+        assert (
+            SW4_POINTS_DTYPE.names is not None
+        )  # always has names as it is a structured dtype, but ty needs a type guard
         for field in SW4_POINTS_DTYPE.names:
             if field in _SW4_POINTS_EXTERNAL_FIELDS:
                 continue
@@ -694,7 +702,7 @@ def read_srf(srf_ffp: Path | str) -> SrfFile:
     return SrfFile.from_file(srf_ffp)
 
 
-def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
+def write_srf(srf_ffp: str | Path, srf: SrfFile) -> None:
     """Write an SRF object to a filepath.
 
     Parameters

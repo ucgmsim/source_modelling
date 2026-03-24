@@ -52,7 +52,7 @@ def find_connected_faults(
 
     """
     fault_names = list(faults)
-    fault_components: DisjointSet[str] = DisjointSet(fault_names)  # type: ignore
+    fault_components: DisjointSet[str] = DisjointSet(fault_names)
     for fault_a_name, fault_b_name in itertools.product(fault_names, repeat=2):
         if not fault_b_name or fault_components.connected(fault_a_name, fault_b_name):
             continue

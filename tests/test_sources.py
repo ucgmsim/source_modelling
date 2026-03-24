@@ -357,7 +357,7 @@ def test_general_invalid_input():
 
 
 def trace(
-    start_trace_nztm: npt.NDArray[float], length: float, strike: float
+    start_trace_nztm: npt.NDArray[np.float64], length: float, strike: float
 ) -> np.ndarray:
     # Do this in NZTM to prevent any issues with the coordinate system conversions
     strike_vec = np.array([np.cos(np.radians(strike)), np.sin(np.radians(strike))])
@@ -418,7 +418,7 @@ def valid_trace_definition(draw: st.DrawFn):
     )
 
 
-@given(valid_trace_definition())
+@given(valid_trace_definition())  # ty: ignore[missing-argument] - @st.composite strips the `draw` parameter; valid_trace_definition() is valid with no args
 def test_plane_from_trace(data: tuple):
     (
         trace_points_nztm,
@@ -1227,7 +1227,7 @@ def fault(
     )
 
 
-@given(fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100))
+@given(fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100))  # ty: ignore[missing-argument] - @st.composite strips the `draw` parameter; fault() is valid with no positional args
 def test_simplify_fault(fault: Fault):
     tolerance = 0.4
     simplified_fault = sources.simplify_fault(fault, tolerance)
@@ -1253,7 +1253,7 @@ def test_simplify_fault(fault: Fault):
 
 @given(
     st.lists(
-        fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100),
+        fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100),  # ty: ignore[missing-argument] - @st.composite strips the `draw` parameter; fault() is valid with no positional args
         min_size=2,
         max_size=10,
     ),
