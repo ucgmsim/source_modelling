@@ -996,7 +996,8 @@ class Fault:
 
         # This relation can now be used to identify if the list of planes given is a line.
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation, create_using=nx.DiGraph
+            points_into_relation,  # ty: ignore[invalid-argument-type] - dict[int, list[int]] satisfies dict[Unknown, Iterable[Unknown]]; ty can't resolve types through networkx's _dispatchable wrapper
+            create_using=nx.DiGraph,
         )
         try:
             self._validate_fault_plane_connectivity(points_into_graph)
@@ -1174,7 +1175,7 @@ class Fault:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.

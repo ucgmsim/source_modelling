@@ -49,7 +49,7 @@ def test_plane_gsf():  # Use tmp_path fixture
     for _, point in gsf_df.iterrows():
         assert plane.geometry.contains(
             shapely.Point(
-                coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
+                coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].to_numpy())
             )
         )
 
@@ -304,7 +304,7 @@ def test_fault_to_gsf(fault: Fault):
             assert shapely.contains(
                 fault.geometry,
                 shapely.Point(
-                    coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
+                    coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].to_numpy())
                 ),
             )
 

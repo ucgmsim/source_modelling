@@ -154,7 +154,7 @@ def test_random_sampling_root(graph: nx.Graph, n: int):
     random.seed(1)
     probability_of_spanning_trees = 0.0
     tree_probabilities: dict[str, float] = {}
-    for tree in mst.SpanningTreeIterator(graph):
+    for tree in mst.SpanningTreeIterator(graph):  # ty: ignore[invalid-argument-type] - SpanningTreeIterator accepts undirected Graph at runtime; the networkx-stubs incorrectly restrict its __init__ to DiGraph only
         p_tree = 1.0
         for u, v in graph.edges:
             if tree.has_edge(u, v):

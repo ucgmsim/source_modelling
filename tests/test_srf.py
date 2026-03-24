@@ -407,7 +407,7 @@ def test_planes_nstk_1_ndip_gt_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,
+        slipt1_array=None,  # ty: ignore[invalid-argument-type] - intentionally passing None to construct a minimal mock SrfFile that doesn't need slip time functions
     )
 
     planes = mock_srf.planes
@@ -450,7 +450,7 @@ def test_planes_nstk_1_ndip_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,
+        slipt1_array=None,  # ty: ignore[invalid-argument-type] - intentionally passing None to construct a minimal mock SrfFile that doesn't need slip time functions
     )
 
     planes = mock_srf.planes
@@ -500,7 +500,7 @@ def test_hdf5_read_write():
             original_srf.slipt1_array.indptr, reconstructed_srf.slipt1_array.indptr
         ), "slipt1_array indptr mismatch"
 
-        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (
+        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # ty: ignore[unresolved-attribute] - csr_array.__ne__ returns a sparse array at runtime; stubs incorrectly type it as bool
             "slipt1_array content mismatch"
         )
 
@@ -546,12 +546,12 @@ def test_sw4_hdf5_read_write():
             ):
                 np.testing.assert_array_almost_equal(
                     points[field],
-                    original_srf.points[field.lower()].values,
+                    original_srf.points[field.lower()].to_numpy(),
                     decimal=3,
                 )
             np.testing.assert_array_almost_equal(
                 points["SLIP1"],
-                original_srf.points["slip"].values,
+                original_srf.points["slip"].to_numpy(),
                 decimal=3,
             )
 
