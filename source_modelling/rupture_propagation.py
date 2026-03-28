@@ -73,30 +73,12 @@ def spanning_tree_with_probabilities(
 
 
 @overload
-def sampled_spanning_tree(graph: nx.Graph, n_samples: Literal[1] = ...) -> nx.Graph:
-    """Sample a single spanning tree from a graph.
-
-    Parameters
-    ----------
-    graph : nx.Graph
-        The graph to sample from.
-    n_samples : Literal[1], optional
-        Number of trees to sample. Default is 1.
-    """
+def sampled_spanning_tree(graph: nx.Graph, n_samples: Literal[1] = ...) -> nx.Graph:  # numpydoc ignore=GL08
     ...
 
 
 @overload
-def sampled_spanning_tree(graph: nx.Graph, n_samples: int) -> list[nx.Graph] | nx.Graph:
-    """Sample one or more spanning trees from a graph.
-
-    Parameters
-    ----------
-    graph : nx.Graph
-        The graph to sample from.
-    n_samples : int
-        Number of trees to sample.
-    """
+def sampled_spanning_tree(graph: nx.Graph, n_samples: int) -> list[nx.Graph] | nx.Graph:  # numpydoc ignore=GL08
     ...
 
 
@@ -237,7 +219,7 @@ def select_top_spanning_trees(
     cumulative_tree_weight = 0.0
     spanning_trees = []
 
-    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):  # ty: ignore[invalid-argument-type] - SpanningTreeIterator accepts undirected Graph at runtime; the networkx-stubs incorrectly restrict its __init__ to DiGraph only
+    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):  # ty: ignore[invalid-argument-type]
         spanning_trees.append(spanning_tree)
         tree_log_probability = sum(
             spanning_tree[node_u][node_v]["weight"]

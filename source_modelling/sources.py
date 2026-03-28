@@ -988,7 +988,7 @@ class Fault:
 
         # This relation can now be used to identify if the list of planes given is a line.
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation,  # ty: ignore[invalid-argument-type] - dict[int, list[int]] satisfies dict[Unknown, Iterable[Unknown]]; ty can't resolve types through networkx's _dispatchable wrapper
+            points_into_relation,  # ty: ignore[invalid-argument-type]
             create_using=nx.DiGraph,
         )
         try:
@@ -1172,7 +1172,7 @@ class Fault:
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(  # ty: ignore[invalid-return-type] - shapely.normalize and union_all are typed to return BaseGeometry, but the result is always Polygon or LineString for plane geometries
+        return shapely.normalize(  # ty: ignore[invalid-return-type]
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 

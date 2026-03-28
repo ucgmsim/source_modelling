@@ -43,6 +43,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Self
 
+import h5py
 import numpy as np
 import pandas as pd
 import scipy as sp
@@ -338,9 +339,6 @@ class SrfFile:
     def write_sw4_hdf5(
         self,
         output_ffp: Path | str,
-        vs: float | np.ndarray = 0.0,
-        den: float | np.ndarray = 0.0,
-        include_slip_time_function: bool = True,
     ) -> None:
         """Write the SRF file in SW4's SRF-HDF5 format.
 
@@ -348,19 +346,17 @@ class SrfFile:
         ----------
         output_ffp : Path
             The path to the output HDF5 file.
-        vs : float or np.ndarray
-            Shear wave velocity (m/s). A scalar broadcasts to all points,
-            or provide a per-point array of shape (npoints,). The Version 1.0
-            SRF format does not include this field; defaults to 0.0.
-        den : float or np.ndarray
-            Density (kg/m^3). A scalar broadcasts to all points,
-            or provide a per-point array of shape (npoints,). The Version 1.0
-            SRF format does not include this field; defaults to 0.0.
-        include_slip_time_function : bool
-            If True, include the SR1 slip rate time series dataset.
-        """
-        import h5py
 
+        References
+        ----------
+        .. [1] Petersson, N.A. and B. Sjogreen (2017). SW4 v2.0.
+           Computational Infrastructure of Geodynamics, Davis, CA.
+           DOI: 10.5281/zenodo.1045297.
+        .. [2] Petersson, N.A. and B. Sjogreen (2017). User's guide to
+           SW4, version 2.0. Technical report LLNL-SM-741439, Lawrence
+           Livermore National Laboratory, Livermore, CA.
+           https://github.com/geodynamics/sw4/blob/master/doc/SW4_UsersGuide.pdf
+        """
         plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
         assert (
             SW4_PLANE_DTYPE.names is not None
@@ -382,21 +378,15 @@ class SrfFile:
                 "slip" if field == "SLIP1" else field.lower()
             ].values.astype(SW4_POINTS_DTYPE[field].type)
 
-        points_data["VS"] = np.asarray(vs, dtype=np.float32)
-        points_data["DEN"] = np.asarray(den, dtype=np.float32)
-
-        if include_slip_time_function:
-            points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
 
         with h5py.File(output_ffp, "w") as h5file:
             h5file.attrs.create("VERSION", np.float32(self.version))
             h5file.attrs.create("PLANE", plane_data)
             h5file.create_dataset("POINTS", data=points_data)
-
-            if include_slip_time_function:
-                h5file.create_dataset(
-                    "SR1", data=self.slipt1_array.data.astype(np.float32)
-                )
+            h5file.create_dataset(
+                "SR1", data=self.slipt1_array.data.astype(np.float32)
+            )
 
     def write_hdf5(
         self, hdf5_ffp: Path, include_slip_time_function: bool = True

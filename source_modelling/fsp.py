@@ -5,8 +5,13 @@ as well as representing their contents.
 See http://equake-rc.info/SRCMOD/fileformats/fsp/
 for details on the FSP format.
 
-Classes: ``FSPFile`` (representation of an FSP file).
-Exceptions: ``FSPParseError`` (raised for errors in parsing FSP files).
+Classes
+-------
+- FSPFile: Representation of an FSP file.
+
+Exceptions
+----------
+- FSPParseError: Exception raised for errors in parsing FSP files.
 
 Examples
 --------

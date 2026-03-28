@@ -56,7 +56,7 @@ def test_plane_gsf():  # Use tmp_path fixture
 
 def test_bad_gsf_type():
     with pytest.raises(TypeError):
-        gsf.source_to_gsf_dataframe(1, 0.1)  # ty: ignore[invalid-argument-type] - intentionally passing wrong type to test error handling
+        gsf.source_to_gsf_dataframe(1, 0.1)  # ty: ignore[invalid-argument-type]
 
 
 def test_write_gsf(tmp_path: Path):
