@@ -59,7 +59,7 @@ def spanning_tree_with_probabilities(
     trees = []
     probabilities = []
 
-    for tree in mst.SpanningTreeIterator(graph):  # ty: ignore[invalid-argument-type] - SpanningTreeIterator accepts undirected Graph at runtime; the networkx-stubs incorrectly restrict its __init__ to DiGraph only
+    for tree in mst.SpanningTreeIterator(graph):  # ty: ignore[invalid-argument-type]
         p_tree = 1.0
         for u, v in graph.edges:
             if tree.has_edge(u, v):
