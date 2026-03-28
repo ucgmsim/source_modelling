@@ -522,7 +522,7 @@ def test_sw4_hdf5_read_write():
             assert plane.shape == (len(original_srf.header),)
             assert (
                 srf.SW4_PLANE_DTYPE.names is not None
-            )  # always has names as it is a structured dtype, but ty needs a type guard
+            ) 
             for idx, row in original_srf.header.iterrows():
                 for field in srf.SW4_PLANE_DTYPE.names:
                     assert plane[idx][field] == pytest.approx(
