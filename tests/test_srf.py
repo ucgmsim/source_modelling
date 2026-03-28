@@ -518,7 +518,6 @@ def test_sw4_hdf5_read_write():
             # VERSION
             assert h5file.attrs["VERSION"] == np.float32(1.0)
 
-            # PLANE -- compare every field against original header
             plane = h5file.attrs["PLANE"]
             assert plane.shape == (len(original_srf.header),)
             assert (
