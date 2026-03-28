@@ -361,11 +361,10 @@ class SrfFile:
         """
         import h5py
 
-        # Build PLANE structured array (header has one row per fault plane)
         plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
         assert (
             SW4_PLANE_DTYPE.names is not None
-        )  # always has names as it is a structured dtype, but ty needs a type guard
+        )
         for field in SW4_PLANE_DTYPE.names:
             plane_data[field] = self.header[field.lower()].values.astype(
                 SW4_PLANE_DTYPE[field].type
