@@ -337,7 +337,7 @@ class SrfFile:
 
     def write_sw4_hdf5(
         self,
-        output_ffp: Path,
+        output_ffp: Path | str,
         vs: float | np.ndarray = 0.0,
         den: float | np.ndarray = 0.0,
         include_slip_time_function: bool = True,
