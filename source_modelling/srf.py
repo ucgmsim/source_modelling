@@ -374,7 +374,7 @@ class SrfFile:
         points_data = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
         assert (
             SW4_POINTS_DTYPE.names is not None
-        )  # always has names as it is a structured dtype, but ty needs a type guard
+        )
         for field in SW4_POINTS_DTYPE.names:
             if field in _SW4_POINTS_EXTERNAL_FIELDS:
                 continue
