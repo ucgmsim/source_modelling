@@ -529,7 +529,6 @@ def test_sw4_hdf5_read_write():
                         row[field.lower()], abs=1e-3
                     )
 
-            # POINTS -- compare each DataFrame-sourced field directly
             points = h5file["POINTS"]
             assert points.shape == (len(original_srf.points),)
             for field in (
