@@ -4,16 +4,8 @@ This module provides classes and functions for representing fault planes and
 faults, along with methods for calculating various properties such as
 dimensions, orientation, and coordinate transformations.
 
-Classes
--------
-Point:
-    A representation of a point source.
-
-Plane:
-    A representation of a single plane of a Fault.
-
-Fault:
-    A representation of a fault, consisting of one or more Planes.
+Classes: ``Point`` (a point source), ``Plane`` (a single fault plane),
+``Fault`` (a fault consisting of one or more planes).
 """
 
 import copy
@@ -21,6 +13,7 @@ import dataclasses
 import itertools
 import json
 import warnings
+from collections.abc import Sequence
 from typing import NamedTuple, Self
 
 import networkx as nx
@@ -110,8 +103,8 @@ class Point:
         return shapely.Point(self.bounds)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -438,8 +431,8 @@ class Plane:
         return shapely.LineString(self.trace)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -450,7 +443,7 @@ class Plane:
     @classmethod
     def from_nztm_trace(
         cls,
-        trace_points_nztm: npt.NDArray[float],
+        trace_points_nztm: npt.NDArray[np.float64],
         dtop: float,
         dbottom: float,
         dip: float,
@@ -523,6 +516,8 @@ class Plane:
                 (trace_points_nztm, np.array([dbottom, dbottom]))
             )
         else:
+            # Non-None guaranteed by validation above; assert narrows type for ty.
+            assert dip_dir_nztm is not None
             dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
             proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
 
@@ -993,7 +988,8 @@ class Fault:
 
         # This relation can now be used to identify if the list of planes given is a line.
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation, create_using=nx.DiGraph
+            points_into_relation,  # ty: ignore[invalid-argument-type]
+            create_using=nx.DiGraph,
         )
         try:
             self._validate_fault_plane_connectivity(points_into_graph)
@@ -1171,12 +1167,12 @@ class Fault:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(
+        return shapely.normalize(  # ty: ignore[invalid-return-type]
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 
@@ -1247,8 +1243,8 @@ class Fault:
         raise ValueError("Given coordinates are not on fault.")
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -1334,12 +1330,12 @@ class Fault:
 IsSource = Plane | Fault | Point
 
 
-def sources_as_geojson_features(sources: list[IsSource]) -> str:
+def sources_as_geojson_features(sources: Sequence[IsSource]) -> str:
     """Convert a list of sources to a GeoJSON FeatureCollection.
 
     Parameters
     ----------
-    sources : list[IsSource]
+    sources : Sequence[IsSource]
             The sources to convert.
 
     Returns

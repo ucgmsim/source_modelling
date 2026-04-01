@@ -1,6 +1,7 @@
 import tempfile
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pandas as pd
 import pytest
@@ -407,7 +408,7 @@ def test_planes_nstk_1_ndip_gt_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # type: ignore
+        slipt1_array=None,  # ty: ignore[invalid-argument-type]
     )
 
     planes = mock_srf.planes
@@ -450,7 +451,7 @@ def test_planes_nstk_1_ndip_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # type: ignore
+        slipt1_array=None,  # ty: ignore[invalid-argument-type]
     )
 
     planes = mock_srf.planes
@@ -500,6 +501,68 @@ def test_hdf5_read_write():
             original_srf.slipt1_array.indptr, reconstructed_srf.slipt1_array.indptr
         ), "slipt1_array indptr mismatch"
 
-        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # type: ignore
+        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # ty: ignore[unresolved-attribute]
             "slipt1_array content mismatch"
         )
+
+
+def test_sw4_hdf5_read_write(tmp_path: Path):
+    """Test that write_sw4_hdf5 preserves header, points, and slip data."""
+
+    original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+
+    output_path = tmp_path / "test.h5"
+    original_srf.write_sw4_hdf5(output_path)
+
+    with h5py.File(output_path, "r") as h5file:
+        # VERSION
+        assert h5file.attrs["VERSION"] == np.float32(1.0)
+
+        plane = h5file.attrs["PLANE"]
+        assert plane.shape == (len(original_srf.header),)
+        assert (
+            srf.SW4_PLANE_DTYPE.names is not None
+        )
+        for idx, row in original_srf.header.iterrows():
+            for field in srf.SW4_PLANE_DTYPE.names:
+                assert plane[idx][field] == pytest.approx(
+                    row[field.lower()], abs=1e-3
+                )
+
+        points = h5file["POINTS"]
+        assert points.shape == (len(original_srf.points),)
+        for field in (
+            "LON",
+            "LAT",
+            "DEP",
+            "STK",
+            "DIP",
+            "AREA",
+            "TINIT",
+            "DT",
+            "RAKE",
+        ):
+            assert points[field] == pytest.approx(
+                original_srf.points[field.lower()].to_numpy(), abs=1e-3
+            )
+        assert points["SLIP1"] == pytest.approx(
+            original_srf.points["slip"].to_numpy(), abs=1e-3
+        )
+
+        # VS/DEN default to 0.0 for Version 1.0 SRF
+        assert points["VS"] == pytest.approx(0.0)
+        assert points["DEN"] == pytest.approx(0.0)
+
+        # NT1 from slipt1_array.indptr
+        assert points["NT1"] == pytest.approx(
+            np.diff(original_srf.slipt1_array.indptr).astype(np.int32)
+        )
+
+        # SR1 slip-time function data
+        assert h5file["SR1"][...] == pytest.approx(
+            original_srf.slipt1_array.data.astype(np.float32)
+        )
+
+        # Unused slip components stay zero
+        for zero_field in ("SLIP2", "NT2", "SLIP3", "NT3"):
+            assert points[zero_field] == pytest.approx(0)

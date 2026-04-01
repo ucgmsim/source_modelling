@@ -12,6 +12,7 @@ dynamic = ["version"]
 dependencies = [
   "fiona",
   "geopandas",
+  "h5py",
   "networkx",
   "numpy",
   "pandas",
@@ -45,6 +46,9 @@ source_modelling = ['NZ_CFM/*']
 
 [tool.setuptools.package-dir]
 source_modelling = "source_modelling"
+
+[tool.ty.src]
+exclude = ["source_modelling/ccldpy.py"]
 
 [tool.ruff]
 extend-exclude = ["source_modelling/ccldpy.py"]

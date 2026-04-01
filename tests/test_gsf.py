@@ -49,14 +49,14 @@ def test_plane_gsf():  # Use tmp_path fixture
     for _, point in gsf_df.iterrows():
         assert plane.geometry.contains(
             shapely.Point(
-                coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
+                coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].to_numpy())
             )
         )
 
 
 def test_bad_gsf_type():
     with pytest.raises(TypeError):
-        gsf.source_to_gsf_dataframe(1, 0.1)
+        gsf.source_to_gsf_dataframe(1, 0.1)  # ty: ignore[invalid-argument-type]
 
 
 def test_write_gsf(tmp_path: Path):
@@ -304,7 +304,7 @@ def test_fault_to_gsf(fault: Fault):
             assert shapely.contains(
                 fault.geometry,
                 shapely.Point(
-                    coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
+                    coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].to_numpy())
                 ),
             )
 

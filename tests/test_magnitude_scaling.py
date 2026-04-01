@@ -86,7 +86,7 @@ def relation_with_magnitude(
         magnitude = draw(st.floats(min_value=min_magnitude, max_value=max_magnitude))
         return scaling_relation, rake, magnitude
 
-    return sampler()
+    return sampler()  # ty: ignore[missing-argument]
 
 
 # The contreras slab 2020 relation (which is the same as Strasser 2010) is not invertible. See the coefficients of Table 2 in the paper
@@ -116,7 +116,7 @@ def test_inversion(
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
         area_to_mag = AREA_TO_MAGNITUDE[scaling_relation]
-    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)
+    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)  # ty: ignore[missing-argument]
 
 
 @pytest.mark.parametrize(
@@ -245,7 +245,7 @@ def test_monotonicity_mag_to_area(
         mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
-    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)
+    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)  # ty: ignore[missing-argument]
 
 
 class RandomFunction(Protocol):
