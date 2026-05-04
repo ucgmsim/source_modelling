@@ -230,8 +230,11 @@ def point_source_slip(
         The calculated slip in cm.
     """
 
-    # Find the index of the closest depth in the velocity model
-    idx = np.argmin(np.abs(velocity_model_df["depth_km"] - source_depth_km))
+    # Finds the first index i in the velocity model such that depth[i - 1] <= source depth < depth[i]
+    # At a boundary therefore, it returns the bottom-most layer index instead of the top.
+    idx = np.searchsorted(
+        velocity_model_df["depth_km"].values, source_depth_km, side="right"
+    )
     vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
     rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]
 
