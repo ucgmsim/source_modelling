@@ -219,8 +219,8 @@ def point_source_slip(
     velocity_model_df : pd.DataFrame
       columns:
         - "depth_km": The *top* depth in kilometers.
-        - "rho_g_per_cm3": The density of the fault in grams per cubic centimeter.
-        - "vs_km_per_s": The shear wave velocity in kilometers per second.
+        - "rho": The density of the fault in grams per cubic centimeter.
+        - "Vs": The shear wave velocity in kilometers per second.
     source_depth_km : float
         The depth of the source in kilometers.
 
