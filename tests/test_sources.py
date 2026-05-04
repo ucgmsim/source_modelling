@@ -74,20 +74,6 @@ def test_point_construction(
     assert np.allclose(point.centroid, point_coordinates)
 
 
-def test_point_top_bottom():
-    point = sources.Point.from_lat_lon_depth(
-        np.array([-43.0, 172.0, 5000.0]),
-        length_m=5000.0,
-        width_m=5000.0,
-        dip=45.0,
-        strike=0.0,
-        dip_dir=90.0,
-    )
-    # top/bottom ~ 5000.0 -/+ 2500 / sqrt(2)
-    assert point.top_m == pytest.approx(3232.23304703)
-    assert point.bottom_m == pytest.approx(6767.76695297)
-
-
 @given(
     point_coordinates=st.builds(
         coordinate,

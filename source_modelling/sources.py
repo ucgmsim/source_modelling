@@ -112,18 +112,6 @@ class Point:
             )
         )
 
-    @property
-    def top_m(self) -> float:  # numpydoc ignore=RT01
-        """float: return the top-depth of the point source in metres."""
-        half_height = np.sin(np.radians(self.dip)) * self.width_m / 2
-        return self.bounds[2] - half_height
-
-    @property
-    def bottom_m(self) -> float:  # numpydoc ignore=RT01
-        """float: return the bottom-depth of the point source in metres."""
-        half_height = np.sin(np.radians(self.dip)) * self.width_m / 2
-        return self.bounds[2] + half_height
-
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
     ) -> np.ndarray:
