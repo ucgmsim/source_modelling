@@ -418,7 +418,7 @@ def valid_trace_definition(draw: st.DrawFn):
     )
 
 
-@given(valid_trace_definition())  # ty: ignore[missing-argument]
+@given(valid_trace_definition())
 def test_plane_from_trace(data: tuple):
     (
         trace_points_nztm,
@@ -1227,7 +1227,7 @@ def fault(
     )
 
 
-@given(fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100))  # ty: ignore[missing-argument]
+@given(fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100))
 def test_simplify_fault(fault: Fault):
     tolerance = 0.4
     simplified_fault = sources.simplify_fault(fault, tolerance)
@@ -1253,7 +1253,7 @@ def test_simplify_fault(fault: Fault):
 
 @given(
     st.lists(
-        fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100),  # ty: ignore[missing-argument]
+        fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100),
         min_size=2,
         max_size=10,
     ),

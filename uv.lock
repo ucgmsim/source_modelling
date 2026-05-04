@@ -422,15 +422,6 @@ wheels = [
 ]
 
 [[package]]
-name = "diffimg"
-version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pillow" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e6/21/cc36f7de1c9af6f890798e013f21f9fc09490eb39f58864be6a1e9da14d4/diffimg-0.3.0.tar.gz", hash = "sha256:5f9bfc5417430729205b70e68f22bade19fed43d963daa7fb45d9447d0a01a24", size = 4310, upload-time = "2021-01-02T18:37:27.11Z" }
-
-[[package]]
 name = "docstring-parser"
 version = "0.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1879,7 +1870,6 @@ dependencies = [
 
 [package.optional-dependencies]
 test = [
-    { name = "diffimg" },
     { name = "hypothesis", extra = ["numpy", "pandas"] },
     { name = "hypothesis-networkx" },
     { name = "pytest" },
@@ -1896,7 +1886,6 @@ types = [
 
 [package.metadata]
 requires-dist = [
-    { name = "diffimg", marker = "extra == 'test'" },
     { name = "fiona" },
     { name = "geopandas" },
     { name = "h5py" },

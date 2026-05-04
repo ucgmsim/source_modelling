@@ -239,7 +239,10 @@ def point_source_slip(
     # Finds the first index i in the velocity model such that depth[i - 1] <= source depth < depth[i]
     # At a boundary therefore, it returns the bottom-most layer index instead of the top.
     idx = np.searchsorted(
-        velocity_model_df["depth_km"].values, source_depth_km, side="right"
+        # to_numpy() used instead of .values because it satisfies type checker
+        velocity_model_df["depth_km"].to_numpy(),
+        source_depth_km,
+        side="right",
     )
     idx = min(idx, len(velocity_model_df) - 1)
     vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]

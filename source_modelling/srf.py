@@ -358,35 +358,29 @@ class SrfFile:
            https://github.com/geodynamics/sw4/blob/master/doc/SW4_UsersGuide.pdf
         """
         plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
-        assert (
-            SW4_PLANE_DTYPE.names is not None
-        )
+        assert SW4_PLANE_DTYPE.names is not None
         for field in SW4_PLANE_DTYPE.names:
             plane_data[field] = self.header[field.lower()].values.astype(
-                SW4_PLANE_DTYPE[field].type
-            )
+                SW4_PLANE_DTYPE[field].type  # ty: ignore[invalid-argument-type]
+            )  # ty: ignore[invalid-assignment]
 
         # Build POINTS structured array
         points_data = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
-        assert (
-            SW4_POINTS_DTYPE.names is not None
-        )
+        assert SW4_POINTS_DTYPE.names is not None
         for field in SW4_POINTS_DTYPE.names:
             if field in _SW4_POINTS_EXTERNAL_FIELDS:
                 continue
             points_data[field] = self.points[
                 "slip" if field == "SLIP1" else field.lower()
-            ].values.astype(SW4_POINTS_DTYPE[field].type)
+            ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
 
-        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)  # ty: ignore[invalid-assignment]
 
         with h5py.File(output_ffp, "w") as h5file:
             h5file.attrs.create("VERSION", np.float32(self.version))
             h5file.attrs.create("PLANE", plane_data)
             h5file.create_dataset("POINTS", data=points_data)
-            h5file.create_dataset(
-                "SR1", data=self.slipt1_array.data.astype(np.float32)
-            )
+            h5file.create_dataset("SR1", data=self.slipt1_array.data.astype(np.float32))
 
     def write_hdf5(
         self, hdf5_ffp: Path, include_slip_time_function: bool = True
@@ -578,7 +572,7 @@ class SrfFile:
             ndip = segment_header["ndip"]
             if nstk == 1 and ndip > 1:
                 # If the number of strike points is 1, we have to rely on the segment header for strike.
-                centroid = segment_header[["elat", "elon"]]
+                centroid = segment_header[["elat", "elon"]].to_numpy()
                 strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
                     centroid,
                     segment_header["len"],
@@ -619,7 +613,7 @@ class SrfFile:
                 # If the number of dip points is 1, we have to rely on the
                 # segment header for dip direction. We will assume that dip
                 # direction = strike + 90.
-                centroid = segment_header[["elat", "elon"]]
+                centroid = segment_header[["elat", "elon"]].to_numpy()
                 planes.append(
                     Plane.from_centroid_strike_dip(
                         centroid,

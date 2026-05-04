@@ -25,7 +25,6 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-  "diffimg",
   "pytest",
   "pytest-cov",
   "hypothesis[pandas, numpy]",
