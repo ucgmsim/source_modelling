@@ -118,48 +118,49 @@ def test_find_connected_faults(
         assert ds.connected("A", "B") == expected_connected
 
 
-@pytest.fixture
-def velocity_model_df():
-    """Subset of rows of the 1D velocity model for testing"""
-    return pd.DataFrame(
+def test_point_source_slip_top_depth():
+    bad_vm = pd.DataFrame(
         {
-            "depth_km": [0.05, 2, 1038.9999],
-            "thickness": [0.05, 0.2, 999.9999],
-            "Vp": [1.8, 3.27, 8.1],
-            "Vs": [0.5, 1.64, 4.6],
-            "rho": [1.81, 2.28, 3.33],
-            "Qp": [38, 164, 460],
-            "Qs": [19, 82, 230],
+            "depth_km": [1.0],
+            "Vs": [1.0],
+            "rho": [1.0],
         }
-    )
+    )  # Other qualities not included because point source slip should not use them
+
+    with pytest.raises(ValueError, match="Velocity model does not begin at 0km depth"):
+        moment.point_source_slip(1.0, 1.0, bad_vm, 1.0)
 
 
-@pytest.mark.parametrize(
-    "source_depth_km, fault_area_km2, magnitude, expected_slip",
-    [
-        (0.01, 100.0, 5.0, 78.41089598165419),
-        (2.0, 100.0, 5.0, 5.785920431607016),
-        (1040.0, 100.0, 5.0, 0.5035413073522274),
-    ],
-)
-def test_point_source_slip(
-    velocity_model_df: pd.DataFrame,
-    source_depth_km: float,
-    fault_area_km2: float,
-    magnitude: float,
-    expected_slip: float,
-):
-    """Test the point_source_slip function with different source depths."""
-    moment_newton_metre = moment.magnitude_to_moment(magnitude)
+def test_point_source_slip_simple():
+    """Test point source slip calculation for arbitrary example"""
+    simple_vm = pd.DataFrame(
+        {
+            "depth_km": [0.0],
+            "Vs": [1.0],
+            "rho": [1.0],
+        }
+    )  # Other qualities not included because point source slip should not use them
 
-    calculated_slip = moment.point_source_slip(
-        moment_newton_metre=moment_newton_metre,
-        fault_area_km2=fault_area_km2,
-        velocity_model_df=velocity_model_df,
-        source_depth_km=source_depth_km,
-    )
+    slip = moment.point_source_slip(1e12, 1.0, simple_vm, 1.0)
+    # 1e12 / (1e6 * 1e3 * 1e6) = 1e-3 m slip
+    # 1e-3 * 1e2 = 1e-1 cm slip
+    assert slip == pytest.approx(0.1)
 
-    assert calculated_slip == pytest.approx(expected_slip)
+
+def test_point_source_slip_boundary():
+    "Test point source slip calculation at boundary of layers"
+    simple_vm = pd.DataFrame(
+        {
+            "depth_km": [0.0, 1.0],
+            "Vs": [0.0, 1.0],
+            "rho": [0.0, 1.0],
+        }
+    )  # Other qualities not included because point source slip should not use them
+
+    # Same calculation as the example, because source depth is 1.0km it should
+    # use the bottom layer not the top (should crash if using the top).
+    slip = moment.point_source_slip(1e12, 1.0, simple_vm, 1.0)
+    assert slip == pytest.approx(0.1)
 
 
 def test_point_source_slip_bad_dataframe():

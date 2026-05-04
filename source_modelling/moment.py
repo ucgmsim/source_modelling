@@ -218,7 +218,7 @@ def point_source_slip(
         The area of the fault in square kilometers.
     velocity_model_df : pd.DataFrame
       columns:
-        - "depth_km": The depth in kilometers.
+        - "depth_km": The *top* depth in kilometers.
         - "rho_g_per_cm3": The density of the fault in grams per cubic centimeter.
         - "vs_km_per_s": The shear wave velocity in kilometers per second.
     source_depth_km : float
@@ -230,11 +230,18 @@ def point_source_slip(
         The calculated slip in cm.
     """
 
+    # While this is not strictly necessary, it does act as a sanity check to
+    # ensure that the bug does not reoccur in the future.
+    if not np.isclose(velocity_model_df["depth_km"].iloc[0], 0.0):
+        raise ValueError(
+            "Velocity model does not begin at 0km depth (are you using bottom depth instead of top depth)?"
+        )
     # Finds the first index i in the velocity model such that depth[i - 1] <= source depth < depth[i]
     # At a boundary therefore, it returns the bottom-most layer index instead of the top.
     idx = np.searchsorted(
         velocity_model_df["depth_km"].values, source_depth_km, side="right"
     )
+    idx = min(idx, len(velocity_model_df) - 1)
     vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
     rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]
 
