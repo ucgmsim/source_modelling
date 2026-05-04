@@ -236,16 +236,14 @@ def point_source_slip(
         raise ValueError(
             "Velocity model does not begin at 0km depth (are you using bottom depth instead of top depth)?"
         )
-    # Finds the first index i in the velocity model such that depth[i - 1] <= source depth < depth[i]
+    # Finds the first index i in the velocity model such that depth[i] <= source depth < depth[i + 1]
     # At a boundary therefore, it returns the bottom-most layer index instead of the top.
-    idx = np.searchsorted(
-    # Finds the first index i in the velocity model such that depth[i] > source depth.
-    # The layer containing the source depth is then i - 1.
-    # Using side="right" ensures that at a boundary (depth[i] == source depth),
-    # we pick the layer starting at that depth (i) rather than the one ending there (i-1).
-    idx = np.searchsorted(
-        velocity_model_df["depth_km"].values, source_depth_km, side="right"
-    ) - 1
+    idx = (
+        np.searchsorted(
+            velocity_model_df["depth_km"].to_numpy(), source_depth_km, side="right"
+        )
+        - 1
+    )
     idx = max(0, idx)
     vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
     rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]

@@ -147,6 +147,22 @@ def test_point_source_slip_simple():
     assert slip == pytest.approx(0.1)
 
 
+def test_point_source_slip_middle():
+    "Test point source slip calculation in the middle of layers"
+    simple_vm = pd.DataFrame(
+        {
+            "depth_km": [0.0, 1.5],
+            "Vs": [1.0, 0.0],
+            "rho": [1.0, 0.0],
+        }
+    )  # Other qualities not included because point source slip should not use them
+
+    # Same calculation as the example, because source depth is 1.0km it should
+    # use the top layer (should crash if using the bottom).
+    slip = moment.point_source_slip(1e12, 1.0, simple_vm, 1.0)
+    assert slip == pytest.approx(0.1)
+
+
 def test_point_source_slip_boundary():
     "Test point source slip calculation at boundary of layers"
     simple_vm = pd.DataFrame(
