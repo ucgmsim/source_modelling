@@ -11,7 +11,7 @@ from networkx.algorithms.tree import mst
 
 from source_modelling import rupture_propagation, sources
 
-random_strongly_connected_graph = hnx.graph_builder(  # ty: ignore[missing-argument]
+random_strongly_connected_graph = hnx.graph_builder(
     graph_type=nx.Graph,
     node_keys=st.text(
         alphabet=st.characters(
