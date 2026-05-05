@@ -222,7 +222,7 @@ def test_cumulative_reduction_resets_per_trace(data) -> None:
 
 
 def test_diff_reduction_isolates_traces() -> None:
-    # 5 points, 2 traces: [P0, P1, P2] and [P3, P4]
+    # 6 points, 2 traces: [P0, P1, P2, P3] and [P4, P5]
     points = np.array(
         [
             [0, 0],
