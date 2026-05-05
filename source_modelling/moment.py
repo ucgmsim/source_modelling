@@ -52,7 +52,7 @@ def find_connected_faults(
 
     """
     fault_names = list(faults)
-    fault_components: DisjointSet[str] = DisjointSet(fault_names)  # type: ignore
+    fault_components: DisjointSet[str] = DisjointSet(fault_names)
     for fault_a_name, fault_b_name in itertools.product(fault_names, repeat=2):
         if not fault_b_name or fault_components.connected(fault_a_name, fault_b_name):
             continue
@@ -218,9 +218,9 @@ def point_source_slip(
         The area of the fault in square kilometers.
     velocity_model_df : pd.DataFrame
       columns:
-        - "depth_km": The depth in kilometers.
-        - "rho_g_per_cm3": The density of the fault in grams per cubic centimeter.
-        - "vs_km_per_s": The shear wave velocity in kilometers per second.
+        - "depth_km": The *top* depth in kilometers.
+        - "rho": The density of the fault in grams per cubic centimeter.
+        - "Vs": The shear wave velocity in kilometers per second.
     source_depth_km : float
         The depth of the source in kilometers.
 
@@ -230,8 +230,21 @@ def point_source_slip(
         The calculated slip in cm.
     """
 
-    # Find the index of the closest depth in the velocity model
-    idx = np.argmin(np.abs(velocity_model_df["depth_km"] - source_depth_km))
+    # While this is not strictly necessary, it does act as a sanity check to
+    # ensure that the bug does not reoccur in the future.
+    if not np.isclose(velocity_model_df["depth_km"].iloc[0], 0.0):
+        raise ValueError(
+            "Velocity model does not begin at 0km depth (are you using bottom depth instead of top depth)?"
+        )
+    # Finds the first index i in the velocity model such that depth[i] <= source depth < depth[i + 1]
+    # At a boundary therefore, it returns the bottom-most layer index instead of the top.
+    idx = (
+        np.searchsorted(
+            velocity_model_df["depth_km"].to_numpy(), source_depth_km, side="right"
+        )
+        - 1
+    )
+    idx = max(0, idx)
     vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
     rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]
 

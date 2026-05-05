@@ -13,8 +13,8 @@ Exceptions
 ----------
 - FSPParseError: Exception raised for errors in parsing FSP files.
 
-Example
--------
+Examples
+--------
 >>> fsp_file = FSPFile.read_from_file(fsp_ffp)
 >>> (fsp_file.data['trup'] + fsp_file.data['rise']).max() # Get time of final rise for subfaults.
 """

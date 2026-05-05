@@ -1,5 +1,5 @@
 from setuptools import setup
-from setuptools_rust import Binding, RustExtension
+from setuptools_rust import Binding, RustExtension  # ty: ignore[unresolved-import]
 
 setup(
     name="source_modelling",

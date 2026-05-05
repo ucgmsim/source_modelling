@@ -663,11 +663,15 @@ def magnitude_to_length_width(
     tuple[float, float]
             Length and width of the fault estimated by the scaling relation.
     """
+
     if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
-        warnings.warn("Rake must be specified for Leonard scaling.")
+        raise ValueError("Rake must be specified for Leonard scaling.")
     scaling_relations_map = {
         ScalingRelation.LEONARD2014: functools.partial(
-            leonard_magnitude_to_length_width, rake=rake, random=random
+            leonard_magnitude_to_length_width,
+            # Rake is checked earlier so ty warning is not required.
+            rake=rake,  # ty: ignore[invalid-argument-type]
+            random=random,
         ),
         ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
             contreras_interface_magnitude_to_length_width, random=random
@@ -713,7 +717,10 @@ def magnitude_to_area(
         raise ValueError("Rake must be specified for Leonard scaling.")
     scaling_relations_map = {
         ScalingRelation.LEONARD2014: functools.partial(
-            leonard_magnitude_to_area, rake=rake, random=random
+            leonard_magnitude_to_area,
+            # Rake is checked earlier so ty warning is not required.
+            rake=rake,  # ty: ignore[invalid-argument-type]
+            random=random,
         ),
         ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
             contreras_interface_magnitude_to_area, random=random
@@ -750,9 +757,15 @@ def area_to_magnitude(
     float
         Moment magnitude of the fault estimated by the scaling relation.
     """
+    if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
+        raise ValueError("Rake must be specified for Leonard scaling.")
+
     scaling_relations_map = {
         ScalingRelation.LEONARD2014: functools.partial(
-            leonard_area_to_magnitude, rake=rake, random=random
+            leonard_area_to_magnitude,
+            # Rake is checked earlier so ty warning is not required.
+            rake=rake,  # ty: ignore[invalid-argument-type]
+            random=random,
         ),
         ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
             contreras_interface_area_to_magnitude, random=random
