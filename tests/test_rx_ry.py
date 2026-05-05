@@ -206,7 +206,7 @@ def test_antipodal_points_single_point_error() -> None:
 @given(
     data=arrays(np.float64, st.integers(2, 20), elements=st.floats(0.1, 100)),
 )
-def test_cumulative_reduction_resets_per_trace(data) -> None:
+def test_cumulative_reduction_resets_per_trace(data: np.ndarray) -> None:
     # Split data into two traces at a random point
     split = len(data) // 2
     indices = np.array([0, split, len(data)], dtype=np.uint64)
