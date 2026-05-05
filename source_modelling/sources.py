@@ -847,15 +847,55 @@ class Plane:
         )
 
     def rx_ry_distance(self, point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate the rx and ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
         trace = self.bounds[:2, :2]
         point = coordinates.wgs_depth_to_nztm(point)[..., :2]
         rx, ry = gc2_distances.segment_rx_ry(trace, point)
         return rx.squeeze(), ry.squeeze()
 
     def rx_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the rx distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
         return self.rx_ry_distance(point)[0]
 
     def ry_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
         return self.rx_ry_distance(point)[1]
 
 
@@ -1364,6 +1404,37 @@ class Fault:
         origins = np.cumulative_sum(trace_lengths[:-1], include_initial=True)
         t, u = gc2_distances.generalised_t_u_coordinates(trace_lengths, rx, ry, origins)
         return t.squeeze(), u.squeeze()
+
+    def rx_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the rx distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
+        return self.rx_ry_distance(point)[0]
+
+    def ry_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+        return self.rx_ry_distance(point)[1]
 
 
 def multi_fault_rx_ry_distance(
