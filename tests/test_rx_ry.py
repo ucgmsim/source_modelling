@@ -8,7 +8,7 @@ from hypothesis.extra.numpy import arrays
 from source_modelling import gc2_distances, sources
 
 
-def test_segment_rx_ry_output_shapes():
+def test_segment_rx_ry_output_shapes() -> None:
     m, n = 5, 10
     bounds = np.random.rand(m, 2, 2)
     points = np.random.rand(n, 2)
@@ -28,7 +28,7 @@ def test_segment_rx_ry_output_shapes():
     t=st.floats(min_value=-100, max_value=100),
     u=st.floats(min_value=-100, max_value=100),
 )
-def test_rx_ry(bounds, t, u):
+def test_rx_ry(bounds: np.ndarray, t: float, u: float) -> None:
     q = bounds[0, 0, :]
     r = bounds[0, 1, :]
     qr = r - q
@@ -60,7 +60,7 @@ def test_rx_ry(bounds, t, u):
     # ry: longitudinal distance from the start of the segment
     ry=st.floats(min_value=-500.0, max_value=1500.0),
 )
-def test_segment_weights_integral_match(lengths, rx, ry) -> None:
+def test_segment_weights_integral_match(lengths: float, rx: float, ry: float) -> None:
     trace_lengths = np.array([lengths])
     rx_arr = np.array([[rx]])
     ry_arr = np.array([[ry]])
@@ -81,7 +81,7 @@ def test_segment_weights_integral_match(lengths, rx, ry) -> None:
     lengths=st.floats(min_value=0.1, max_value=1000.0),
     ry=st.floats(min_value=-500.0, max_value=1500.0),
 )
-def test_segment_weights_at_zero(lengths, ry):
+def test_segment_weights_at_zero(lengths: float, ry: float) -> None:
     assume(not np.isclose(ry, 0.0) and not np.isclose(ry, lengths))
     trace_lengths = np.array([lengths])
     rx = 0.0
@@ -165,7 +165,7 @@ def test_rx_ry_fault_single_plane() -> None:
     assert ry_plane == pytest.approx(ry_fault)
 
 
-def test_antipodal_points_simple_square():
+def test_antipodal_points_simple_square() -> None:
     """Tests a unit square; antipodal points should be diagonal corners."""
     points = np.array([[0, 0], [1, 0], [1, 1], [0, 1]])
     p1, p2 = gc2_distances.antipodal_points(points)
@@ -175,7 +175,7 @@ def test_antipodal_points_simple_square():
     assert distance == pytest.approx(np.sqrt(2))
 
 
-def test_antipodal_points_with_interior_points():
+def test_antipodal_points_with_interior_points() -> None:
     """Tests that points inside the hull don't affect the result."""
     # A triangle with a point right in the middle
     points = np.array([[0, 0], [10, 0], [5, 10], [5, 5]])
@@ -187,7 +187,7 @@ def test_antipodal_points_with_interior_points():
     assert distance == pytest.approx(np.sqrt(125))
 
 
-def test_antipodal_points_collinear_points():
+def test_antipodal_points_collinear_points() -> None:
     """Tests points on a straight line."""
     points = np.array([[0, 0], [1, 1], [2, 2], [5, 5]])
     p1, p2 = gc2_distances.antipodal_points(points)
@@ -196,7 +196,7 @@ def test_antipodal_points_collinear_points():
     assert np.linalg.norm(p1 - p2) == pytest.approx(np.sqrt(50))
 
 
-def test_antipodal_points_single_point_error():
+def test_antipodal_points_single_point_error() -> None:
     """Tests that a single point raises an error (as combinations requires 2)."""
     points = np.array([[1, 1]])
     with pytest.raises(ValueError):
@@ -278,7 +278,7 @@ def test_strike_corrected_directions_flips_appropriately() -> None:
     assert np.sum(np.vecdot(corrected, trial_unit)) > 0
 
 
-def test_calculate_gc2_u_origins_logic():
+def test_calculate_gc2_u_origins_logic() -> None:
     # Setup: 2 traces. Trace 1 is 10 units long. Trace 2 starts 50 units East.
     seg_lengths = np.array([5.0, 5.0, 3.0, 3.0])
     seg_indices = np.array([0, 2, 4], dtype=np.uint64)
