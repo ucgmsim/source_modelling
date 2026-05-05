@@ -208,7 +208,7 @@ def calculate_gc2_u_origins(
     local_shifts = cumulative_reduction(segment_lengths, segment_indices)
     segment_counts = np.diff(segment_indices)
 
-    segment_counts = segment_counts.astype(np.int64, casting="unsafe")
+    segment_counts = segment_counts.astype(np.int64, casting="safe")
 
     global_shifts = np.repeat(np.dot(trace_starts - p_origin, b_hat), segment_counts)
     return global_shifts + local_shifts
@@ -375,7 +375,7 @@ def multi_trace_rx_ry(
     segment_lengths = np.linalg.norm(direction_vectors, axis=1)
 
     directions_per_trace = np.diff(trace_indices) // 2
-    directions_per_trace = directions_per_trace.astype(np.int64, casting="unsafe")
+    directions_per_trace = directions_per_trace.astype(np.int64, casting="safe")
     trace_direction_start_indices = np.cumulative_sum(
         directions_per_trace, include_initial=True
     )
