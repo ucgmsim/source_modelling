@@ -346,8 +346,8 @@ def test_multi_trace_rx_ry_origin_alignment() -> None:
 def test_multi_trace_rx_ry_local_shift_accumulation() -> None:
     """Test that multiple segments within a single trace accumulate local shifts."""
     # Single trace with two segments: (0,0) -> (5,0) -> (15,0)
-    trace_points = np.array([[0.0, 0.0], [5.0, 0.0], [5.0, 0.0], [15.0, 0.0]])
-    trace_indices = np.array([0, 2, 4], dtype=np.uint64)
+    trace_points = np.array([[0.0, 0.0], [5.0, 0.0], [15.0, 0.0]])
+    trace_indices = np.array([0, 3], dtype=np.uint64)
 
     # Point P(10, 2)
     # Seg 1: ry = 10, rx = 2
