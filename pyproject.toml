@@ -14,6 +14,7 @@ dependencies = [
   "geopandas",
   "h5py",
   "networkx",
+  "numba>=0.65.1",
   "numpy",
   "pandas",
   "parse",
