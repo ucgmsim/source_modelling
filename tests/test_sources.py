@@ -1360,3 +1360,19 @@ def test_closest_points_beneath(
         assert a_bounds.max_dip == 1
         assert float(b_bounds.min_dip) == pytest.approx(expected_dip_b)
         assert b_bounds.max_dip == 1
+
+
+def test_single_fault_rx_ry():
+    trace = np.array([[-43.0, 172.0], [-43.1, 172.0], [-43.2, 172.0]])
+    fault_a = Fault.from_trace_points(
+        trace,
+        dtop=0,
+        dbottom=10,
+        dip=90,
+        dip_dir_nztm=0.0,
+    )
+    rx, ry = fault_a.rx_ry_distance(np.array([-43.0, 172.0]))
+    assert rx.item() == pytest.approx(0)
+    assert ry.item() == pytest.approx(0)
+    
+
