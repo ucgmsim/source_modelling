@@ -1372,6 +1372,7 @@ def test_single_fault_rx_ry():
         dip_dir_nztm=0.0,
     )
     rx, ry = fault_a.rx_ry_distance(np.array([-43.0, 172.0]))
+    assert rx.ndim == 0
     assert rx.item() == pytest.approx(0)
     assert ry.item() == pytest.approx(0)
     
