@@ -520,14 +520,10 @@ def test_sw4_hdf5_read_write(tmp_path: Path):
 
         plane = h5file.attrs["PLANE"]
         assert plane.shape == (len(original_srf.header),)
-        assert (
-            srf.SW4_PLANE_DTYPE.names is not None
-        )
+        assert srf.SW4_PLANE_DTYPE.names is not None
         for idx, row in original_srf.header.iterrows():
             for field in srf.SW4_PLANE_DTYPE.names:
-                assert plane[idx][field] == pytest.approx(
-                    row[field.lower()], abs=1e-3
-                )
+                assert plane[idx][field] == pytest.approx(row[field.lower()], abs=1e-3)
 
         points = h5file["POINTS"]
         assert points.shape == (len(original_srf.points),)

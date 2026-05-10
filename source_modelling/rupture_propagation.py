@@ -73,12 +73,16 @@ def spanning_tree_with_probabilities(
 
 
 @overload
-def sampled_spanning_tree(graph: nx.Graph, n_samples: Literal[1] = ...) -> nx.Graph:  # numpydoc ignore=GL08
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: Literal[1] = ...
+) -> nx.Graph:  # numpydoc ignore=GL08
     ...
 
 
 @overload
-def sampled_spanning_tree(graph: nx.Graph, n_samples: int) -> list[nx.Graph] | nx.Graph:  # numpydoc ignore=GL08
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: int
+) -> list[nx.Graph] | nx.Graph:  # numpydoc ignore=GL08
     ...
 
 
