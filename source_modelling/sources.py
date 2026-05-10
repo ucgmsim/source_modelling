@@ -607,13 +607,14 @@ class Plane:
         if (
             dtop is not None
             and dbottom is not None
-            and not np.isclose(dbottom - dtop, np.sin(dip) * width)
+            and not np.isclose(dbottom - dtop, np.sin(np.radians(dip)) * width)
         ):
             raise ValueError(
                 "Top and bottom depths are not consistent with dip and width parameters."
             )
         elif (
-            dtop is not None
+            len(centroid) == 3
+            and dtop is not None
             and dbottom is not None
             and not np.isclose(centroid[2], (dtop + dbottom) / 2)
         ):
@@ -1456,7 +1457,7 @@ def multi_fault_rx_ry_distance(
     ry : np.ndarray
         The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
     """
-    point = coordinates.wgs_depth_to_nztm(point[:, :2])
+    point = coordinates.wgs_depth_to_nztm(point[..., :2])
     traces = [fault.trace[:, :2] for fault in faults]
     trace_points = np.concatenate(traces, axis=0)
     trace_indices = np.cumulative_sum(

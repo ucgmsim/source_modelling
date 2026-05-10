@@ -83,7 +83,7 @@ def segment_weights(
     Returns
     -------
     np.ndarray
-        An array of shape (m, n) containing distance weights for each segment point pair. 
+        An array of shape (m, n) containing distance weights for each segment point pair.
     """
     trace_lengths = trace_lengths[:, np.newaxis]
 
@@ -100,7 +100,9 @@ def segment_weights(
     if np.all(~mask_zero):
         return w
     # Otherwise, we need to find all point-pairs on the exterior of the segments and handle those
-    segment_exterior_mask = ~mask_zero & ((0 > ry) | (ry > trace_lengths))
+    left_of_segment = (0 > ry) & ~np.isclose(ry, 0.0)
+    right_of_segment = (ry > trace_lengths) & ~np.isclose(ry, trace_lengths)
+    segment_exterior_mask = mask_zero & (left_of_segment | right_of_segment)
 
     # The choice to use nan makes the final special case easy to identify
     special_case = np.divide(
@@ -109,7 +111,6 @@ def segment_weights(
         where=segment_exterior_mask,
         out=np.full_like(w, np.nan),
     ) - np.divide(1.0, ry, where=segment_exterior_mask, out=np.full_like(w, np.nan))
-
 
     w = np.where(mask_zero, special_case, w)
 
@@ -124,17 +125,17 @@ def segment_weights(
     nan_point_mask = np.sum(nan_mask, axis=0)
     if nan_point_mask.max() > 1:
         # This indicates a point lies on multiple traces at once, which is considered an input error
-        raise ValueError('Points lie on overlapping traces.')
+        raise ValueError("Points lie on overlapping traces.")
 
     # It is now safe to cast the nan point mask as a boolean for indexing purposes
     nan_point_mask = nan_point_mask.astype(np.bool_)
-    
+
     # The above assertion assures that the nan_mask is an array whose columns
     # are either all zero, or one-hot encoded where the nan value occurs (i.e.
     # identifying which segment contains the point). Thus, we can simply mask in
     # these columns and get one-hot encoding for free.
     w[:, nan_point_mask] = nan_mask[:, nan_point_mask]
-    
+
     return w
 
 

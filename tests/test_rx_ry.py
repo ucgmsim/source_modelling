@@ -60,8 +60,8 @@ def test_rx_ry(bounds: np.ndarray, t: float, u: float) -> None:
     # ry: longitudinal distance from the start of the segment
     ry=st.floats(min_value=-500.0, max_value=1500.0),
 )
-def test_segment_weights_integral_match(lengths: float, rx: float, ry: float) -> None:
-    trace_lengths = np.array([lengths])
+def test_segment_weights_integral_match(length: float, rx: float, ry: float) -> None:
+    trace_length = np.array([length])
     rx_arr = np.array([[rx]])
     ry_arr = np.array([[ry]])
 
@@ -69,9 +69,9 @@ def test_segment_weights_integral_match(lengths: float, rx: float, ry: float) ->
         dist_sq = rx**2 + (u - ry) ** 2
         return 1.0 / dist_sq
 
-    expected_w, _ = sp.integrate.quad(integrand, 0, lengths)
+    expected_w, _ = sp.integrate.quad(integrand, 0, length)
 
-    actual_w_arr = gc2_distances.segment_weights(trace_lengths, rx_arr, ry_arr)
+    actual_w_arr = gc2_distances.segment_weights(trace_length, rx_arr, ry_arr)
     actual_w = actual_w_arr.item()
 
     assert actual_w == pytest.approx(expected_w, rel=1e-4, abs=1e-8)
@@ -81,19 +81,73 @@ def test_segment_weights_integral_match(lengths: float, rx: float, ry: float) ->
     lengths=st.floats(min_value=0.1, max_value=1000.0),
     ry=st.floats(min_value=-500.0, max_value=1500.0),
 )
-def test_segment_weights_at_zero(lengths: float, ry: float) -> None:
-    assume(not np.isclose(ry, 0.0) and not np.isclose(ry, lengths))
-    trace_lengths = np.array([lengths])
+def test_segment_weights_at_zero_off_segment(length: float, ry: float) -> None:
+    assume(
+        (ry < 0 and not np.isclose(ry, 0.0))
+        or (ry > length and not np.isclose(ry, length))
+    )
+    trace_length = np.array([length])
     rx = 0.0
     rx_arr = np.array([[rx]])
     ry_arr = np.array([[ry]])
 
-    expected_w = 1 / (ry - lengths) - (1.0 / ry)
+    expected_w = 1 / (ry - length) - (1.0 / ry)
 
-    actual_w_arr = gc2_distances.segment_weights(trace_lengths, rx_arr, ry_arr)
+    actual_w_arr = gc2_distances.segment_weights(trace_length, rx_arr, ry_arr)
     actual_w = actual_w_arr.item()
 
     assert actual_w == pytest.approx(expected_w, rel=1e-4, abs=1e-8)
+
+
+@st.composite
+def point_on_trace_strategy(draw: st.DrawFn):
+    # Draw an array of lengths (at least one segment)
+    lengths = draw(
+        st.lists(st.floats(min_value=0.1, max_value=1000.0), min_size=1, max_size=50)
+    )
+    num_segments = len(lengths)
+
+    # Pick the index that will be inside
+    target_idx = draw(st.integers(min_value=0, max_value=num_segments - 1))
+
+    ry_values = []
+    for i, length in enumerate(lengths):
+        if i == target_idx:
+            # Inside the segment: [0, length]
+            val = draw(st.floats(min_value=0.0, max_value=length))
+        else:
+            # Outside: Either negative or greater than length
+            # We use a small buffer to avoid floating point edge cases at exactly 0 or length
+            outside_below = st.floats(max_value=-0.1)
+            outside_above = st.floats(min_value=length + 0.1)
+            val = draw(st.one_of(outside_below, outside_above))
+
+        ry_values.append(val)
+
+    return np.array(lengths), target_idx, np.array(ry_values)
+
+
+@given(value=point_on_trace_strategy())
+def test_segment_weights_at_zero_on_segment(
+    value: tuple[np.ndarray, int, np.ndarray],
+) -> None:
+    length, idx, ry = value
+    rx = np.zeros_like(ry)
+
+    actual_w = gc2_distances.segment_weights(
+        length, rx[:, np.newaxis], ry[:, np.newaxis]
+    )
+
+    assert actual_w[idx] == pytest.approx(1.0)
+    assert actual_w.sum() == pytest.approx(1.0)
+
+
+def test_segment_weights_fail_for_overlapping_segments() -> None:
+    ry = np.array([0.0, 0.0])
+    rx = np.zeros_like(ry)
+    length = np.ones_like(ry)
+    with pytest.raises(ValueError, match="Points lie on overlapping traces"):
+        _ = gc2_distances.segment_weights(length, rx[:, np.newaxis], ry[:, np.newaxis])
 
 
 def test_rx_ry_plane() -> None:
