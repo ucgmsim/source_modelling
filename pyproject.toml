@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dynamic = ["version"]
 dependencies = [
+  "fiona",
   "geopandas",
   "h5py",
   "networkx",
@@ -23,7 +24,7 @@ dependencies = [
   "xarray[io]",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 test = [
   "pytest",
   "pytest-cov",
@@ -39,10 +40,8 @@ types = [
   "types-networkx",
   "ty",
 ]
-fiona = [
-  "fiona"
-]
 dev = ["ruff", "deptry", "ty", "numpydoc"]
+
 
 [tool.setuptools.package-data]
 source_modelling = ['NZ_CFM/*']
@@ -135,7 +134,3 @@ exclude = [ # don't report on objects that match any of these regex
   '\.__repr__$',
 ]
 
-
-[tool.maturin]
-bindings = "pyo3"
-path = "source_modelling/srf_parser"
