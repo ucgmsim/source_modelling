@@ -1386,8 +1386,6 @@ def test_single_fault_rx_ry():
 
 
 def test_plane_rx_ry():
-    # Deliberately testing the rx/ry calculations with a simple edge case
-    # because the mathematics is tested rigoursly in the test_rx_ry.py module
     plane_a = Plane.from_centroid_strike_dip(
         np.array([-43.0, 172.0]),
         dip=90,

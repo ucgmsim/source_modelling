@@ -270,9 +270,9 @@ def generalised_t_u_coordinates(
     Returns
     -------
     t : np.ndarray
-        The weighted average rx distance, an array of shape (m, n).
+        The weighted average rx distance, an array of shape (n,).
     u : np.ndarray
-        The weighted average ry distance, an array of shape (m, n).
+        The weighted average ry distance, an array of shape (n,).
     """
     w = segment_weights(trace_lengths, rx, ry)
 
@@ -423,7 +423,10 @@ def multi_trace_rx_ry(
         direction_vectors, trial_unit_vector
     )
     b_hat = np.sum(direction_vectors, axis=0)
-    b_hat /= np.linalg.norm(b_hat)
+    b_hat_norm = np.linalg.norm(b_hat)
+    if np.isclose(b_hat_norm, 0.0):
+        raise ValueError("Invalid direction vectors calculated: likely indicates degenerate trace or invalid geometry.")
+    b_hat /= b_hat_norm
 
     u_shift_origins = calculate_gc2_u_origins(
         segment_lengths,

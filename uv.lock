@@ -2332,7 +2332,7 @@ requires-dist = [
     { name = "hypothesis-networkx", marker = "extra == 'test'" },
     { name = "networkx" },
     { name = "numba", specifier = ">=0.65.1" },
-    { name = "numpy" },
+    { name = "numpy", specifier = ">=2.0" },
     { name = "pandas" },
     { name = "pandas-stubs", marker = "extra == 'types'" },
     { name = "parse" },
