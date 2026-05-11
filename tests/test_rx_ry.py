@@ -302,17 +302,25 @@ def test_diff_reduction_isolates_traces() -> None:
         np.float64,
         shape=st.tuples(st.integers(2, 10), st.just(2)),
         elements=st.floats(-1e5, 1e5),
-    )
+    ),
+    pair_indices=st.lists(
+        st.tuples(st.integers(0, 9), st.integers(0, 9)),
+        min_size=20,
+        max_size=20,
+    ),
 )
-def test_trial_strike_vector_invariants(points: np.ndarray) -> None:
+def test_trial_strike_vector_invariants(
+    points: np.ndarray, pair_indices: list[tuple[int, int]]
+) -> None:
     assume(len(np.unique(points, axis=0)) == len(points))
     # Antipodal distance should be max distance in set
     a, b = gc2_distances.trial_strike_vector(points)
     dist_sq = np.sum((a - b) ** 2)
 
-    # Check against a few random pairs
-    for _ in range(20):
-        p1, p2 = points[np.random.choice(len(points), 2)]
+    # Check against a few Hypothesis-generated pairs
+    for i, j in pair_indices:
+        p1 = points[i % len(points)]
+        p2 = points[j % len(points)]
         assert dist_sq >= np.sum((p1 - p2) ** 2) - 1e-7
 
     # Invariant: Canonical orientation (NZTM x-axis/Easting is index 1)
