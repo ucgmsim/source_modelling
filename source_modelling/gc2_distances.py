@@ -140,7 +140,7 @@ def segment_weights(
 
 
 @njit([float64[:](float64[:], uint64[:]), float64[:](float64[:], int64[:])], cache=True)
-def cumulative_reduction(data: np.ndarray, indices: np.ndarray) -> np.ndarray:
+def cumulative_reduction(data: np.ndarray, indices: np.ndarray) -> np.ndarray: # pragma: no cover
     """Calculate sum between indices.
 
     Parameters
@@ -173,7 +173,7 @@ def cumulative_reduction(data: np.ndarray, indices: np.ndarray) -> np.ndarray:
     [float64[:, :](float64[:, :], uint64[:]), float64[:, :](float64[:, :], int64[:])],
     cache=True,
 )
-def diff_reduction(points: np.ndarray, indices: np.ndarray) -> np.ndarray:
+def diff_reduction(points: np.ndarray, indices: np.ndarray) -> np.ndarray: # pragma: no cover
     """Calculate a diff reduction points between the given indices.
 
     Parameters
