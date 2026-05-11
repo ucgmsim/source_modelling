@@ -114,7 +114,7 @@ class Point:
         )
 
     def fault_coordinates_to_wgs_depth_coordinates(
-        self, fault_coordinates: np.ndarray
+        self, _fault_coordinates: np.ndarray
     ) -> np.ndarray:
         """Convert fault-local coordinates to global (lat, lon, depth) coordinates.
 
@@ -1042,7 +1042,7 @@ class Fault:
 
         # This relation can now be used to identify if the list of planes given is a line.
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation,  # ty: ignore[invalid-argument-type]
+            points_into_relation,  # type: ignore
             create_using=nx.DiGraph,
         )
         try:
@@ -1226,7 +1226,7 @@ class Fault:
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(  # ty: ignore[invalid-return-type]
+        return shapely.normalize(  # type: ignore
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 
