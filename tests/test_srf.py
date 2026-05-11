@@ -408,7 +408,7 @@ def test_planes_nstk_1_ndip_gt_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # ty: ignore[invalid-argument-type]
+        slipt1_array=None,  # type: ignore
     )
 
     planes = mock_srf.planes
@@ -451,7 +451,7 @@ def test_planes_nstk_1_ndip_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # ty: ignore[invalid-argument-type]
+        slipt1_array=None,  # type: ignore
     )
 
     planes = mock_srf.planes
@@ -501,7 +501,7 @@ def test_hdf5_read_write():
             original_srf.slipt1_array.indptr, reconstructed_srf.slipt1_array.indptr
         ), "slipt1_array indptr mismatch"
 
-        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # ty: ignore[unresolved-attribute]
+        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # type: ignore
             "slipt1_array content mismatch"
         )
 
@@ -520,14 +520,10 @@ def test_sw4_hdf5_read_write(tmp_path: Path):
 
         plane = h5file.attrs["PLANE"]
         assert plane.shape == (len(original_srf.header),)
-        assert (
-            srf.SW4_PLANE_DTYPE.names is not None
-        )
+        assert srf.SW4_PLANE_DTYPE.names is not None
         for idx, row in original_srf.header.iterrows():
             for field in srf.SW4_PLANE_DTYPE.names:
-                assert plane[idx][field] == pytest.approx(
-                    row[field.lower()], abs=1e-3
-                )
+                assert plane[idx][field] == pytest.approx(row[field.lower()], abs=1e-3)
 
         points = h5file["POINTS"]
         assert points.shape == (len(original_srf.points),)

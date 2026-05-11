@@ -304,7 +304,9 @@ def test_fault_to_gsf(fault: Fault):
             assert shapely.contains(
                 fault.geometry,
                 shapely.Point(
-                    coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].to_numpy())
+                    coordinates.wgs_depth_to_nztm(
+                        point[["lat", "lon", "dep"]].to_numpy()
+                    )
                 ),
             )
 

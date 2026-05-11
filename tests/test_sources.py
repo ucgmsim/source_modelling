@@ -14,7 +14,7 @@ from hypothesis.extra import numpy as nst
 
 from qcore import coordinates, geo
 from source_modelling import sources
-from source_modelling.sources import Fault, Plane
+from source_modelling.sources import Fault, Plane, multi_fault_rx_ry_distance
 
 DATA_PATH = Path("tests") / "data"
 np.random.seed(0)
@@ -1360,3 +1360,74 @@ def test_closest_points_beneath(
         assert a_bounds.max_dip == 1
         assert float(b_bounds.min_dip) == pytest.approx(expected_dip_b)
         assert b_bounds.max_dip == 1
+
+
+def test_single_fault_rx_ry():
+    # Deliberately testing the rx/ry calculations with a simple edge case
+    # because the mathematics is tested rigorously in the test_rx_ry.py module
+    trace = np.array([[-43.0, 172.0], [-43.1, 172.0], [-43.2, 172.0]])
+    fault_a = Fault.from_trace_points(
+        trace,
+        dtop=0,
+        dbottom=10,
+        dip=90,
+        dip_dir_nztm=0.0,
+    )
+    rx, ry = fault_a.rx_ry_distance(np.array([-43.0, 172.0]))
+
+    assert rx.ndim == 0
+    assert rx.item() == pytest.approx(0)
+    assert ry.item() == pytest.approx(0)
+
+    rx1 = fault_a.rx_distance(np.array([-43.0, 172.0]))
+    ry1 = fault_a.ry_distance(np.array([-43.0, 172.0]))
+    assert rx == rx1
+    assert ry == ry1
+
+
+def test_plane_rx_ry():
+    plane_a = Plane.from_centroid_strike_dip(
+        np.array([-43.0, 172.0]),
+        dip=90,
+        length=1.0,
+        width=1.0,
+        dtop=0.0,
+        dbottom=1.0,
+        strike=0.0,
+    )
+    rx, ry = plane_a.rx_ry_distance(np.array([-43.0, 172.0]))
+
+    assert rx.ndim == 0
+    assert rx.item() == pytest.approx(0)
+    # Point roughly half way down the trace
+    assert ry.item() == pytest.approx(500.0)
+
+    rx1 = plane_a.rx_distance(np.array([-43.0, 172.0]))
+    ry1 = plane_a.ry_distance(np.array([-43.0, 172.0]))
+    assert rx == rx1
+    assert ry == ry1
+
+
+def test_multi_fault_rx_ry():
+    trace = np.array([[-43.0, 172.0], [-43.1, 172.0], [-43.2, 172.0]])
+    fault_a = Fault.from_trace_points(
+        trace,
+        dtop=0,
+        dbottom=10,
+        dip=90,
+        dip_dir_nztm=0.0,
+    )
+
+    trace = np.array([[-44.0, 172.0], [-44.1, 172.0], [-44.2, 172.0]])
+    fault_b = Fault.from_trace_points(
+        trace,
+        dtop=0,
+        dbottom=10,
+        dip=90,
+        dip_dir_nztm=0.0,
+    )
+
+    rx, ry = multi_fault_rx_ry_distance([fault_a, fault_b], np.array([-43.0, 172.0]))
+
+    assert rx == pytest.approx(0.0)
+    assert ry == pytest.approx(0.0)

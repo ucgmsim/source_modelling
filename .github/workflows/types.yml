@@ -14,6 +14,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install GMT
+        run: sudo apt-get update && sudo apt-get install -y gmt libgmt-dev ghostscript gdal-bin libgdal-dev
+
       - name: Setup Python
         uses: actions/setup-python@v5
 
@@ -22,8 +25,5 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install project with types
-        run: uv sync --all-extras --dev
-
       - name: Run type checking with ty
-        run: uv run ty check --exclude source_modelling/ccldpy.py --exclude setup.py
+        run: uv run --all-groups ty check --exclude source_modelling/ccldpy.py --exclude setup.py

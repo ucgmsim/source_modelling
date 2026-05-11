@@ -23,6 +23,7 @@ import scipy as sp
 import shapely
 
 from qcore import coordinates, geo, grid
+from source_modelling import gc2_distances
 
 _KM_TO_M = 1000
 
@@ -606,13 +607,14 @@ class Plane:
         if (
             dtop is not None
             and dbottom is not None
-            and not np.isclose(dbottom - dtop, np.sin(dip) * width)
+            and not np.isclose(dbottom - dtop, np.sin(np.radians(dip)) * width)
         ):
             raise ValueError(
                 "Top and bottom depths are not consistent with dip and width parameters."
             )
         elif (
-            dtop is not None
+            len(centroid) == 3
+            and dtop is not None
             and dbottom is not None
             and not np.isclose(centroid[2], (dtop + dbottom) / 2)
         ):
@@ -845,6 +847,58 @@ class Plane:
             shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
 
+    def rx_ry_distance(self, point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate the rx and ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
+        trace = self.bounds[:2, :2]
+        point = coordinates.wgs_depth_to_nztm(point)[..., :2]
+        rx, ry = gc2_distances.segment_rx_ry(trace, point)
+        return rx.squeeze(), ry.squeeze()
+
+    def rx_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the rx distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
+        return self.rx_ry_distance(point)[0]
+
+    def ry_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+        return self.rx_ry_distance(point)[1]
+
 
 @dataclasses.dataclass
 class Fault:
@@ -988,7 +1042,7 @@ class Fault:
 
         # This relation can now be used to identify if the list of planes given is a line.
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation,  # ty: ignore[invalid-argument-type]
+            points_into_relation,  # type: ignore
             create_using=nx.DiGraph,
         )
         try:
@@ -1172,7 +1226,7 @@ class Fault:
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(  # ty: ignore[invalid-return-type]
+        return shapely.normalize(  # type: ignore
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 
@@ -1325,6 +1379,92 @@ class Fault:
         return self.geometry.distance(
             shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
+
+    def rx_ry_distance(self, point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate the rx and ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+        trace = self.trace[:, :2].reshape((-1, 2, 2))
+        point = coordinates.wgs_depth_to_nztm(point)[..., :2]
+
+        rx, ry = gc2_distances.segment_rx_ry(trace, point)
+        p_start = trace[:, 0, :]
+        p_end = trace[:, 1, :]
+        trace_lengths = np.linalg.norm(p_end - p_start, axis=-1)
+        origins = np.cumulative_sum(trace_lengths[:-1], include_initial=True)
+        t, u = gc2_distances.generalised_t_u_coordinates(trace_lengths, rx, ry, origins)
+        return t.squeeze(), u.squeeze()
+
+    def rx_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the rx distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
+        return self.rx_ry_distance(point)[0]
+
+    def ry_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+        return self.rx_ry_distance(point)[1]
+
+
+def multi_fault_rx_ry_distance(
+    faults: list[Fault | Plane], point: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate the rx-ry distance between a set of (possibly disconnected) faults and a set of points.
+
+    Parameters
+    ----------
+    faults : list[Fault | Plane]
+        Faults to calculate distances from.
+    point : np.ndarray
+        Points to calculate to, has shape (n, 2).
+
+    Returns
+    -------
+    rx : np.ndarray
+        The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+    ry : np.ndarray
+        The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+    """
+    point = coordinates.wgs_depth_to_nztm(point[..., :2])
+    traces = [fault.trace[:, :2] for fault in faults]
+    trace_points = np.concatenate(traces, axis=0)
+    trace_indices = np.cumulative_sum(
+        [len(trace) for trace in traces], include_initial=True
+    )
+    rx, ry = gc2_distances.segment_rx_ry(trace_points, point)
+    return gc2_distances.multi_trace_rx_ry(trace_points, trace_indices, rx, ry)
 
 
 IsSource = Plane | Fault | Point

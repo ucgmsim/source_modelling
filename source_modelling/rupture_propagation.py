@@ -59,7 +59,7 @@ def spanning_tree_with_probabilities(
     trees = []
     probabilities = []
 
-    for tree in mst.SpanningTreeIterator(graph):  # ty: ignore[invalid-argument-type]
+    for tree in mst.SpanningTreeIterator(graph):  # type: ignore
         p_tree = 1.0
         for u, v in graph.edges:
             if tree.has_edge(u, v):
@@ -73,12 +73,16 @@ def spanning_tree_with_probabilities(
 
 
 @overload
-def sampled_spanning_tree(graph: nx.Graph, n_samples: Literal[1] = ...) -> nx.Graph:  # numpydoc ignore=GL08
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: Literal[1] = ...
+) -> nx.Graph:  # numpydoc ignore=GL08
     ...
 
 
 @overload
-def sampled_spanning_tree(graph: nx.Graph, n_samples: int) -> list[nx.Graph] | nx.Graph:  # numpydoc ignore=GL08
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: int
+) -> list[nx.Graph] | nx.Graph:  # numpydoc ignore=GL08
     ...
 
 
@@ -219,7 +223,7 @@ def select_top_spanning_trees(
     cumulative_tree_weight = 0.0
     spanning_trees = []
 
-    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):  # ty: ignore[invalid-argument-type]
+    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):  # type: ignore
         spanning_trees.append(spanning_tree)
         tree_log_probability = sum(
             spanning_tree[node_u][node_v]["weight"]
