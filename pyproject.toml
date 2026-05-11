@@ -14,7 +14,7 @@ dependencies = [
   "h5py",
   "networkx",
   "numba>=0.65.1",
-  "numpy",
+  "numpy>=2.0",
   "pandas",
   "parse",
   "qcore-utils",
