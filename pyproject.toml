@@ -27,6 +27,7 @@ dependencies = [
 test = [
   "pytest",
   "pytest-cov",
+  "coverage[toml]",
   "hypothesis[pandas, numpy]",
   "hypothesis-networkx",
 ]
@@ -40,14 +41,6 @@ types = [
 ]
 fiona = [
   "fiona"
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    # Dataclasses tend to have type definitions that pollute coverage
-    # statistics, so this excludes them from the reports.
-    "pragma: no cover"
-    "@dataclasses.dataclass"
 ]
 
 [tool.setuptools.package-data]
