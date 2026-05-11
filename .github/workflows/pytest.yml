@@ -25,30 +25,6 @@ jobs:
         run: |
           uv run --all-groups pytest --cov=source_modelling --cov-report=html tests
 
-      - name: Upload coverage data
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-data
-          path: .coverage
-          include-hidden-files: true
-          if-no-files-found: ignore
-
-  coverage:
-    needs: test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out the repo
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-
-      - name: Download coverage data
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-data
-
       - name: Combine coverage and fail it it’s under 100 %
         run: |
           uv run --all-groups python -m coverage html --skip-covered --skip-empty
