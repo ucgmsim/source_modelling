@@ -114,7 +114,7 @@ class Point:
         )
 
     def fault_coordinates_to_wgs_depth_coordinates(
-        self, _fault_coordinates: np.ndarray
+        self, fault_coordinates: np.ndarray
     ) -> np.ndarray:
         """Convert fault-local coordinates to global (lat, lon, depth) coordinates.
 
