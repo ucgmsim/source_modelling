@@ -23,7 +23,7 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run --all-extras pytest --cov=source_modelling --cov-report=html tests
+          uv run --all-groups pytest --cov=source_modelling --cov-report=html tests
 
       - name: Upload coverage data
         uses: actions/upload-artifact@v4
@@ -51,13 +51,13 @@ jobs:
 
       - name: Combine coverage and fail it it’s under 100 %
         run: |
-          uv run --all-extras python -m coverage html --skip-covered --skip-empty
+          uv run --all-groups python -m coverage html --skip-covered --skip-empty
 
           # Report and write to summary.
-          uv run --all-extras python -m coverage report | sed 's/^/    /' >> $GITHUB_STEP_SUMMARY
+          uv run --all-groups python -m coverage report | sed 's/^/    /' >> $GITHUB_STEP_SUMMARY
 
           # Report again and fail if under 95%.
-          uv run --all-extras python -Im coverage report --fail-under=95
+          uv run --all-groups python -Im coverage report --fail-under=95
 
       - name: Upload HTML report if check failed
         uses: actions/upload-artifact@v4

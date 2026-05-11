@@ -15,4 +15,4 @@ jobs:
       - name: Install GMT
         run: sudo apt-get update && sudo apt-get install -y gmt libgmt-dev ghostscript gdal-bin libgdal-dev
 
-      - run: uv run --all-extras deptry .
+      - run: uv run --all-groups deptry .
