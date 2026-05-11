@@ -51,7 +51,7 @@ def test_rx_ry(bounds: np.ndarray, t: float, u: float) -> None:
 
 
 @given(
-    lengths=st.floats(min_value=0.1, max_value=1000.0),
+    length=st.floats(min_value=0.1, max_value=1000.0),
     # Set rx != 0 to avoid the edge case where equation 5 applies.
     rx=st.one_of(
         st.floats(min_value=0.1, max_value=500.0),
@@ -78,7 +78,7 @@ def test_segment_weights_integral_match(length: float, rx: float, ry: float) -> 
 
 
 @given(
-    lengths=st.floats(min_value=0.1, max_value=1000.0),
+    length=st.floats(min_value=0.1, max_value=1000.0),
     ry=st.floats(min_value=-500.0, max_value=1500.0),
 )
 def test_segment_weights_at_zero_off_segment(length: float, ry: float) -> None:
