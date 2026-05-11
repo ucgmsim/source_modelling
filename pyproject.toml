@@ -42,6 +42,7 @@ types = [
 fiona = [
   "fiona"
 ]
+dev = ["ruff", "deptry", "ty", "numpydoc"]
 
 [tool.setuptools.package-data]
 source_modelling = ['NZ_CFM/*']
