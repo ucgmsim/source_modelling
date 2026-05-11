@@ -1364,7 +1364,7 @@ def test_closest_points_beneath(
 
 def test_single_fault_rx_ry():
     # Deliberately testing the rx/ry calculations with a simple edge case
-    # because the mathematics is tested rigoursly in the test_rx_ry.py module
+    # because the mathematics is tested rigorously in the test_rx_ry.py module
     trace = np.array([[-43.0, 172.0], [-43.1, 172.0], [-43.2, 172.0]])
     fault_a = Fault.from_trace_points(
         trace,
