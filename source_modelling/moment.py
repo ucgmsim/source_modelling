@@ -1,6 +1,7 @@
 """Utility functions for working with moment rate and moment."""
 
 import itertools
+import typing
 
 import numpy as np
 import numpy.typing as npt
@@ -10,7 +11,11 @@ from scipy.cluster.hierarchy import DisjointSet
 from scipy.sparse import csr_array
 
 from source_modelling import rupture_propagation, sources
+from source_modelling.magnitude_scaling import BoldM, Mw
 from source_modelling.sources import Fault, Plane
+
+# Offset between the BoldM and Mw magnitude conventions: BoldM = Mw + BOLDM_MW_OFFSET.
+BOLDM_MW_OFFSET = 0.0333
 
 
 def find_connected_faults(
@@ -120,7 +125,13 @@ def moment_rate_over_time_from_slip(
     return moment_rate_df
 
 
-def moment_to_magnitude(moment: float) -> float:
+@typing.overload
+def moment_to_magnitude(
+    moment: float, bold_m: typing.Literal[False] = False
+) -> Mw: ...
+@typing.overload
+def moment_to_magnitude(moment: float, bold_m: typing.Literal[True]) -> BoldM: ...
+def moment_to_magnitude(moment: float, bold_m: bool = False) -> Mw | BoldM:
     """Convert moment to magnitude.
 
     NOTE: the qcore mag_scaling module does not have this expression.
@@ -129,29 +140,46 @@ def moment_to_magnitude(moment: float) -> float:
     ----------
     moment : float
         The moment of the rupture in Nm.
+    bold_m : bool, optional
+        If True, return the magnitude in BoldM convention
+        (`BoldM = Mw + BOLDM_MW_OFFSET`). Default is False (Mw).
 
     Returns
     -------
-    float
-        Rupture magnitude
+    Mw | BoldM
+        Rupture magnitude in the requested convention.
     """
-    return 2 / 3 * np.log10(moment) - 6.03333
+    mw = 2 / 3 * np.log10(moment) - 6.03333
+    if bold_m:
+        return mw + BOLDM_MW_OFFSET
+    return mw
 
 
-def magnitude_to_moment(magnitude: float) -> float:
+@typing.overload
+def magnitude_to_moment(
+    magnitude: Mw, bold_m: typing.Literal[False] = False
+) -> float: ...
+@typing.overload
+def magnitude_to_moment(magnitude: BoldM, bold_m: typing.Literal[True]) -> float: ...
+def magnitude_to_moment(magnitude: Mw | BoldM, bold_m: bool = False) -> float:
     """Convert magnitude to moment.
 
     Parameters
     ----------
-    magnitude : float
-        The magnitude of the rupture.
+    magnitude : Mw | BoldM
+        The magnitude of the rupture, in the convention indicated by `bold_m`.
+    bold_m : bool, optional
+        If True, `magnitude` is interpreted as BoldM and converted to Mw
+        (`Mw = BoldM - BOLDM_MW_OFFSET`) before computing the moment.
+        Default is False (input is Mw).
 
     Returns
     -------
     float
         Rupture moment in Nm.
     """
-    return 10 ** ((magnitude + 6.03333) * 3 / 2)
+    mw = magnitude - BOLDM_MW_OFFSET if bold_m else magnitude
+    return 10 ** ((mw + 6.03333) * 3 / 2)
 
 
 def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFrame:
