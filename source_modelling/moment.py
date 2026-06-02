@@ -17,7 +17,7 @@ from source_modelling.sources import Fault, Plane
 # Moment magnitude scale coefficients for seismic moment in Nm, from
 # equations 4 and 7 of Hanks and Kanamori (1979). See the [Hanks1979] reference
 # in the `moment_to_magnitude` docstring for the full citation.
-EQUATION_4_COEFFICIENT = 6.0666  # `Mw` convention
+EQUATION_4_COEFFICIENT = 6.0667  # `Mw` convention
 EQUATION_7_COEFFICIENT = 6.0333  # `BoldM` convention
 
 
