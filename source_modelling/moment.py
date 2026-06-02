@@ -14,8 +14,11 @@ from source_modelling import rupture_propagation, sources
 from source_modelling.magnitude_scaling import BoldM, Mw
 from source_modelling.sources import Fault, Plane
 
-# Offset between the BoldM and Mw magnitude conventions: BoldM = Mw + BOLDM_MW_OFFSET.
-BOLDM_MW_OFFSET = 0.0333
+# Moment magnitude scale coefficients for seismic moment in Nm, from
+# equations 4 and 7 of Hanks and Kanamori (1979). See the [Hanks1979] reference
+# in the `moment_to_magnitude` docstring for the full citation.
+EQUATION_4_COEFFICIENT = 6.0666  # `Mw` convention
+EQUATION_7_COEFFICIENT = 6.0333  # `BoldM` convention
 
 
 def find_connected_faults(
@@ -126,12 +129,10 @@ def moment_rate_over_time_from_slip(
 
 
 @typing.overload
-def moment_to_magnitude(
-    moment: float, bold_m: typing.Literal[False] = False
-) -> Mw: ...
-@typing.overload
 def moment_to_magnitude(moment: float, bold_m: typing.Literal[True]) -> BoldM: ...
-def moment_to_magnitude(moment: float, bold_m: bool = False) -> Mw | BoldM:
+@typing.overload
+def moment_to_magnitude(moment: float, bold_m: typing.Literal[False] = False) -> Mw: ...
+def moment_to_magnitude(moment: float, bold_m: bool = True) -> BoldM | Mw:
     """Convert moment to magnitude.
 
     NOTE: the qcore mag_scaling module does not have this expression.
@@ -141,45 +142,58 @@ def moment_to_magnitude(moment: float, bold_m: bool = False) -> Mw | BoldM:
     moment : float
         The moment of the rupture in Nm.
     bold_m : bool, optional
-        If True, return the magnitude in BoldM convention
-        (`BoldM = Mw + BOLDM_MW_OFFSET`). Default is False (Mw).
+        Set whether Equation 4 or 7 from [Hanks1979]_ is used for the conversion.
+        If True, use Equation 7 (`BoldM` convention).
+        If False, use Equation 4 (`Mw` convention).
 
     Returns
     -------
-    Mw | BoldM
-        Rupture magnitude in the requested convention.
+    BoldM | Mw
+        Rupture moment magnitude in the convention specified by `bold_m`.
+
+    References
+    ----------
+    .. [Hanks1979] Hanks, T. C., and H. Kanamori (1979),
+           "A moment magnitude scale",
+           J. Geophys. Res., 84(B5), 2348-2350,
+           doi:10.1029/JB084iB05p02348.
     """
-    mw = 2 / 3 * np.log10(moment) - 6.03333
+
     if bold_m:
-        return BoldM(mw + BOLDM_MW_OFFSET)
-    return Mw(mw)
+        return BoldM(2 / 3 * np.log10(moment) - EQUATION_7_COEFFICIENT)
+
+    if not bold_m:
+        return Mw(2 / 3 * np.log10(moment) - EQUATION_4_COEFFICIENT)
 
 
+@typing.overload
+def magnitude_to_moment(magnitude: BoldM, bold_m: typing.Literal[True]) -> float: ...
 @typing.overload
 def magnitude_to_moment(
     magnitude: Mw, bold_m: typing.Literal[False] = False
 ) -> float: ...
-@typing.overload
-def magnitude_to_moment(magnitude: BoldM, bold_m: typing.Literal[True]) -> float: ...
-def magnitude_to_moment(magnitude: Mw | BoldM, bold_m: bool = False) -> float:
+def magnitude_to_moment(magnitude: BoldM | Mw, bold_m: bool = True) -> float:
     """Convert magnitude to moment.
 
     Parameters
     ----------
-    magnitude : Mw | BoldM
+    magnitude : BoldM | Mw
         The magnitude of the rupture, in the convention indicated by `bold_m`.
     bold_m : bool, optional
-        If True, `magnitude` is interpreted as BoldM and converted to Mw
-        (`Mw = BoldM - BOLDM_MW_OFFSET`) before computing the moment.
-        Default is False (input is Mw).
+        Set whether Equation 4 or 7 from [Hanks1979]_ is used for the conversion.
+        If True, use Equation 7 (`BoldM` convention).
+        If False, use Equation 4 (`Mw` convention).
 
     Returns
     -------
     float
         Rupture moment in Nm.
     """
-    mw = magnitude - BOLDM_MW_OFFSET if bold_m else magnitude
-    return 10 ** ((mw + 6.03333) * 3 / 2)
+
+    if bold_m:
+        return 10 ** ((magnitude + EQUATION_7_COEFFICIENT) * 3 / 2)
+    if not bold_m:
+        return 10 ** ((magnitude + EQUATION_4_COEFFICIENT) * 3 / 2)
 
 
 def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFrame:
