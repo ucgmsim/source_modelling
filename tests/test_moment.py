@@ -9,6 +9,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
 from source_modelling import moment
+from source_modelling.magnitude_scaling import Mw
 from source_modelling.sources import Fault, Plane
 
 
@@ -190,7 +191,7 @@ def test_point_source_slip_bad_dataframe():
         }
     )
 
-    moment_newton_metre = moment.magnitude_to_moment(5.0)
+    moment_newton_metre = moment.magnitude_to_moment(Mw(5.0))
 
     # Should raise KeyError when trying to access missing columns
     with pytest.raises(KeyError):

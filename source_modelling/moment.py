@@ -1,6 +1,7 @@
 """Utility functions for working with moment rate and moment."""
 
 import itertools
+import typing
 
 import numpy as np
 import numpy.typing as npt
@@ -10,7 +11,14 @@ from scipy.cluster.hierarchy import DisjointSet
 from scipy.sparse import csr_array
 
 from source_modelling import rupture_propagation, sources
+from source_modelling.magnitude_scaling import BoldM, Mw
 from source_modelling.sources import Fault, Plane
+
+# Moment magnitude scale coefficients for seismic moment in Nm, from
+# equations 4 and 7 of Hanks and Kanamori (1979). See the [Hanks1979] reference
+# in the `moment_to_magnitude` docstring for the full citation.
+EQUATION_4_COEFFICIENT = 6.0667  # `Mw` convention
+EQUATION_7_COEFFICIENT = 6.0333  # `BoldM` convention
 
 
 def find_connected_faults(
@@ -120,7 +128,15 @@ def moment_rate_over_time_from_slip(
     return moment_rate_df
 
 
-def moment_to_magnitude(moment: float) -> float:
+@typing.overload
+def moment_to_magnitude(
+    moment: float, bold_m: typing.Literal[True]
+) -> BoldM: ...  # numpydoc ignore=GL08
+@typing.overload
+def moment_to_magnitude(
+    moment: float, bold_m: typing.Literal[False] = False
+) -> Mw: ...  # numpydoc ignore=GL08
+def moment_to_magnitude(moment: float, bold_m: bool = True) -> BoldM | Mw:
     """Convert moment to magnitude.
 
     NOTE: the qcore mag_scaling module does not have this expression.
@@ -129,29 +145,61 @@ def moment_to_magnitude(moment: float) -> float:
     ----------
     moment : float
         The moment of the rupture in Nm.
+    bold_m : bool, optional
+        Set whether Equation 4 or 7 from [Hanks1979]_ is used for the conversion.
+        If True, use Equation 7 (`BoldM` convention).
+        If False, use Equation 4 (`Mw` convention).
 
     Returns
     -------
-    float
-        Rupture magnitude
+    BoldM | Mw
+        Rupture moment magnitude in the convention specified by `bold_m`.
+
+    References
+    ----------
+    .. [Hanks1979] Hanks, T. C., and H. Kanamori (1979),
+           "A moment magnitude scale",
+           J. Geophys. Res., 84(B5), 2348-2350,
+           doi:10.1029/JB084iB05p02348.
     """
-    return 2 / 3 * np.log10(moment) - 6.03333
+
+    if bold_m:
+        return BoldM(2 / 3 * np.log10(moment) - EQUATION_7_COEFFICIENT)
+
+    else:
+        return Mw(2 / 3 * np.log10(moment) - EQUATION_4_COEFFICIENT)
 
 
-def magnitude_to_moment(magnitude: float) -> float:
+@typing.overload
+def magnitude_to_moment(
+    magnitude: BoldM, bold_m: typing.Literal[True]
+) -> float: ...  # numpydoc ignore=GL08
+@typing.overload
+def magnitude_to_moment(
+    magnitude: Mw, bold_m: typing.Literal[False] = False
+) -> float: ...  # numpydoc ignore=GL08
+def magnitude_to_moment(magnitude: BoldM | Mw, bold_m: bool = True) -> float:
     """Convert magnitude to moment.
 
     Parameters
     ----------
-    magnitude : float
-        The magnitude of the rupture.
+    magnitude : BoldM | Mw
+        The magnitude of the rupture, in the convention indicated by `bold_m`.
+    bold_m : bool, optional
+        Set whether Equation 4 or 7 from [Hanks1979]_ is used for the conversion.
+        If True, use Equation 7 (`BoldM` convention).
+        If False, use Equation 4 (`Mw` convention).
 
     Returns
     -------
     float
         Rupture moment in Nm.
     """
-    return 10 ** ((magnitude + 6.03333) * 3 / 2)
+
+    if bold_m:
+        return 10 ** ((magnitude + EQUATION_7_COEFFICIENT) * 3 / 2)
+    else:
+        return 10 ** ((magnitude + EQUATION_4_COEFFICIENT) * 3 / 2)
 
 
 def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFrame:

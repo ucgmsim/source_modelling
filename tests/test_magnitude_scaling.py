@@ -12,6 +12,7 @@ import scipy as sp
 from hypothesis import assume, given
 
 from source_modelling import magnitude_scaling
+from source_modelling.magnitude_scaling import BoldM, Mw
 
 MAGNITUDE_TO_AREA = {
     magnitude_scaling.ScalingRelation.LEONARD2014: magnitude_scaling.leonard_magnitude_to_area,
@@ -116,7 +117,7 @@ def test_inversion(
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
         area_to_mag = AREA_TO_MAGNITUDE[scaling_relation]
-    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)  # ty: ignore[missing-argument]
+    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)  # ty: ignore[missing-argument, invalid-argument-type]
 
 
 @pytest.mark.parametrize(
@@ -149,7 +150,7 @@ def test_inversion(
         (9.0, 180.0, 102329.29922807537),
     ],
 )
-def test_leonard_area(mw: float, rake: float, expected_area: float):
+def test_leonard_area(mw: Mw, rake: float, expected_area: float):
     """Test the Leonard 2014 area calculation against values from the old implementation in qcore.
 
     NOTE: this combined with the inversion test for leonard ensure that the area calculation is compatible with the old implementation as well."""
@@ -213,7 +214,7 @@ def test_leonard_area(mw: float, rake: float, expected_area: float):
         (7.8, 5211.947111050806),
     ],
 )
-def test_strasser_slab_expected_area(mw: float, expected_area: float):
+def test_strasser_slab_expected_area(mw: BoldM, expected_area: float):
     """Test the Strasser 2010 slab area calculation against values from the old implementation in qcore."""
     assert magnitude_scaling.strasser_slab_magnitude_to_area(mw) == pytest.approx(
         expected_area
@@ -221,8 +222,8 @@ def test_strasser_slab_expected_area(mw: float, expected_area: float):
 
 
 @given(st.floats(min_value=5.9, max_value=7.7))
-def test_strasser_monotonicity(mag1: float):
-    mag2 = mag1 + 0.1  # Slightly higher magnitude
+def test_strasser_monotonicity(mag1: BoldM):
+    mag2 = BoldM(mag1 + 0.1)  # Slightly higher magnitude
     assert magnitude_scaling.strasser_slab_magnitude_to_area(
         mag2
     ) > magnitude_scaling.strasser_slab_magnitude_to_area(mag1)
@@ -245,7 +246,7 @@ def test_monotonicity_mag_to_area(
         mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)  # ty: ignore[unknown-argument, invalid-argument-type]
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
-    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)  # ty: ignore[missing-argument]
+    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)  # ty: ignore[missing-argument, invalid-argument-type]
 
 
 class RandomFunction(Protocol):
@@ -260,8 +261,8 @@ class RandomFunction(Protocol):
         itertools.product(
             [magnitude_scaling.contreras_interface_area_to_magnitude],
             np.linspace(
-                magnitude_scaling.contreras_interface_magnitude_to_area(6.0),
-                magnitude_scaling.contreras_interface_magnitude_to_area(9.0),
+                magnitude_scaling.contreras_interface_magnitude_to_area(BoldM(6.0)),
+                magnitude_scaling.contreras_interface_magnitude_to_area(BoldM(9.0)),
                 10,
             ),
         )
@@ -485,7 +486,7 @@ def test_area_preservation_lw(
 )
 def test_area_preservation_lw_leonard(
     rake: float,
-    magnitude: float,
+    magnitude: Mw,
 ):
     """Test that the area is preserved when converting between area and length/width."""
     area = magnitude_scaling.leonard_magnitude_to_area(magnitude, rake)
@@ -534,7 +535,7 @@ def test_magnitude_to_length_width_calls_correct_function(
     func_name: str,
     rake_required: bool,
 ):
-    magnitude = 7.0
+    magnitude = Mw(7.0)
     rake = 90.0 if rake_required else None
     random = True
 
@@ -573,7 +574,7 @@ def test_magnitude_to_area_calls_correct_function(
     func_name: str,
     rake_required: bool,
 ):
-    magnitude = 7.0
+    magnitude = Mw(7.0)
     rake = 90.0 if rake_required else None
     random = True
 
