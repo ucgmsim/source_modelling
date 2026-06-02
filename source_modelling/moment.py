@@ -192,7 +192,7 @@ def magnitude_to_moment(magnitude: BoldM | Mw, bold_m: bool = True) -> float:
 
     if bold_m:
         return 10 ** ((magnitude + EQUATION_7_COEFFICIENT) * 3 / 2)
-    if not bold_m:
+    else:
         return 10 ** ((magnitude + EQUATION_4_COEFFICIENT) * 3 / 2)
 
 
