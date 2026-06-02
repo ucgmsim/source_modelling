@@ -129,9 +129,13 @@ def moment_rate_over_time_from_slip(
 
 
 @typing.overload
-def moment_to_magnitude(moment: float, bold_m: typing.Literal[True]) -> BoldM: ...  # numpydoc ignore=GL08
+def moment_to_magnitude(
+    moment: float, bold_m: typing.Literal[True]
+) -> BoldM: ...  # numpydoc ignore=GL08
 @typing.overload
-def moment_to_magnitude(moment: float, bold_m: typing.Literal[False] = False) -> Mw: ...  # numpydoc ignore=GL08
+def moment_to_magnitude(
+    moment: float, bold_m: typing.Literal[False] = False
+) -> Mw: ...  # numpydoc ignore=GL08
 def moment_to_magnitude(moment: float, bold_m: bool = True) -> BoldM | Mw:
     """Convert moment to magnitude.
 
@@ -162,12 +166,14 @@ def moment_to_magnitude(moment: float, bold_m: bool = True) -> BoldM | Mw:
     if bold_m:
         return BoldM(2 / 3 * np.log10(moment) - EQUATION_7_COEFFICIENT)
 
-    if not bold_m:
+    else:
         return Mw(2 / 3 * np.log10(moment) - EQUATION_4_COEFFICIENT)
 
 
 @typing.overload
-def magnitude_to_moment(magnitude: BoldM, bold_m: typing.Literal[True]) -> float: ...  # numpydoc ignore=GL08
+def magnitude_to_moment(
+    magnitude: BoldM, bold_m: typing.Literal[True]
+) -> float: ...  # numpydoc ignore=GL08
 @typing.overload
 def magnitude_to_moment(
     magnitude: Mw, bold_m: typing.Literal[False] = False
@@ -192,7 +198,7 @@ def magnitude_to_moment(magnitude: BoldM | Mw, bold_m: bool = True) -> float:
 
     if bold_m:
         return 10 ** ((magnitude + EQUATION_7_COEFFICIENT) * 3 / 2)
-    if not bold_m:
+    else:
         return 10 ** ((magnitude + EQUATION_4_COEFFICIENT) * 3 / 2)
 
 
