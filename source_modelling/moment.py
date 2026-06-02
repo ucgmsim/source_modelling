@@ -151,8 +151,8 @@ def moment_to_magnitude(moment: float, bold_m: bool = False) -> Mw | BoldM:
     """
     mw = 2 / 3 * np.log10(moment) - 6.03333
     if bold_m:
-        return mw + BOLDM_MW_OFFSET
-    return mw
+        return BoldM(mw + BOLDM_MW_OFFSET)
+    return Mw(mw)
 
 
 @typing.overload
