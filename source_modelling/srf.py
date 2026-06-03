@@ -308,7 +308,7 @@ class SrfFile:
         """
 
         with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
-            srf_file_handle.write("1.0\n")
+            srf_file_handle.write(f"{self.version}\n")
             srf_file_handle.write(f"PLANE {len(self.header)}\n")
             # Cannot use self.header.to_string because the newline separating headers is significant!
             # This is ok because the number of headers is typically very small (< 100)

@@ -598,3 +598,15 @@ def test_read_srf_v1_has_no_vs_den():
     assert "vs" not in christchurch_srf.points
     assert "den" not in christchurch_srf.points
     assert christchurch_srf.points.shape[1] == 11
+
+
+def test_write_read_srf_v2(tmp_path: Path):
+    """Check that writing a version 2.0 SRF round-trips, including vs/den."""
+    srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
+    out = tmp_path / "roundtrip_v2.srf"
+    srf.write_srf(out, srf_v2)
+    reread = srf.read_srf(out)
+    assert reread.version == "2.0"
+    assert srf_v2.header.equals(reread.header)
+    assert srf_v2.points.equals(reread.points)
+    assert (srf_v2.slip != reread.slip).nnz == 0

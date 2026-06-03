@@ -166,7 +166,7 @@ fn write_srf_points(
     let row_array = row_ptr.as_slice()?;
     let data_array = data.as_slice()?;
     let mut buffer = [0u8; BUFFER_SIZE];
-    let summary_length = 8;
+    let summary_length = metadata_array.shape()[1] - 3;
     for (i, row) in metadata_array.outer_iter().enumerate() {
         // Write all but last element
         for v in row.iter().take(summary_length) {
