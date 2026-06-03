@@ -187,8 +187,7 @@ class SrfFile:
 
 
     points : pd.DataFrame
-        A list of SrfPoint objects representing the points in the SRF
-        file. The columns of the points dataframe are:
+        A dataframe of the points (subfaults) in the SRF file. The columns are:
 
         - lon: longitude of the patch.
         - lat: latitude of the patch.
@@ -198,11 +197,15 @@ class SrfFile:
         - area: area of the patch (in cm^2).
         - tinit: initial rupture time for this patch (in seconds).
         - dt: the timestep for all slipt columns (in seconds).
+        - vs: shear-wave velocity at the patch (in cm/s). Version 2.0 only.
+        - den: density at the patch (in g/cm^3). Version 2.0 only.
         - rake: local rake.
-        - slip: total slip.
+        - slip: total slip (in cm).
+        - rise: total rise time (in seconds), computed as nt * dt.
 
-        The final two columns are computed from the SRF and are not saved to
-        disk. See the linked documentation on the SRF format for more details.
+        The vs and den columns are only present when version is "2.0". The
+        rise column is computed from the SRF and is not written to disk. See
+        the linked documentation on the SRF format for more details.
 
     slipt1_array : csr_array
         A sparse array containing the slip for each point and at each timestep, where
@@ -274,24 +277,17 @@ class SrfFile:
             position = srf_file_handle.tell()
 
         points_metadata, slipt1_array = srf_parser.parse_srf(  # type: ignore
-            str(srf_ffp), position, point_count
+            str(srf_ffp), position, point_count, version == "2.0"
         )
 
+        columns = ["lon", "lat", "dep", "stk", "dip", "area", "tinit", "dt"]
+        if version == "2.0":
+            columns += ["vs", "den"]
+        columns += ["rake", "slip", "rise"]
+
         points_df = pd.DataFrame(
-            points_metadata.reshape((-1, 11)),
-            columns=[
-                "lon",
-                "lat",
-                "dep",
-                "stk",
-                "dip",
-                "area",
-                "tinit",
-                "dt",
-                "rake",
-                "slip",
-                "rise",
-            ],
+            points_metadata.reshape((-1, len(columns))),
+            columns=columns,
         )
 
         return cls(

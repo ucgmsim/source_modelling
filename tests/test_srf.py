@@ -562,3 +562,39 @@ def test_sw4_hdf5_read_write(tmp_path: Path):
         # Unused slip components stay zero
         for zero_field in ("SLIP2", "NT2", "SLIP3", "NT3"):
             assert points[zero_field] == pytest.approx(0)
+
+
+def test_read_srf_v2():
+    """Test that a version 2.0 SRF is read with vs and den point columns."""
+    srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
+    assert srf_v2.version == "2.0"
+    assert len(srf_v2.points) == 2
+    assert "vs" in srf_v2.points
+    assert "den" in srf_v2.points
+    assert srf_v2.points["vs"].tolist() == pytest.approx([3.5e5, 3.6e5])
+    assert srf_v2.points["den"].tolist() == pytest.approx([2.7, 2.8])
+    assert srf_v2.points.iloc[0].to_dict() == pytest.approx(
+        {
+            "lon": 172.0,
+            "lat": -43.0,
+            "dep": 0.5,
+            "stk": 45,
+            "dip": 80,
+            "area": 1.0e10,
+            "tinit": 0.0,
+            "dt": 0.1,
+            "vs": 3.5e5,
+            "den": 2.7,
+            "rake": 90,
+            "slip": 10.0,
+            "rise": 0.2,
+        }
+    )
+
+
+def test_read_srf_v1_has_no_vs_den():
+    """Regression: version 1.0 SRFs must not gain vs/den columns."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    assert "vs" not in christchurch_srf.points
+    assert "den" not in christchurch_srf.points
+    assert christchurch_srf.points.shape[1] == 11

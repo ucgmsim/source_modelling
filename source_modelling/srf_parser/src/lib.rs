@@ -67,9 +67,10 @@ fn parse_value<T: lexical_core::FromLexical>(
 fn read_srf_points(
     data: &[u8],
     point_count: usize,
+    read_vs_den: bool,
 ) -> Result<(Vec<f32>, SparseMatrix), lexical_core::Error> {
     let mut index: usize = 0;
-    let mut metadata = Vec::with_capacity(point_count * 11);
+    let mut metadata = Vec::with_capacity(point_count * if read_vs_den { 13 } else { 11 });
     let mut slipt1 = SparseMatrix::default();
 
     for _ in 0..point_count {
@@ -96,6 +97,11 @@ fn read_srf_points(
 
         let dt = parse_value::<f32>(data, &mut index)?;
         metadata.push(dt);
+
+        if read_vs_den {
+            metadata.push(parse_value::<f32>(data, &mut index)?);
+            metadata.push(parse_value::<f32>(data, &mut index)?);
+        }
 
         let rake = parse_value::<f32>(data, &mut index)?;
         metadata.push(rake);
@@ -130,11 +136,12 @@ fn parse_srf(
     file_path: &str,
     offset: usize,
     num_points: usize,
+    read_vs_den: bool,
 ) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     let file = File::open(file_path).or_else(marshall_os_error)?;
     let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
     let (metadata, sparse_matrix) =
-        read_srf_points(&mmap[offset..], num_points).or_else(marshall_value_error)?;
+        read_srf_points(&mmap[offset..], num_points, read_vs_den).or_else(marshall_value_error)?;
 
     let metadata_array = PyArray1::from_vec(py, metadata);
 
