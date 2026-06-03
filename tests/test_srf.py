@@ -610,3 +610,15 @@ def test_write_read_srf_v2(tmp_path: Path):
     assert srf_v2.header.equals(reread.header)
     assert srf_v2.points.equals(reread.points)
     assert (srf_v2.slip != reread.slip).nnz == 0
+
+
+def test_sw4_hdf5_v2(tmp_path: Path):
+    """Test that write_sw4_hdf5 writes vs/den for a version 2.0 SRF."""
+    srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
+    out = tmp_path / "v2.h5"
+    srf_v2.write_sw4_hdf5(out)
+    with h5py.File(out, "r") as h5file:
+        assert h5file.attrs["VERSION"] == np.float32(2.0)
+        points = h5file["POINTS"]
+        assert points["VS"] == pytest.approx(srf_v2.points["vs"].to_numpy())
+        assert points["DEN"] == pytest.approx(srf_v2.points["den"].to_numpy())

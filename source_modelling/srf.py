@@ -371,6 +371,9 @@ class SrfFile:
             ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
 
         points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)  # ty: ignore[invalid-assignment]
+        if "vs" in self.points:  # VS/DEN are only present for version 2.0 SRFs
+            points_data["VS"] = self.points["vs"].values.astype(np.float32)  # ty: ignore[invalid-assignment]
+            points_data["DEN"] = self.points["den"].values.astype(np.float32)  # ty: ignore[invalid-assignment]
 
         with h5py.File(output_ffp, "w") as h5file:
             h5file.attrs.create("VERSION", np.float32(self.version))
