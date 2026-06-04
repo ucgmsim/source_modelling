@@ -367,6 +367,9 @@ def test_junk_srfs():
     with pytest.raises(parse_utils.ParseError):
         srf.read_srf(SRF_DIR / "no_points.srf")
 
+    with pytest.raises(parse_utils.ParseError):
+        srf.read_srf(SRF_DIR / "bad_plane.srf")
+
 
 def test_writing_christchurch():
     """Check that writing a copy an SRF produces an SRF with the same values."""
@@ -609,6 +612,23 @@ def test_read_srf_v1_has_no_vs_den():
     assert "vs" not in christchurch_srf.points
     assert "den" not in christchurch_srf.points
     assert christchurch_srf.points.shape[1] == 11
+
+
+def test_unsupported_version_srf(tmp_path: Path):
+    """An otherwise-valid SRF whose version is neither 1.0 nor 2.0 is rejected."""
+    bad_srf = tmp_path / "v9.srf"
+    bad_srf.write_text(
+        "9.0\n"
+        "PLANE 1\n"
+        "  172.0  -43.0   1   1   1.0   1.0\n"
+        "  45   80   0.0   0.0   0.5\n"
+        "POINTS 1\n"
+        "  172.0  -43.0   0.5   45   80   1.0e10   0.0   0.1\n"
+        "  90   10.0   1   0.0   0   0.0   0\n"
+        "  0.0\n"
+    )
+    with pytest.raises(parse_utils.ParseError):
+        srf.read_srf(bad_srf)
 
 
 def test_write_read_srf_v2(tmp_path: Path):

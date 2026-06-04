@@ -237,6 +237,8 @@ class SrfFile:
         """
         with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
             version = srf_file_handle.readline().strip()
+            if version not in {"1.0", "2.0"}:
+                raise parse_utils.ParseError(f"Unsupported SRF version: {version}")
 
             plane_count_line = srf_file_handle.readline().strip()
             plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
