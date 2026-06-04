@@ -166,6 +166,9 @@ fn write_srf_points(
     let row_array = row_ptr.as_slice()?;
     let data_array = data.as_slice()?;
     let mut buffer = [0u8; BUFFER_SIZE];
+    // Data line 1 gets every point column except the trailing three (hence the
+    // - 3): rake and slip are written on line 2, and the derived rise column is
+    // not written at all. So summary_length is 8 for v1.0 and 10 (vs, den) for v2.0.
     let summary_length = metadata_array.shape()[1] - 3;
     for (i, row) in metadata_array.outer_iter().enumerate() {
         // Write all but last element
