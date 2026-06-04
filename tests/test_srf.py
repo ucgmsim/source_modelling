@@ -565,7 +565,7 @@ def test_sw4_hdf5_read_write(tmp_path: Path):
 
 
 def test_read_srf_v2():
-    """Test that a version 2.0 SRF is read with vs and den point columns."""
+    """Read a version 2.0 SRF and verify the parsed point metadata and slip-rate function."""
     srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
     assert srf_v2.version == "2.0"
     assert len(srf_v2.points) == 2
@@ -590,6 +590,17 @@ def test_read_srf_v2():
             "rise": 0.2,
         }
     )
+    # 2 points (rows) x 3 time-step columns. Columns are 0-indexed, so the column
+    # count is (highest filled column index) + 1 = 2 + 1 = 3 (columns 0, 1, 2).
+    assert srf_v2.slipt1_array.shape == (2, 3)
+    # the stored values, row by row; each point starts with a slip-rate of 0.0.
+    assert srf_v2.slipt1_array.data.tolist() == pytest.approx([0.0, 5.0, 0.0, 6.0])
+    # each sample's column = floor(tinit / dt) + offset, where offset is the
+    # sample's index within its point's slip-rate function (0 to nt1 - 1):
+    # point 0 (floor(0.0/0.1)=0) fills cols 0,1; point 1 (floor(0.1/0.1)=1) fills cols 1,2.
+    assert srf_v2.slipt1_array.indices.tolist() == [0, 1, 1, 2]
+    # row boundaries into data/indices: nt1 = 2 per point, so cuts at 0, 2, 4.
+    assert srf_v2.slipt1_array.indptr.tolist() == [0, 2, 4]
 
 
 def test_read_srf_v1_has_no_vs_den():
