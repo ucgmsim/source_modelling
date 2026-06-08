@@ -163,11 +163,16 @@ def moment_to_magnitude(moment: float, bold_m: bool = True) -> BoldM | Mw:
            doi:10.1029/JB084iB05p02348.
     """
 
+    
     if bold_m:
-        return BoldM(2 / 3 * np.log10(moment) - EQUATION_7_COEFFICIENT)
-
+        mag =  BoldM(2 / 3 * np.log10(moment) - EQUATION_7_COEFFICIENT)
     else:
-        return Mw(2 / 3 * np.log10(moment) - EQUATION_4_COEFFICIENT)
+        mag = Mw(2 / 3 * np.log10(moment) - EQUATION_4_COEFFICIENT)
+
+    if mag > 10.0:
+        raise ValueError('Magnitude for moment is unreasonably large, did you provide moment in dyne-cm instead of Nm?')
+    
+    return mag
 
 
 @typing.overload
