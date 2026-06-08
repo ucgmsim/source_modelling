@@ -63,10 +63,10 @@ def test_moment_to_magnitude_units():
     # Should throw error because the magnitude is too large to be physically plausible.
     mom = 1.44e+28
     with pytest.raises(ValueError, match='Magnitude for moment is unreasonably large'):
-        moment.moment_to_magnitude()
-         
-    
-    
+        moment.moment_to_magnitude(mom)
+
+
+
 
 
 # The following test involves some patching to make it feasible to test properly.
