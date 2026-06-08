@@ -67,8 +67,6 @@ def test_moment_to_magnitude_units():
 
 
 
-
-
 # The following test involves some patching to make it feasible to test properly.
 
 
