@@ -155,6 +155,13 @@ def moment_to_magnitude(moment: float, bold_m: bool = True) -> BoldM | Mw:
     BoldM | Mw
         Rupture moment magnitude in the convention specified by `bold_m`.
 
+    Raises
+    ------
+    ValueError
+        If the provided moment corresponds to a physically implausible
+        magnitude. Likely this is because the user supplied moment is in dyne-cm
+        instead of Nm.
+
     References
     ----------
     .. [Hanks1979] Hanks, T. C., and H. Kanamori (1979),
