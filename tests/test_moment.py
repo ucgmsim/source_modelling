@@ -61,10 +61,9 @@ def test_moment_to_magnitude():
 def test_moment_to_magnitude_units():
     # Dusky sound earthquake, nominal magnitude ~ 8.0 but GCMT provides the moment in dyne-cm.
     # Should throw error because the magnitude is too large to be physically plausible.
-    mom = 1.44e+28
-    with pytest.raises(ValueError, match='Magnitude for moment is unreasonably large'):
+    mom = 1.44e28
+    with pytest.raises(ValueError, match="Magnitude for moment is unreasonably large"):
         moment.moment_to_magnitude(mom)
-
 
 
 # The following test involves some patching to make it feasible to test properly.
