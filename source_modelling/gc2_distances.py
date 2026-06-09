@@ -140,7 +140,9 @@ def segment_weights(
 
 
 @njit([float64[:](float64[:], uint64[:]), float64[:](float64[:], int64[:])], cache=True)
-def cumulative_reduction(data: np.ndarray, indices: np.ndarray) -> np.ndarray: # pragma: no cover
+def cumulative_reduction(
+    data: np.ndarray, indices: np.ndarray
+) -> np.ndarray:  # pragma: no cover
     """Calculate sum between indices.
 
     Parameters
@@ -173,7 +175,9 @@ def cumulative_reduction(data: np.ndarray, indices: np.ndarray) -> np.ndarray: #
     [float64[:, :](float64[:, :], uint64[:]), float64[:, :](float64[:, :], int64[:])],
     cache=True,
 )
-def diff_reduction(points: np.ndarray, indices: np.ndarray) -> np.ndarray: # pragma: no cover
+def diff_reduction(
+    points: np.ndarray, indices: np.ndarray
+) -> np.ndarray:  # pragma: no cover
     """Calculate a diff reduction points between the given indices.
 
     Parameters
@@ -425,7 +429,9 @@ def multi_trace_rx_ry(
     b_hat = np.sum(direction_vectors, axis=0)
     b_hat_norm = np.linalg.norm(b_hat)
     if np.isclose(b_hat_norm, 0.0):
-        raise ValueError("Invalid direction vectors calculated: likely indicates degenerate trace or invalid geometry.")
+        raise ValueError(
+            "Invalid direction vectors calculated: likely indicates degenerate trace or invalid geometry."
+        )
     b_hat /= b_hat_norm
 
     u_shift_origins = calculate_gc2_u_origins(
