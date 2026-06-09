@@ -245,9 +245,6 @@ def mw_to_boldm(magnitude: Mw) -> BoldM:
     Parameters
     ----------
     magnitude : Mw
-    Parameters
-    ----------
-    magnitude : Mw
         A magnitude in the Mw convention.
 
     Returns
