@@ -237,8 +237,11 @@ def boldm_to_mw(magnitude: BoldM) -> Mw:
     return Mw(magnitude + BOLDM_TO_MW)
 
 def mw_to_boldm(magnitude: Mw) -> BoldM:
-    """Convert a Mw convention magnitude to an BoldM convention magnitude.
+    """Convert a Mw convention magnitude to a BoldM convention magnitude.
 
+    Parameters
+    ----------
+    magnitude : Mw
     Parameters
     ----------
     magnitude : Mw
