@@ -544,9 +544,9 @@ def test_magnitude_to_length_width_calls_correct_function(
         magnitude_scaling.magnitude_to_length_width(
             # We are not testing outputs here so we can ignore the invalid magnitude convention.
             scaling_relation,
-            magnitude,
+            magnitude,  # ty: ignore[invalid-argument-type]
             rake,
-            random,  # ty: ignore[invalid-argument-type]
+            random,
         )
         mock_func.assert_called_once()
 
