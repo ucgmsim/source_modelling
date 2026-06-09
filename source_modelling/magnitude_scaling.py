@@ -721,7 +721,7 @@ def magnitude_to_area(
 
     Returns
     -------
-    tuple[float, float]
+    float
         Area of the fault estimated by the scaling relation.
     """
     match scaling_relation:
