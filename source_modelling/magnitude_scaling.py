@@ -667,7 +667,7 @@ def magnitude_to_length_width(
     ----------
     scaling_relation : ScalingRelation
         Scaling relation to use.
-    magnitude : BoldM | Mw
+    magnitude : BoldM
         Moment magnitude of the fault rupture.
     rake : float, optional
         Rake of the fault (degrees). Required for Leonard scaling.
@@ -706,7 +706,7 @@ def magnitude_to_area(
     ----------
     scaling_relation : ScalingRelation
         Scaling relation to use.
-    magnitude : BoldM | Mw
+    magnitude : BoldM
         Moment magnitude of the fault rupture.
     rake : float, optional
         Rake of the fault (degrees). Required for Leonard scaling.
