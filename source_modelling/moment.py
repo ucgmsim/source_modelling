@@ -24,6 +24,7 @@ EQUATION_4_COEFFICIENT = 6.0667  # `Mw` convention
 EQUATION_7_COEFFICIENT = 6.0333  # `BoldM` convention
 BOLDM_TO_MW = EQUATION_7_COEFFICIENT - EQUATION_4_COEFFICIENT
 
+
 def find_connected_faults(
     faults: dict[str, Fault | Plane],
     separation_distance: float = 2.0,
@@ -217,6 +218,7 @@ def magnitude_to_moment(magnitude: BoldM | Mw, bold_m: bool = True) -> float:
     else:
         return 10 ** ((magnitude + EQUATION_4_COEFFICIENT) * 3 / 2)
 
+
 def boldm_to_mw(magnitude: BoldM) -> Mw:
     """Convert a BoldM convention magnitude to an Mw convention magnitude.
 
@@ -235,6 +237,7 @@ def boldm_to_mw(magnitude: BoldM) -> Mw:
     moment_to_magnitude : Introduces the different magnitude conventions.
     """
     return Mw(magnitude + BOLDM_TO_MW)
+
 
 def mw_to_boldm(magnitude: Mw) -> BoldM:
     """Convert a Mw convention magnitude to a BoldM convention magnitude.

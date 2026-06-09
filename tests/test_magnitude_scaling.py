@@ -543,7 +543,10 @@ def test_magnitude_to_length_width_calls_correct_function(
     with patch(f"source_modelling.magnitude_scaling.{func_name}") as mock_func:
         magnitude_scaling.magnitude_to_length_width(
             # We are not testing outputs here so we can ignore the invalid magnitude convention.
-            scaling_relation, magnitude, rake, random # ty: ignore[invalid-argument-type]
+            scaling_relation,
+            magnitude,
+            rake,
+            random,  # ty: ignore[invalid-argument-type]
         )
         mock_func.assert_called_once()
 
@@ -579,7 +582,7 @@ def test_magnitude_to_area_calls_correct_function(
 
     with patch(f"source_modelling.magnitude_scaling.{func_name}") as mock_func:
         # We are not checking outputs here, so it is ok to ignore the invalid magnitude convention
-        magnitude_scaling.magnitude_to_area(scaling_relation, magnitude, rake, random) # ty: ignore[invalid-argument-type]
+        magnitude_scaling.magnitude_to_area(scaling_relation, magnitude, rake, random)  # ty: ignore[invalid-argument-type]
 
         mock_func.assert_called_once()
 

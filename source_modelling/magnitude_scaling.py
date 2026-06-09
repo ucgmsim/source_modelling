@@ -1,4 +1,5 @@
 """Magnitude scaling relationships for fault dimensions."""
+
 import warnings
 from enum import Enum, StrEnum, auto
 
@@ -683,16 +684,17 @@ def magnitude_to_length_width(
     match scaling_relation:
         case ScalingRelation.LEONARD2014 if rake is not None:
             return leonard_magnitude_to_length_width(
-                moment.boldm_to_mw(magnitude),
-                rake=rake,
-                random=random
+                moment.boldm_to_mw(magnitude), rake=rake, random=random
             )
         case ScalingRelation.LEONARD2014:
-            raise ValueError('Rake must be specified for Leonard scaling.')
+            raise ValueError("Rake must be specified for Leonard scaling.")
         case ScalingRelation.CONTRERAS_INTERFACE2017:
-            return contreras_interface_magnitude_to_length_width(magnitude, random=random)
+            return contreras_interface_magnitude_to_length_width(
+                magnitude, random=random
+            )
         case ScalingRelation.CONTRERAS_SLAB2020:
             return contreras_slab_magnitude_to_length_width(magnitude, random=random)
+
 
 def magnitude_to_area(
     scaling_relation: ScalingRelation,
@@ -727,16 +729,15 @@ def magnitude_to_area(
     match scaling_relation:
         case ScalingRelation.LEONARD2014 if rake is not None:
             return leonard_magnitude_to_area(
-                moment.boldm_to_mw(magnitude),
-                rake=rake,
-                random=random
+                moment.boldm_to_mw(magnitude), rake=rake, random=random
             )
         case ScalingRelation.LEONARD2014:
-            raise ValueError('Rake must be specified for Leonard scaling.')
+            raise ValueError("Rake must be specified for Leonard scaling.")
         case ScalingRelation.CONTRERAS_INTERFACE2017:
             return contreras_interface_magnitude_to_area(magnitude, random=random)
         case ScalingRelation.CONTRERAS_SLAB2020:
             return strasser_slab_magnitude_to_area(magnitude, random=random)
+
 
 def area_to_magnitude(
     scaling_relation: ScalingRelation,
@@ -766,14 +767,10 @@ def area_to_magnitude(
 
     match scaling_relation:
         case ScalingRelation.LEONARD2014 if rake is not None:
-            mag = leonard_area_to_magnitude(
-                area,
-                rake=rake,
-                random=random
-            )
+            mag = leonard_area_to_magnitude(area, rake=rake, random=random)
             return moment.mw_to_boldm(mag)
         case ScalingRelation.LEONARD2014:
-            raise ValueError('Rake must be specified for Leonard scaling.')
+            raise ValueError("Rake must be specified for Leonard scaling.")
         case ScalingRelation.CONTRERAS_INTERFACE2017:
             return contreras_interface_area_to_magnitude(area, random=random)
         case ScalingRelation.CONTRERAS_SLAB2020:
