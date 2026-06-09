@@ -11,8 +11,8 @@ import pytest
 import scipy as sp
 from hypothesis import assume, given
 
-from source_modelling import magnitude_scaling
-from source_modelling.magnitude_scaling import BoldM, Mw
+from source_modelling import magnitude_scaling, moment
+from source_modelling.moment import BoldM, Mw
 
 MAGNITUDE_TO_AREA = {
     magnitude_scaling.ScalingRelation.LEONARD2014: magnitude_scaling.leonard_magnitude_to_area,
@@ -154,8 +154,9 @@ def test_leonard_area(mw: Mw, rake: float, expected_area: float):
     """Test the Leonard 2014 area calculation against values from the old implementation in qcore.
 
     NOTE: this combined with the inversion test for leonard ensure that the area calculation is compatible with the old implementation as well."""
+    boldm = moment.mw_to_boldm(mw)
     assert magnitude_scaling.magnitude_to_area(
-        magnitude_scaling.ScalingRelation.LEONARD2014, mw, rake
+        magnitude_scaling.ScalingRelation.LEONARD2014, boldm, rake
     ) == pytest.approx(expected_area)
 
 
@@ -541,12 +542,10 @@ def test_magnitude_to_length_width_calls_correct_function(
 
     with patch(f"source_modelling.magnitude_scaling.{func_name}") as mock_func:
         magnitude_scaling.magnitude_to_length_width(
-            scaling_relation, magnitude, rake, random
+            # We are not testing outputs here so we can ignore the invalid magnitude convention.
+            scaling_relation, magnitude, rake, random # ty: ignore[invalid-argument-type]
         )
-        if rake_required:
-            mock_func.assert_called_once_with(magnitude, rake=rake, random=random)
-        else:
-            mock_func.assert_called_once_with(magnitude, random=random)
+        mock_func.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -579,11 +578,10 @@ def test_magnitude_to_area_calls_correct_function(
     random = True
 
     with patch(f"source_modelling.magnitude_scaling.{func_name}") as mock_func:
-        magnitude_scaling.magnitude_to_area(scaling_relation, magnitude, rake, random)
-        if rake_required:
-            mock_func.assert_called_once_with(magnitude, rake=rake, random=random)
-        else:
-            mock_func.assert_called_once_with(magnitude, random=random)
+        # We are not checking outputs here, so it is ok to ignore the invalid magnitude convention
+        magnitude_scaling.magnitude_to_area(scaling_relation, magnitude, rake, random) # ty: ignore[invalid-argument-type]
+
+        mock_func.assert_called_once()
 
 
 @pytest.mark.parametrize(

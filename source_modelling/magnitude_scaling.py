@@ -1,15 +1,12 @@
 """Magnitude scaling relationships for fault dimensions."""
-
-import functools
-import typing
 import warnings
 from enum import Enum, StrEnum, auto
 
 import numpy as np
 import scipy as sp
 
-BoldM = typing.NewType("BoldM", float)
-Mw = typing.NewType("Mw", float)
+from source_modelling import moment
+from source_modelling.moment import BoldM, Mw
 
 
 class RakeType(Enum):
@@ -660,7 +657,7 @@ def contreras_slab_magnitude_to_length_width(
 
 def magnitude_to_length_width(
     scaling_relation: ScalingRelation,
-    magnitude: BoldM | Mw,
+    magnitude: BoldM,
     rake: float | None = None,
     random: bool = False,
 ) -> tuple[float, float]:
@@ -683,32 +680,23 @@ def magnitude_to_length_width(
     tuple[float, float]
             Length and width of the fault estimated by the scaling relation.
     """
-
-    if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
-        raise ValueError("Rake must be specified for Leonard scaling.")
-    scaling_relations_map = {
-        ScalingRelation.LEONARD2014: functools.partial(
-            leonard_magnitude_to_length_width,
-            # Rake is checked earlier so ty warning is not required.
-            rake=rake,  # ty: ignore[invalid-argument-type]
-            random=random,
-        ),
-        ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
-            contreras_interface_magnitude_to_length_width, random=random
-        ),
-        ScalingRelation.CONTRERAS_SLAB2020: functools.partial(
-            contreras_slab_magnitude_to_length_width, random=random
-        ),
-    }
-    # The dispatched callable is a union of partials expecting either Mw or BoldM,
-    # so ty can't see that the scaling_relation key already determines which
-    # convention `magnitude` should be treated as.
-    return scaling_relations_map[scaling_relation](magnitude)  # ty: ignore[invalid-argument-type]
-
+    match scaling_relation:
+        case ScalingRelation.LEONARD2014 if rake is not None:
+            return leonard_magnitude_to_length_width(
+                moment.boldm_to_mw(magnitude),
+                rake=rake,
+                random=random
+            )
+        case ScalingRelation.LEONARD2014:
+            raise ValueError('Rake must be specified for Leonard scaling.')
+        case ScalingRelation.CONTRERAS_INTERFACE2017:
+            return contreras_interface_magnitude_to_length_width(magnitude, random=random)
+        case ScalingRelation.CONTRERAS_SLAB2020:
+            return contreras_slab_magnitude_to_length_width(magnitude, random=random)
 
 def magnitude_to_area(
     scaling_relation: ScalingRelation,
-    magnitude: BoldM | Mw,
+    magnitude: BoldM,
     rake: float | None = None,
     random: bool = False,
 ) -> float:
@@ -736,32 +724,26 @@ def magnitude_to_area(
     tuple[float, float]
         Area of the fault estimated by the scaling relation.
     """
-    if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
-        raise ValueError("Rake must be specified for Leonard scaling.")
-    scaling_relations_map = {
-        ScalingRelation.LEONARD2014: functools.partial(
-            leonard_magnitude_to_area,
-            # Rake is checked earlier so ty warning is not required.
-            rake=rake,  # ty: ignore[invalid-argument-type]
-            random=random,
-        ),
-        ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
-            contreras_interface_magnitude_to_area, random=random
-        ),
-        ScalingRelation.CONTRERAS_SLAB2020: functools.partial(
-            strasser_slab_magnitude_to_area, random=random
-        ),
-    }
-    # See note in `magnitude_to_length_width` about why this is ignored.
-    return scaling_relations_map[scaling_relation](magnitude)  # ty: ignore[invalid-argument-type]
-
+    match scaling_relation:
+        case ScalingRelation.LEONARD2014 if rake is not None:
+            return leonard_magnitude_to_area(
+                moment.boldm_to_mw(magnitude),
+                rake=rake,
+                random=random
+            )
+        case ScalingRelation.LEONARD2014:
+            raise ValueError('Rake must be specified for Leonard scaling.')
+        case ScalingRelation.CONTRERAS_INTERFACE2017:
+            return contreras_interface_magnitude_to_area(magnitude, random=random)
+        case ScalingRelation.CONTRERAS_SLAB2020:
+            return strasser_slab_magnitude_to_area(magnitude, random=random)
 
 def area_to_magnitude(
     scaling_relation: ScalingRelation,
     area: float,
     rake: float | None = None,
     random: bool = False,
-) -> BoldM | Mw:
+) -> BoldM:
     """Convert area to magnitude using a scaling relationship.
 
     Parameters
@@ -778,24 +760,21 @@ def area_to_magnitude(
 
     Returns
     -------
-    BoldM | Mw
+    BoldM
         Moment magnitude of the fault rupture estimated by the scaling relation.
     """
-    if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
-        raise ValueError("Rake must be specified for Leonard scaling.")
 
-    scaling_relations_map = {
-        ScalingRelation.LEONARD2014: functools.partial(
-            leonard_area_to_magnitude,
-            # Rake is checked earlier so ty warning is not required.
-            rake=rake,  # ty: ignore[invalid-argument-type]
-            random=random,
-        ),
-        ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
-            contreras_interface_area_to_magnitude, random=random
-        ),
-        ScalingRelation.CONTRERAS_SLAB2020: functools.partial(
-            strasser_slab_area_to_magnitude, random=random
-        ),
-    }
-    return scaling_relations_map[scaling_relation](area)
+    match scaling_relation:
+        case ScalingRelation.LEONARD2014 if rake is not None:
+            mag = leonard_area_to_magnitude(
+                area,
+                rake=rake,
+                random=random
+            )
+            return moment.mw_to_boldm(mag)
+        case ScalingRelation.LEONARD2014:
+            raise ValueError('Rake must be specified for Leonard scaling.')
+        case ScalingRelation.CONTRERAS_INTERFACE2017:
+            return contreras_interface_area_to_magnitude(area, random=random)
+        case ScalingRelation.CONTRERAS_SLAB2020:
+            return strasser_slab_area_to_magnitude(area, random=random)

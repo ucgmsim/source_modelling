@@ -11,15 +11,18 @@ from scipy.cluster.hierarchy import DisjointSet
 from scipy.sparse import csr_array
 
 from source_modelling import rupture_propagation, sources
-from source_modelling.magnitude_scaling import BoldM, Mw
 from source_modelling.sources import Fault, Plane
+
+BoldM = typing.NewType("BoldM", float)
+Mw = typing.NewType("Mw", float)
+
 
 # Moment magnitude scale coefficients for seismic moment in Nm, from
 # equations 4 and 7 of Hanks and Kanamori (1979). See the [Hanks1979] reference
 # in the `moment_to_magnitude` docstring for the full citation.
 EQUATION_4_COEFFICIENT = 6.0667  # `Mw` convention
 EQUATION_7_COEFFICIENT = 6.0333  # `BoldM` convention
-
+BOLDM_TO_MW = EQUATION_7_COEFFICIENT - EQUATION_4_COEFFICIENT
 
 def find_connected_faults(
     faults: dict[str, Fault | Plane],
@@ -213,6 +216,44 @@ def magnitude_to_moment(magnitude: BoldM | Mw, bold_m: bool = True) -> float:
         return 10 ** ((magnitude + EQUATION_7_COEFFICIENT) * 3 / 2)
     else:
         return 10 ** ((magnitude + EQUATION_4_COEFFICIENT) * 3 / 2)
+
+def boldm_to_mw(magnitude: BoldM) -> Mw:
+    """Convert a BoldM convention magnitude to an Mw convention magnitude.
+
+    Parameters
+    ----------
+    magnitude : BoldM
+        A magnitude in the BoldM convention.
+
+    Returns
+    -------
+    Mw
+        A magnitude in the Mw convention.
+
+    See Also
+    --------
+    moment_to_magnitude : Introduces the different magnitude conventions.
+    """
+    return Mw(magnitude + BOLDM_TO_MW)
+
+def mw_to_boldm(magnitude: Mw) -> BoldM:
+    """Convert a Mw convention magnitude to an BoldM convention magnitude.
+
+    Parameters
+    ----------
+    magnitude : Mw
+        A magnitude in the Mw convention.
+
+    Returns
+    -------
+    BoldM
+        A magnitude in the BoldM convention.
+
+    See Also
+    --------
+    moment_to_magnitude : Introduces the different magnitude conventions.
+    """
+    return BoldM(magnitude - BOLDM_TO_MW)
 
 
 def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFrame:
