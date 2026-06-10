@@ -626,7 +626,9 @@ def test_read_real_srf_v2(tmp_path: Path):
     """
     srf_ffp = tmp_path / "test_v2.srf"
     srf_ffp.write_bytes(
-        gzip.decompress((Path(__file__).parent / "data" / "test_v2.srf.gz").read_bytes())
+        gzip.decompress(
+            (Path(__file__).parent / "srfs" / "test_v2.srf.gz").read_bytes()
+        )
     )
     real_srf = srf.read_srf(srf_ffp)
     assert real_srf.version == "2.0"
