@@ -363,7 +363,7 @@ class SrfFile:
             )  # ty: ignore[invalid-assignment]
 
         # Build POINTS structured array
-        points_data = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
+        points_data: np.ndarray = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
         assert SW4_POINTS_DTYPE.names is not None
         for field in SW4_POINTS_DTYPE.names:
             if field in _SW4_POINTS_EXTERNAL_FIELDS:
@@ -372,8 +372,8 @@ class SrfFile:
                 "slip" if field == "SLIP1" else field.lower()
             ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
 
-        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)  # ty: ignore[invalid-assignment]
-        if "vs" in self.points:  # VS/DEN are only present for version 2.0 SRFs
+        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+        if self.version == "2.0":  # vs/den are mandatory in 2.0; missing columns will fail loudly
             points_data["VS"] = self.points["vs"].to_numpy().astype(np.float32)
             points_data["DEN"] = self.points["den"].to_numpy().astype(np.float32)
 

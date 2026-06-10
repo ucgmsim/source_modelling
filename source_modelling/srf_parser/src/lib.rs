@@ -14,6 +14,11 @@ use std::io::BufWriter;
 use std::io::Error;
 use std::io::Write;
 
+/// Number of per-point metadata quantities returned for each SRF version
+/// (version 2.0 adds vs and den).
+const NUM_QUANTITIES_V1: usize = 11;
+const NUM_QUANTITIES_V2: usize = 13;
+
 #[derive(Default)]
 struct SparseMatrix {
     row_ptr: Vec<i64>,
@@ -70,7 +75,14 @@ fn read_srf_points(
     read_vs_den: bool,
 ) -> Result<(Vec<f32>, SparseMatrix), lexical_core::Error> {
     let mut index: usize = 0;
-    let mut metadata = Vec::with_capacity(point_count * if read_vs_den { 13 } else { 11 });
+    let mut metadata = Vec::with_capacity(
+        point_count
+            * if read_vs_den {
+                NUM_QUANTITIES_V2
+            } else {
+                NUM_QUANTITIES_V1
+            },
+    );
     let mut slipt1 = SparseMatrix::default();
 
     for _ in 0..point_count {
