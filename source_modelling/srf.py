@@ -241,6 +241,8 @@ class SrfFile:
                 raise parse_utils.ParseError(f"Unsupported SRF version: {version}")
 
             plane_count_line = srf_file_handle.readline().strip()
+            while plane_count_line.startswith("#"):  # genslip writes comments after the version line
+                plane_count_line = srf_file_handle.readline().strip()
             plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
             if not plane_count_match:
                 raise parse_utils.ParseError(

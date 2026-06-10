@@ -1,3 +1,4 @@
+import gzip
 import tempfile
 from pathlib import Path
 
@@ -568,7 +569,13 @@ def test_sw4_hdf5_read_write(tmp_path: Path):
 
 
 def test_read_srf_v2():
-    """Read a version 2.0 SRF and verify the parsed point metadata and slip-rate function."""
+    """Read a minimal hand-written version 2.0 SRF and verify every parsed value.
+
+    The 2-point source file is small enough that all the expected values here,
+    including the complete slip-rate sparse-matrix structure, can be checked by
+    eye against the file. See test_read_real_srf_v2 for the complementary test
+    on a real (genslip-generated) version 2.0 SRF.
+    """
     srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
     assert srf_v2.version == "2.0"
     assert len(srf_v2.points) == 2
@@ -604,6 +611,98 @@ def test_read_srf_v2():
     assert srf_v2.slipt1_array.indices.tolist() == [0, 1, 1, 2]
     # row boundaries into data/indices: nt1 = 2 per point, so cuts at 0, 2, 4.
     assert srf_v2.slipt1_array.indptr.tolist() == [0, 2, 4]
+
+
+def test_read_real_srf_v2(tmp_path: Path):
+    """Read a real genslip-generated version 2.0 SRF end to end.
+
+    Complements the hand-verifiable test_read_srf_v2 by covering what only a
+    real file exercises: the comment lines genslip writes after the version
+    line, and a full-size (2601-point) rupture. The expected values below are
+    spot checks transcribed from the first, middle and last point blocks of
+    the file. Because the parser consumes the file as one sequential token
+    stream, a correct last point implies it stayed aligned through every
+    preceding block.
+    """
+    srf_ffp = tmp_path / "test_v2.srf"
+    srf_ffp.write_bytes(
+        gzip.decompress((Path(__file__).parent / "data" / "test_v2.srf.gz").read_bytes())
+    )
+    real_srf = srf.read_srf(srf_ffp)
+    assert real_srf.version == "2.0"
+    assert real_srf.header.iloc[0].to_dict() == pytest.approx(
+        {
+            "elon": 176.514603,
+            "elat": -38.006092,
+            "nstk": 51,
+            "ndip": 51,
+            "len": 5.0699,
+            "wid": 5.0699,
+            "stk": 240,
+            "dip": 88,
+            "dtop": 0.0,
+            "shyp": 0.0,
+            "dhyp": 2.5350,
+        }
+    )
+    assert len(real_srf.points) == 2601
+    assert real_srf.points.iloc[0].to_dict() == pytest.approx(
+        {
+            "lon": 176.539108,
+            "lat": -37.994919,
+            "dep": 4.96747e-02,
+            "stk": 240,
+            "dip": 88,
+            "area": 9.88234e07,
+            "tinit": 5.815377,
+            "dt": 5.0e-03,
+            "vs": 3.8e04,
+            "den": 1.81,
+            "rake": -16,
+            "slip": 94.2758,
+            "rise": 64 * 5.0e-03,
+        }
+    )
+    assert real_srf.points.iloc[1300].to_dict() == pytest.approx(
+        {
+            "lon": 176.514099,
+            "lat": -38.005402,
+            "dep": 2.53341,
+            "stk": 240,
+            "dip": 88,
+            "area": 9.88234e07,
+            "tinit": 9.254894e-02,
+            "dt": 5.0e-03,
+            "vs": 2.28e05,
+            "den": 2.40,
+            "rake": -15,
+            "slip": 49.4048,
+            "rise": 59 * 5.0e-03,
+        }
+    )
+    assert real_srf.points.iloc[2600].to_dict() == pytest.approx(
+        {
+            "lon": 176.489090,
+            "lat": -38.015869,
+            "dep": 5.01714,
+            "stk": 240,
+            "dip": 88,
+            "area": 9.88234e07,
+            "tinit": 2.567641,
+            "dt": 5.0e-03,
+            "vs": 3.6e05,
+            "den": 2.72,
+            "rake": -7,
+            "slip": 15.8105,
+            "rise": 3 * 5.0e-03,
+        }
+    )
+    # the first point's slip-rate function holds nt1 = 64 samples
+    assert np.diff(real_srf.slipt1_array.indptr)[0] == 64
+    assert real_srf.slipt1_array.data[:3] == pytest.approx([0.0, 9.69786, 21.3934])
+    # the last point's slip-rate function holds nt1 = 3 samples
+    assert np.diff(real_srf.slipt1_array.indptr)[-1] == 3
+    assert real_srf.slipt1_array.data[-3:] == pytest.approx([0.0, 3.16209e03, 0.0])
 
 
 def test_read_srf_v1_has_no_vs_den():
