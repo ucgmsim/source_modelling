@@ -14,6 +14,11 @@ use std::io::BufWriter;
 use std::io::Error;
 use std::io::Write;
 
+/// Number of per-point metadata quantities returned for each SRF version
+/// (version 2.0 adds vs and den).
+const NUM_QUANTITIES_V1: usize = 11;
+const NUM_QUANTITIES_V2: usize = 13;
+
 #[derive(Default)]
 struct SparseMatrix {
     row_ptr: Vec<i64>,
@@ -67,9 +72,17 @@ fn parse_value<T: lexical_core::FromLexical>(
 fn read_srf_points(
     data: &[u8],
     point_count: usize,
+    read_vs_den: bool,
 ) -> Result<(Vec<f32>, SparseMatrix), lexical_core::Error> {
     let mut index: usize = 0;
-    let mut metadata = Vec::with_capacity(point_count * 11);
+    let mut metadata = Vec::with_capacity(
+        point_count
+            * if read_vs_den {
+                NUM_QUANTITIES_V2
+            } else {
+                NUM_QUANTITIES_V1
+            },
+    );
     let mut slipt1 = SparseMatrix::default();
 
     for _ in 0..point_count {
@@ -96,6 +109,11 @@ fn read_srf_points(
 
         let dt = parse_value::<f32>(data, &mut index)?;
         metadata.push(dt);
+
+        if read_vs_den {
+            metadata.push(parse_value::<f32>(data, &mut index)?);
+            metadata.push(parse_value::<f32>(data, &mut index)?);
+        }
 
         let rake = parse_value::<f32>(data, &mut index)?;
         metadata.push(rake);
@@ -130,11 +148,12 @@ fn parse_srf(
     file_path: &str,
     offset: usize,
     num_points: usize,
+    read_vs_den: bool,
 ) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     let file = File::open(file_path).or_else(marshall_os_error)?;
     let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
     let (metadata, sparse_matrix) =
-        read_srf_points(&mmap[offset..], num_points).or_else(marshall_value_error)?;
+        read_srf_points(&mmap[offset..], num_points, read_vs_den).or_else(marshall_value_error)?;
 
     let metadata_array = PyArray1::from_vec(py, metadata);
 
@@ -159,7 +178,10 @@ fn write_srf_points(
     let row_array = row_ptr.as_slice()?;
     let data_array = data.as_slice()?;
     let mut buffer = [0u8; BUFFER_SIZE];
-    let summary_length = 8;
+    // Data line 1 gets every point column except the trailing three (hence the
+    // - 3): rake and slip are written on line 2, and the derived rise column is
+    // not written at all. So summary_length is 8 for v1.0 and 10 (vs, den) for v2.0.
+    let summary_length = metadata_array.shape()[1] - 3;
     for (i, row) in metadata_array.outer_iter().enumerate() {
         // Write all but last element
         for v in row.iter().take(summary_length) {

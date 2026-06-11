@@ -187,8 +187,7 @@ class SrfFile:
 
 
     points : pd.DataFrame
-        A list of SrfPoint objects representing the points in the SRF
-        file. The columns of the points dataframe are:
+        A dataframe of the points (subfaults) in the SRF file. The columns are:
 
         - lon: longitude of the patch.
         - lat: latitude of the patch.
@@ -198,11 +197,15 @@ class SrfFile:
         - area: area of the patch (in cm^2).
         - tinit: initial rupture time for this patch (in seconds).
         - dt: the timestep for all slipt columns (in seconds).
+        - vs: shear-wave velocity at the patch (in cm/s). Version 2.0 only.
+        - den: density at the patch (in g/cm^3). Version 2.0 only.
         - rake: local rake.
-        - slip: total slip.
+        - slip: total slip (in cm).
+        - rise: total rise time (in seconds), computed as nt * dt.
 
-        The final two columns are computed from the SRF and are not saved to
-        disk. See the linked documentation on the SRF format for more details.
+        The vs and den columns are only present when version is "2.0". The
+        rise column is computed from the SRF and is not written to disk. See
+        the linked documentation on the SRF format for more details.
 
     slipt1_array : csr_array
         A sparse array containing the slip for each point and at each timestep, where
@@ -234,8 +237,12 @@ class SrfFile:
         """
         with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
             version = srf_file_handle.readline().strip()
+            if version not in {"1.0", "2.0"}:
+                raise parse_utils.ParseError(f"Unsupported SRF version: {version}")
 
             plane_count_line = srf_file_handle.readline().strip()
+            while plane_count_line.startswith("#"):  # genslip writes comments after the version line
+                plane_count_line = srf_file_handle.readline().strip()
             plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
             if not plane_count_match:
                 raise parse_utils.ParseError(
@@ -274,24 +281,17 @@ class SrfFile:
             position = srf_file_handle.tell()
 
         points_metadata, slipt1_array = srf_parser.parse_srf(  # type: ignore
-            str(srf_ffp), position, point_count
+            str(srf_ffp), position, point_count, version == "2.0"
         )
 
+        columns = ["lon", "lat", "dep", "stk", "dip", "area", "tinit", "dt"]
+        if version == "2.0":
+            columns += ["vs", "den"]
+        columns += ["rake", "slip", "rise"]
+
         points_df = pd.DataFrame(
-            points_metadata.reshape((-1, 11)),
-            columns=[
-                "lon",
-                "lat",
-                "dep",
-                "stk",
-                "dip",
-                "area",
-                "tinit",
-                "dt",
-                "rake",
-                "slip",
-                "rise",
-            ],
+            points_metadata.reshape((-1, len(columns))),
+            columns=columns,
         )
 
         return cls(
@@ -312,7 +312,7 @@ class SrfFile:
         """
 
         with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
-            srf_file_handle.write("1.0\n")
+            srf_file_handle.write(f"{self.version}\n")
             srf_file_handle.write(f"PLANE {len(self.header)}\n")
             # Cannot use self.header.to_string because the newline separating headers is significant!
             # This is ok because the number of headers is typically very small (< 100)
@@ -365,7 +365,7 @@ class SrfFile:
             )  # ty: ignore[invalid-assignment]
 
         # Build POINTS structured array
-        points_data = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
+        points_data: np.ndarray = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
         assert SW4_POINTS_DTYPE.names is not None
         for field in SW4_POINTS_DTYPE.names:
             if field in _SW4_POINTS_EXTERNAL_FIELDS:
@@ -374,7 +374,10 @@ class SrfFile:
                 "slip" if field == "SLIP1" else field.lower()
             ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
 
-        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)  # ty: ignore[invalid-assignment]
+        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+        if self.version == "2.0":  # vs/den are mandatory in 2.0; missing columns will fail loudly
+            points_data["VS"] = self.points["vs"].to_numpy().astype(np.float32)
+            points_data["DEN"] = self.points["den"].to_numpy().astype(np.float32)
 
         with h5py.File(output_ffp, "w") as h5file:
             h5file.attrs.create("VERSION", np.float32(self.version))
