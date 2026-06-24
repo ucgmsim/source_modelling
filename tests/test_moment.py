@@ -209,3 +209,28 @@ def test_point_source_slip_bad_dataframe():
             velocity_model_df=bad_velocity_model_df,
             source_depth_km=2.0,
         )
+
+
+def test_velocity_model_layer_index():
+    """Deepest layer whose top <= depth; boundary -> deeper; clamp at ends."""
+    vm = pd.DataFrame({"depth_km": [0.0, 1.0, 2.0]})
+
+    assert moment.velocity_model_layer_index(vm, 0.0) == 0
+    assert moment.velocity_model_layer_index(vm, 0.5) == 0
+    assert moment.velocity_model_layer_index(vm, 1.0) == 1  # boundary -> deeper layer
+    assert moment.velocity_model_layer_index(vm, 1.5) == 1
+    assert (
+        moment.velocity_model_layer_index(vm, 5.0) == 2
+    )  # below last top -> last layer
+
+    np.testing.assert_array_equal(
+        moment.velocity_model_layer_index(vm, np.array([0.0, 1.0, 1.5, 2.0, 5.0])),
+        np.array([0, 1, 1, 2, 2]),
+    )
+
+
+def test_velocity_model_layer_index_top_depth():
+    """A velocity model not beginning at 0 km depth raises."""
+    bad_vm = pd.DataFrame({"depth_km": [1.0, 2.0]})
+    with pytest.raises(ValueError, match="Velocity model does not begin at 0km depth"):
+        moment.velocity_model_layer_index(bad_vm, 1.0)

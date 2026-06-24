@@ -304,6 +304,55 @@ def dyne_cm_to_newton_metre(dyne_cm: float) -> float:
     return dyne_cm * _dyne_to_newton * _cm_to_m
 
 
+@typing.overload
+def velocity_model_layer_index(
+    velocity_model_df: pd.DataFrame, depths_km: float
+) -> np.intp: ...  # numpydoc ignore=GL08
+@typing.overload
+def velocity_model_layer_index(
+    velocity_model_df: pd.DataFrame, depths_km: npt.NDArray[np.floating]
+) -> npt.NDArray[np.intp]: ...  # numpydoc ignore=GL08
+def velocity_model_layer_index(
+    velocity_model_df: pd.DataFrame, depths_km: float | npt.NDArray[np.floating]
+) -> np.intp | npt.NDArray[np.intp]:
+    """Return the velocity-model layer index containing each depth.
+
+    Selects the deepest layer whose top depth does not exceed the query depth (a depth
+    exactly on a layer boundary takes the deeper layer); a depth above the first layer top
+    clamps to layer 0. Scalar in -> scalar out; array in -> array out.
+
+    Parameters
+    ----------
+    velocity_model_df : pd.DataFrame
+        Velocity model with a ``depth_km`` column of layer *top* depths in kilometres, the
+        first of which must be 0.
+    depths_km : float or npt.NDArray[np.floating]
+        Query depth(s) in kilometres.
+
+    Returns
+    -------
+    np.intp or npt.NDArray[np.intp]
+        The layer index for each query depth.
+
+    Raises
+    ------
+    ValueError
+        If the velocity model does not begin at 0 km depth (a sign that bottom depths were
+        passed instead of top depths).
+    """
+    if not np.isclose(velocity_model_df["depth_km"].iloc[0], 0.0):
+        raise ValueError(
+            "Velocity model does not begin at 0km depth (are you using bottom depth instead of top depth)?"
+        )
+    return np.maximum(
+        np.searchsorted(
+            velocity_model_df["depth_km"].to_numpy(), depths_km, side="right"
+        )
+        - 1,
+        0,
+    )
+
+
 def point_source_slip(
     moment_newton_metre: float,
     fault_area_km2: float,
@@ -335,21 +384,7 @@ def point_source_slip(
         The calculated slip in cm.
     """
 
-    # While this is not strictly necessary, it does act as a sanity check to
-    # ensure that the bug does not reoccur in the future.
-    if not np.isclose(velocity_model_df["depth_km"].iloc[0], 0.0):
-        raise ValueError(
-            "Velocity model does not begin at 0km depth (are you using bottom depth instead of top depth)?"
-        )
-    # Finds the first index i in the velocity model such that depth[i] <= source depth < depth[i + 1]
-    # At a boundary therefore, it returns the bottom-most layer index instead of the top.
-    idx = (
-        np.searchsorted(
-            velocity_model_df["depth_km"].to_numpy(), source_depth_km, side="right"
-        )
-        - 1
-    )
-    idx = max(0, idx)
+    idx = velocity_model_layer_index(velocity_model_df, source_depth_km)
     vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
     rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]
 
