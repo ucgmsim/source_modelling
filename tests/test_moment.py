@@ -223,10 +223,14 @@ def test_velocity_model_layer_index():
         moment.velocity_model_layer_index(vm, 5.0) == 2
     )  # below last top -> last layer
 
-    np.testing.assert_array_equal(
-        moment.velocity_model_layer_index(vm, np.array([0.0, 1.0, 1.5, 2.0, 5.0])),
-        np.array([0, 1, 1, 2, 2]),
+    array_result = moment.velocity_model_layer_index(
+        vm, np.array([0.0, 1.0, 1.5, 2.0, 5.0])
     )
+    np.testing.assert_array_equal(array_result, np.array([0, 1, 1, 2, 2]))
+
+    # Lock the overload type contract: scalar input -> np.intp, array input -> np.intp array.
+    assert isinstance(moment.velocity_model_layer_index(vm, 0.5), np.intp)
+    assert array_result.dtype == np.intp
 
 
 def test_velocity_model_layer_index_top_depth():
