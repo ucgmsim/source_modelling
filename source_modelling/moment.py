@@ -307,14 +307,14 @@ def dyne_cm_to_newton_metre(dyne_cm: float) -> float:
 @typing.overload
 def velocity_model_layer_index(
     velocity_model_df: pd.DataFrame, depths_km: float
-) -> np.intp: ...  # numpydoc ignore=GL08
+) -> int: ...  # numpydoc ignore=GL08
 @typing.overload
 def velocity_model_layer_index(
     velocity_model_df: pd.DataFrame, depths_km: npt.NDArray[np.floating]
 ) -> npt.NDArray[np.intp]: ...  # numpydoc ignore=GL08
 def velocity_model_layer_index(
     velocity_model_df: pd.DataFrame, depths_km: float | npt.NDArray[np.floating]
-) -> np.intp | npt.NDArray[np.intp]:
+) -> int | npt.NDArray[np.intp]:
     """Return the velocity-model layer index containing each depth.
 
     Selects the deepest layer whose top depth does not exceed the query depth. A depth
