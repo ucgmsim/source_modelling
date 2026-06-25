@@ -344,13 +344,18 @@ def velocity_model_layer_index(
         raise ValueError(
             "Velocity model does not begin at 0km depth (are you using bottom depth instead of top depth)?"
         )
-    return np.maximum(
+
+    idx = (
         np.searchsorted(
             velocity_model_df["depth_km"].to_numpy(), depths_km, side="right"
         )
-        - 1,
-        0,
+        - 1
     )
+
+    if isinstance(depths_km, (int, float, np.floating)):
+        return max(0, int(idx))
+
+    return np.maximum(0, idx)
 
 
 def point_source_slip(
