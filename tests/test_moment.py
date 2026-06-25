@@ -245,8 +245,8 @@ def test_velocity_model_layer_index():
     )
     np.testing.assert_array_equal(array_result, np.array([0, 1, 1, 2, 2]))
 
-    # Lock the overload type contract: scalar input -> np.intp, array input -> np.intp array.
-    assert isinstance(moment.velocity_model_layer_index(vm, 0.5), np.intp)
+    # Lock the overload type contract: scalar input -> int, array input -> np.intp array.
+    assert isinstance(moment.velocity_model_layer_index(vm, 0.5), int)
     assert array_result.dtype == np.intp
 
 
