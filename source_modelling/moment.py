@@ -340,26 +340,6 @@ def velocity_model_layer_index(
         If the velocity model does not begin at 0 km depth (a sign that bottom depths were
         passed instead of top depths).
 
-    Notes
-    -----
-    Layers are keyed by their *top* depths ``t0 = 0 < t1 < ... < tN`` (the ``depth_km``
-    column). Each layer covers ``t_i <= depth < t_(i+1)``, so a depth lying exactly on a
-    boundary belongs to the *deeper* layer (the one whose top it is), and the deepest
-    layer is unbounded::
-
-        depth                          returned index
-        -----                          --------------
-        t0 = 0  --+--  layer 0          0   for  t0 <= depth < t1   (t0 = 0)
-                  |
-        t1      --+--  layer 1          1   for  t1 <= depth < t2   (depth == t1 -> 1)
-                  |
-        t2      --+--  layer 2          2   for  t2 <= depth < t3   (depth == t2 -> 2)
-                  |
-                  :     ...
-                  |
-        tN      --+--  layer N          N   for  depth >= tN        (deepest, unbounded)
-
-    Equivalently, ``searchsorted(depth_km, depth, side="right") - 1`` clamped at 0.
     """
     if not np.isclose(velocity_model_df["depth_km"].iloc[0], 0.0):
         raise ValueError(
