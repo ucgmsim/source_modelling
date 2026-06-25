@@ -317,9 +317,8 @@ def velocity_model_layer_index(
 ) -> np.intp | npt.NDArray[np.intp]:
     """Return the velocity-model layer index containing each depth.
 
-    Selects the deepest layer whose top depth does not exceed the query depth (a depth
-    exactly on a layer boundary takes the deeper layer); a depth above the first layer top
-    clamps to layer 0. Scalar in -> scalar out; array in -> array out.
+    Selects the deepest layer whose top depth does not exceed the query depth. A depth
+    exactly on a layer boundary takes the deeper layer.
 
     Parameters
     ----------
