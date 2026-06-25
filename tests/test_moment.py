@@ -209,3 +209,49 @@ def test_point_source_slip_bad_dataframe():
             velocity_model_df=bad_velocity_model_df,
             source_depth_km=2.0,
         )
+
+
+def test_velocity_model_layer_index():
+    """Test depth-to-velocity-layer mapping.
+
+    With layer top depths ``[0, 1, 2]`` km (three layers, the deepest unbounded), each
+    query depth is assigned the deepest layer whose top does not exceed it:
+
+    - an interior depth lands in its containing layer (``0.5 -> 0``, ``1.5 -> 1``);
+    - a depth exactly on a layer boundary takes the deeper layer, i.e. the one whose top
+      it is (``0.0 -> 0``, ``1.0 -> 1``, ``2.0 -> 2``);
+    - a depth beyond the last layer top falls in the deepest, unbounded layer
+      (``5.0 -> 2``);
+    - a depth above the surface (necessarily negative, as the model starts at 0) is
+      clamped to layer 0 rather than wrapping to the last layer (``-1.0 -> 0``);
+    - a scalar input returns an ``np.intp`` and an array input returns an ``np.intp``
+      array.
+    """
+    vm = pd.DataFrame({"depth_km": [0.0, 1.0, 2.0]})
+
+    assert (
+        moment.velocity_model_layer_index(vm, -1.0) == 0
+    )  # above surface -> clamp to 0
+    assert moment.velocity_model_layer_index(vm, 0.0) == 0
+    assert moment.velocity_model_layer_index(vm, 0.5) == 0
+    assert moment.velocity_model_layer_index(vm, 1.0) == 1  # boundary -> deeper layer
+    assert moment.velocity_model_layer_index(vm, 1.5) == 1
+    assert (
+        moment.velocity_model_layer_index(vm, 5.0) == 2
+    )  # below last top -> last layer
+
+    array_result = moment.velocity_model_layer_index(
+        vm, np.array([0.0, 1.0, 1.5, 2.0, 5.0])
+    )
+    np.testing.assert_array_equal(array_result, np.array([0, 1, 1, 2, 2]))
+
+    # Lock the overload type contract: scalar input -> int, array input -> np.intp array.
+    assert isinstance(moment.velocity_model_layer_index(vm, 0.5), int)
+    assert array_result.dtype == np.intp
+
+
+def test_velocity_model_must_start_at_zero():
+    """A velocity model not beginning at 0 km depth raises."""
+    bad_vm = pd.DataFrame({"depth_km": [1.0, 2.0]})
+    with pytest.raises(ValueError, match="Velocity model does not begin at 0km depth"):
+        moment.velocity_model_layer_index(bad_vm, 1.0)
