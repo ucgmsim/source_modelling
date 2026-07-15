@@ -159,9 +159,9 @@ mod tests {
         scanner.next::<f32>().unwrap();
         let err = scanner.next::<f32>().unwrap_err();
         match err {
-            ScannerError::InvalidNumber { index, context, .. } => {
-                assert_eq!(index, 4);
-                assert_eq!(context, "abc");
+            ScannerError::InvalidNumber { line, column, .. } => {
+                assert_eq!(line, 1);
+                assert_eq!(column, 5);
             }
             other => panic!("expected InvalidNumber, got {other:?}"),
         }
@@ -172,7 +172,7 @@ mod tests {
         let mut scanner = Scanner::new(b"  \n ");
         assert!(matches!(
             scanner.next::<f32>().unwrap_err(),
-            ScannerError::UnexpectedEof { .. }
+            ScannerError::UnexpectedEof
         ));
     }
 
@@ -187,7 +187,7 @@ mod tests {
     fn skip_token_mismatch_reports_both_tokens() {
         let mut scanner = Scanner::new(b"PLANES");
         match scanner.skip_token(b"POINTS").unwrap_err() {
-            ScannerError::InvalidToken { expected, found } => {
+            ScannerError::InvalidToken { expected, found, .. } => {
                 assert_eq!(expected, "POINTS");
                 assert_eq!(found, "PLANES");
             }
@@ -200,7 +200,7 @@ mod tests {
         let mut scanner = Scanner::new(b"POIN");
         assert!(matches!(
             scanner.skip_token(b"POINTS").unwrap_err(),
-            ScannerError::UnexpectedEof { .. }
+            ScannerError::UnexpectedEof
         ));
     }
 
@@ -214,9 +214,26 @@ mod tests {
     #[test]
     fn line_without_newline_errors() {
         let mut scanner = Scanner::new(b"no newline here");
-        assert!(matches!(
-            scanner.line().unwrap_err(),
-            ScannerError::NoNewlineFound { .. }
-        ));
+        match scanner.line().unwrap_err() {
+            ScannerError::NoNewlineFound { line, column } => {
+                assert_eq!(line, 1);
+                assert_eq!(column, 1);
+            }
+            other => panic!("expected NoNewlineFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn next_error_line_tracking() {
+        let mut scanner = Scanner::new(b"1.0\nabc");
+        scanner.next::<f32>().unwrap();
+        let err = scanner.next::<f32>().unwrap_err();
+        match err {
+            ScannerError::InvalidNumber { line, column, .. } => {
+                assert_eq!(line, 2);
+                assert_eq!(column, 2);
+            }
+            other => panic!("expected InvalidNumber, got {other:?}"),
+        }
     }
 }
