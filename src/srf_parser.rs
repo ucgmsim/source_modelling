@@ -178,6 +178,15 @@ fn read_srf_points_v1(
     Ok((metadata, slipt1))
 }
 
+fn skip_comments(scanner: &mut scanner::Scanner) -> Result<(), SrfParseError> {
+    scanner.skip_spaces()?;
+    while scanner.peek() == b'#' {
+        let _ = scanner.line()?;
+        // Technically you could have whitespace here, but again we're parsing a very strict subset.
+    }
+    Ok(())
+}
+
 fn read_srf_points_v2(
     planes: &[SrfPlane],
     scanner: &mut scanner::Scanner,
@@ -243,6 +252,10 @@ fn read_srf_points_v2(
 
 pub fn read_srf_struct(scanner: &mut scanner::Scanner) -> Result<SrfFile, SrfParseError> {
     let version = Version::parse(scanner.line()?)?;
+    // Comments can only occur between the version indicator and the PLANE token.
+    if version == Version::V2 {
+        skip_comments(scanner)?;
+    }
 
     scanner.skip_token(b"PLANE")?;
     let plane_count: usize = scanner.next()?;
