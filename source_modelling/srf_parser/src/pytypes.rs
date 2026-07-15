@@ -92,11 +92,16 @@ pub struct PySrfMetadata {
     pub slip1: Py<PyArray1<f32>>,
     #[pyo3(get, set)]
     pub rise: Py<PyArray1<f32>>,
+    #[pyo3(get, set)]
+    pub vs: Option<Py<PyArray1<f32>>>,
+    #[pyo3(get, set)]
+    pub density: Option<Py<PyArray1<f32>>>,
 }
 
 #[pymethods]
 impl PySrfMetadata {
     #[new]
+    #[pyo3(signature = (lon, lat, dep, stk, dip, area, tinit, dt, rake, slip1, rise, vs=None, density=None))]
     pub fn new(
         lon: Py<PyArray1<f32>>,
         lat: Py<PyArray1<f32>>,
@@ -109,9 +114,11 @@ impl PySrfMetadata {
         rake: Py<PyArray1<f32>>,
         slip1: Py<PyArray1<f32>>,
         rise: Py<PyArray1<f32>>,
+        vs: Option<Py<PyArray1<f32>>>,
+        density: Option<Py<PyArray1<f32>>>,
     ) -> Self {
         PySrfMetadata {
-            lon, lat, dep, stk, dip, area, tinit, dt, rake, slip1, rise,
+            lon, lat, dep, stk, dip, area, tinit, dt, rake, slip1, rise, vs, density,
         }
     }
 }

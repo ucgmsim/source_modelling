@@ -131,7 +131,7 @@ impl SrfMetadata {
         }
     }
 
-    pub fn push(&mut self, point: Point) {
+    pub fn push(&mut self, point: &Point) {
         self.lon.push(point.lon);
         self.lat.push(point.lat);
         self.dep.push(point.dep);
@@ -166,16 +166,19 @@ impl<'py> IntoPyObject<'py> for SrfMetadata {
                 rake: PyArray1::from_vec(py, self.rake).unbind(),
                 slip1: PyArray1::from_vec(py, self.slip1).unbind(),
                 rise: PyArray1::from_vec(py, self.rise).unbind(),
+                vs: None,
+                density: None,
             },
         )?
         .into_bound(py))
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct PointV2 {
-    base: Point,
-    vs: f32,
-    density: f32,
+    pub base: Point,
+    pub vs: f32,
+    pub density: f32,
 }
 
 #[derive(Debug)]
@@ -201,11 +204,55 @@ impl SrfMetadataV2 {
     }
 }
 
+impl<'py> IntoPyObject<'py> for SrfMetadataV2 {
+    type Target = PySrfMetadata;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        let base = self.base.into_pyobject(py)?;
+        {
+            let mut base_ref = base.borrow_mut();
+            base_ref.vs = Some(PyArray1::from_vec(py, self.vs).unbind());
+            base_ref.density = Some(PyArray1::from_vec(py, self.density).unbind());
+        }
+        Ok(base)
+    }
+}
+
+#[derive(Debug)]
+pub enum SrfMetadataVersioned {
+    V1(SrfMetadata),
+    V2(SrfMetadataV2),
+}
+
+impl SrfMetadataVersioned {
+    pub fn base(&self) -> &SrfMetadata {
+        match self {
+            Self::V1(metadata) => metadata,
+            Self::V2(metadata) => &metadata.base,
+        }
+    }
+}
+
+impl<'py> IntoPyObject<'py> for SrfMetadataVersioned {
+    type Target = PySrfMetadata;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        match self {
+            Self::V1(metadata) => metadata.into_pyobject(py),
+            Self::V2(metadata) => metadata.into_pyobject(py),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct SrfFile {
     pub version: String,
     pub planes: Vec<SrfPlane>,
-    pub metadata: SrfMetadata,
+    pub metadata: SrfMetadataVersioned,
     pub slipt1: CsrMatrix,
 }
 

@@ -1,5 +1,5 @@
 use crate::scanner;
-use crate::types::{CsrMatrix, Point, SrfFile, SrfMetadata, SrfPlane};
+use crate::types::{CsrMatrix, Point, SrfFile, SrfMetadata, SrfMetadataVersioned, SrfPlane};
 
 fn read_srf_header(
     scanner: &mut scanner::Scanner,
@@ -113,7 +113,7 @@ pub fn read_srf_struct(
     Ok(SrfFile {
         version,
         planes: header,
-        metadata,
+        metadata: SrfMetadataVersioned::V1(metadata),
         slipt1,
     })
 }
