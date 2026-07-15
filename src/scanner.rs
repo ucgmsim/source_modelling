@@ -2,28 +2,38 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ScannerError {
-    #[error("invalid number at byte {index}: {source}, context: {context}")]
+    #[error("line {line}:{column}: invalid number \"{source}\"")]
     InvalidNumber {
         source: lexical_core::Error,
-        index: usize,
-        context: String,
+        line: usize,
+        column: usize,
     },
-    #[error("invalid token, expected: {expected}, found: {found}")]
-    InvalidToken { expected: String, found: String },
-    #[error("could not find newline, context: {context}")]
-    NoNewlineFound { context: String },
-    #[error("unexpected end of input, context: {context}")]
-    UnexpectedEof { context: String },
+    #[error("line {line}:{column}: invalid token, expected: {expected}, found: \"{found}\"")]
+    InvalidToken {
+        expected: String,
+        found: String,
+        line: usize,
+        column: usize,
+    },
+    #[error("line {line}:{column}: could not find newline.")]
+    NoNewlineFound { line: usize, column: usize },
+    #[error("unexpected end of input")]
+    UnexpectedEof,
 }
 
 pub struct Scanner<'a> {
     data: &'a [u8],
     index: usize,
+    line: usize,
 }
 
 impl<'a> Scanner<'a> {
     pub fn new(data: &'a [u8]) -> Self {
-        Self { data, index: 0 }
+        Self {
+            data,
+            index: 0,
+            line: 1,
+        }
     }
 
     pub fn remaining(&self) -> usize {
@@ -40,8 +50,8 @@ impl<'a> Scanner<'a> {
             lexical_core::parse_partial(&self.data[self.index..]).map_err(|source| {
                 ScannerError::InvalidNumber {
                     source,
-                    index: self.index,
-                    context: self.context_string(),
+                    line: self.line,
+                    column: self.column(),
                 }
             })?;
         self.index += read;
@@ -49,54 +59,54 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn skip_spaces(&mut self) -> Result<(), ScannerError> {
-        let nonwhitespace = &self.data[self.index..]
+        let nonwhitespace = self.data[self.index..]
             .iter()
             .position(|&c| !c.is_ascii_whitespace());
         match nonwhitespace {
             Some(x) => {
+                self.line += self.data[self.index..self.index + x]
+                    .iter()
+                    .filter(|&&c| c == b'\n')
+                    .count();
                 self.index += x;
+
                 Ok(())
             }
-            _ => Err(ScannerError::UnexpectedEof {
-                context: self.context_string(),
-            }),
+            _ => Err(ScannerError::UnexpectedEof),
         }
     }
 
     pub fn expect_end_of_line(&mut self) -> Result<(), ScannerError> {
-        let mut i = self.index;
-        let mut found_eol = false;
-        let jump = &self.data[self.index..].iter().enumerate().find(|&(i, c)| c == b'\n' || !c.is_ascii_whitespace());
+        let jump = self.data[self.index..]
+            .iter()
+            .enumerate()
+            .find(|&(_, &c)| c == b'\n' || !c.is_ascii_whitespace());
         match jump {
             Some((i, b'\n')) => {
-                self.index += i;
+                self.index += i + 1; // Plus one to skip the newline itself
+                self.line += 1;
                 Ok(())
-            },
-            Some(_) => {
-                Err(ScannerError::NoNewlineFound {
-                    context: self.context_string(),
-                })
-            },
-            _ => {
-                Err(ScannerError::UnexpectedEof {
-                    context: self.context_string()
-                })
             }
+            Some(_) => Err(ScannerError::NoNewlineFound {
+                line: self.line,
+                column: self.column(),
+            }),
+            _ => Err(ScannerError::UnexpectedEof),
         }
     }
 
     pub fn line(&mut self) -> Result<&[u8], ScannerError> {
-        let newline_index = &self.data[self.index..]
-            .iter()
-            .position(|&c| => c == b"\n");
+        let newline_index = self.data[self.index..].iter().position(|&c| c == b'\n');
         match newline_index {
             Some(x) => {
                 let res = Ok(&self.data[self.index..self.index + x]);
+                self.line += 1;
                 self.index += x + 1; // plus 1 to skip the newline itself.
                 res
             }
             _ => Err(ScannerError::NoNewlineFound {
-                context: self.context_string(),
+                line: self.line,
+                column: self.column(),
             }),
         }
     }
@@ -106,26 +116,28 @@ impl<'a> Scanner<'a> {
         let next = self
             .data
             .get(self.index..self.index + token.len())
-            .ok_or_else(|| ScannerError::UnexpectedEof {
-                context: self.context_string(),
-            })?;
+            .ok_or(ScannerError::UnexpectedEof)?;
         if next == token {
             self.index += token.len();
+            self.line += token.iter().filter(|&&c| c == b'\n').count();
             Ok(())
         } else {
             Err(ScannerError::InvalidToken {
+                line: self.line,
+                column: self.column(),
                 expected: String::from_utf8_lossy(token).into_owned(),
                 found: String::from_utf8_lossy(next).into_owned(),
             })
         }
     }
 
-    pub fn context(&self) -> &[u8] {
-        &self.data[self.index..(self.index + 20).min(self.data.len())]
-    }
-
-    fn context_string(&self) -> String {
-        String::from_utf8_lossy(self.context()).into_owned()
+    fn column(&self) -> usize {
+        let nl = self.data[..self.index]
+            .iter()
+            .rposition(|&c| c == b'\n')
+            .unwrap_or(0);
+        // Columns are 1-indexed for human readability
+        self.index - nl + 1
     }
 }
 
