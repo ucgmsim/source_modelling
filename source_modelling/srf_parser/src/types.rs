@@ -88,6 +88,54 @@ impl CsrMatrix {
     pub fn push(&mut self, v: f32) {
         self.data.push(v);
     }
+
+    pub fn rows(&self) -> CsrRowIter<'_> {
+        CsrRowIter {
+            matrix: self,
+            index: 0,
+        }
+    }
+}
+
+pub struct CsrRowIter<'a> {
+    matrix: &'a CsrMatrix,
+    index: usize,
+}
+
+impl<'a> Iterator for CsrRowIter<'a> {
+    type Item = &'a [f32];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.index;
+        if i >= self.matrix.row_ptr.len() {
+            return None;
+        }
+        self.index += 1;
+        let start = self.matrix.row_ptr[i];
+        let end = self
+            .matrix
+            .row_ptr
+            .get(i + 1)
+            .copied()
+            .unwrap_or(self.matrix.data.len());
+        Some(&self.matrix.data[start..end])
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.matrix.row_ptr.len() - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for CsrRowIter<'_> {}
+
+impl<'a> IntoIterator for &'a CsrMatrix {
+    type Item = &'a [f32];
+    type IntoIter = CsrRowIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.rows()
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -150,6 +198,59 @@ impl SrfMetadata {
         self.slip1.push(point.slip1);
         self.rise.push(point.rise);
     }
+
+    pub fn iter(&self) -> PointIter<'_> {
+        PointIter {
+            metadata: self,
+            index: 0,
+        }
+    }
+}
+
+pub struct PointIter<'a> {
+    metadata: &'a SrfMetadata,
+    index: usize,
+}
+
+impl Iterator for PointIter<'_> {
+    type Item = Point;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.index;
+        if i >= self.metadata.lon.len() {
+            return None;
+        }
+        self.index += 1;
+        Some(Point {
+            lon: self.metadata.lon[i],
+            lat: self.metadata.lat[i],
+            dep: self.metadata.dep[i],
+            stk: self.metadata.stk[i],
+            dip: self.metadata.dip[i],
+            area: self.metadata.area[i],
+            tinit: self.metadata.tinit[i],
+            dt: self.metadata.dt[i],
+            rake: self.metadata.rake[i],
+            slip1: self.metadata.slip1[i],
+            rise: self.metadata.rise[i],
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.metadata.lon.len() - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for PointIter<'_> {}
+
+impl<'a> IntoIterator for &'a SrfMetadata {
+    type Item = Point;
+    type IntoIter = PointIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
 }
 
 impl<'py> IntoPyObject<'py> for SrfMetadata {
@@ -207,6 +308,47 @@ impl SrfMetadataV2 {
         self.base.push(&point.base);
         self.vs.push(point.vs);
         self.density.push(point.density);
+    }
+
+    pub fn iter(&self) -> PointV2Iter<'_> {
+        PointV2Iter {
+            points: self.base.iter(),
+            metadata: self,
+        }
+    }
+}
+
+pub struct PointV2Iter<'a> {
+    points: PointIter<'a>,
+    metadata: &'a SrfMetadataV2,
+}
+
+impl Iterator for PointV2Iter<'_> {
+    type Item = PointV2;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.points.index;
+        let base = self.points.next()?;
+        Some(PointV2 {
+            base,
+            vs: self.metadata.vs[i],
+            density: self.metadata.density[i],
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.points.size_hint()
+    }
+}
+
+impl ExactSizeIterator for PointV2Iter<'_> {}
+
+impl<'a> IntoIterator for &'a SrfMetadataV2 {
+    type Item = PointV2;
+    type IntoIter = PointV2Iter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

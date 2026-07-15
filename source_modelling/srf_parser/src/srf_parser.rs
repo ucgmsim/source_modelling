@@ -5,22 +5,6 @@ use crate::types::{
     CsrMatrix, Point, PointV2, SrfFile, SrfMetadata, SrfMetadataV2, SrfMetadataVersioned, SrfPlane,
 };
 
-#[derive(Debug, Error)]
-pub enum SrfParseError {
-    #[error(transparent)]
-    Scanner(#[from] scanner::ScannerError),
-    #[error("unknown SRF version: {0}")]
-    UnknownVersion(String),
-    #[error("PLANE headers expect {expected} total points but POINTS declares {declared}")]
-    PointCountMismatch { declared: usize, expected: usize },
-    #[error("plane {plane} expects {expected} points but its POINTS block declares {declared}")]
-    PlanePointCountMismatch {
-        plane: usize,
-        declared: usize,
-        expected: usize,
-    },
-}
-
 #[derive(Debug)]
 pub enum Version {
     V1,
@@ -37,6 +21,22 @@ impl Version {
             )),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum SrfParseError {
+    #[error(transparent)]
+    Scanner(#[from] scanner::ScannerError),
+    #[error("unknown SRF version: {0}")]
+    UnknownVersion(String),
+    #[error("PLANE headers expect {expected} total points but POINTS declares {declared}")]
+    PointCountMismatch { declared: usize, expected: usize },
+    #[error("plane {plane} expects {expected} points but its POINTS block declares {declared}")]
+    PlanePointCountMismatch {
+        plane: usize,
+        declared: usize,
+        expected: usize,
+    },
 }
 
 fn read_srf_header(
