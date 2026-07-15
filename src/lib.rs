@@ -1,7 +1,8 @@
-mod scanner;
 pub mod pytypes;
-pub mod srf_parser;
-pub mod types;
+mod scanner;
+mod srf_parser;
+mod srf_writer;
+mod types;
 
 use lexical_core::BUFFER_SIZE;
 use memmap::MmapOptions;
@@ -30,6 +31,17 @@ pub fn parse_srf<'py>(py: Python<'py>, file_path: &str) -> PyResult<Py<PySrfFile
     let mut scanner = scanner::Scanner::new(&mmap);
     let srf_file = srf_parser::read_srf_struct(&mut scanner).or_else(marshall_value_error)?;
     Ok(srf_file.into_pyobject(py)?.unbind())
+}
+
+#[pyfunction]
+pub fn write_srf<'py>(
+    py: Python<'py>,
+    py_srf_file: Py<PySrfFile>,
+    file_path: &str,
+) -> PyResult<()> {
+    let mut writer = File::open(file_path).or_else(marshall_os_error)?;
+    let srf_file = py_srf_file.extract(py)?;
+    srf_writer::write_srf(&mut writer, srf_file).or_else(marshall_os_error)
 }
 
 #[pyfunction]
