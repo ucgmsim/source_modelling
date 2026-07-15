@@ -13,6 +13,7 @@ lexical-core = "1.0.6"
 memmap2 = "0.9"
 ndarray = "0.17.2"
 thiserror = "2"
+itertools = "0.15.0"
 
 [profile.release]
 lto = "thin"

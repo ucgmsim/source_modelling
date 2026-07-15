@@ -109,9 +109,13 @@ fn read_point_header(scanner: &mut scanner::Scanner) -> Result<PointHeader, SrfP
 fn read_slip_row(
     scanner: &mut scanner::Scanner,
     slipt1: &mut CsrMatrix,
+    tinit: f32,
+    dt: f32,
     nt: usize,
 ) -> Result<(), SrfParseError> {
     let _slip2 = scanner.next::<f32>()?;
+    // The choice between round and floor is relatively arbitrary. We choose floor here.
+    let starting = (tinit / dt).floor() as usize;
 
     let nt2 = scanner.next::<usize>()?;
     if nt2 != 0 {
@@ -123,11 +127,9 @@ fn read_slip_row(
     if nt3 != 0 {
         return Err(SrfParseError::UnsupportedSlipArray(3));
     }
-
-    slipt1.push_row();
-    for _ in 0..nt {
-        slipt1.push(scanner.next()?);
-    }
+    itertools::process_results((0..nt).map(|_| scanner.next()), |clean_iter| {
+        slipt1.add_row(starting, clean_iter)
+    })?;
     Ok(())
 }
 
@@ -178,7 +180,8 @@ fn read_srf_points_v1(
             rise,
         };
         metadata.push(&point);
-        read_slip_row(scanner, &mut slipt1, nt)?;
+
+        read_slip_row(scanner, &mut slipt1, header.tinit, header.dt, nt)?;
     }
     Ok((metadata, slipt1))
 }
@@ -249,7 +252,7 @@ fn read_srf_points_v2(
                 vs,
                 density,
             });
-            read_slip_row(scanner, &mut slipt1, nt)?;
+            read_slip_row(scanner, &mut slipt1, header.tinit, header.dt, nt)?;
         }
     }
     Ok((metadata, slipt1))
@@ -322,7 +325,7 @@ POINTS 2\n\
         assert_eq!(metadata.lon, vec![0.1, 0.2]);
         assert_eq!(metadata.rake, vec![30.0, 45.0]);
         assert_eq!(metadata.rise, vec![3.0 * 0.1f32, 2.0 * 0.1f32]);
-        assert_eq!(srf.slipt1.row_ptr, vec![0, 3]);
+        assert_eq!(srf.slipt1.row_ptr, vec![0, 3, 5]);
         assert_eq!(srf.slipt1.data, vec![0.1, 0.2, 0.3, 0.4, 0.5]);
     }
 
@@ -374,7 +377,7 @@ POINTS 1\n\
         assert_eq!(metadata.base.lon, vec![0.1, 0.2]);
         assert_eq!(metadata.vs, vec![3.5, 3.6]);
         assert_eq!(metadata.density, vec![2.7, 2.8]);
-        assert_eq!(srf.slipt1.row_ptr, vec![0, 2]);
+        assert_eq!(srf.slipt1.row_ptr, vec![0, 2, 3]);
         assert_eq!(srf.slipt1.data, vec![0.1, 0.2, 0.4]);
     }
 

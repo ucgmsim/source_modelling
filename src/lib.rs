@@ -35,7 +35,9 @@ pub fn parse_srf<'py>(py: Python<'py>, file_path: &str) -> PyResult<Py<PySrfFile
         // mmap requires a non-zero length, so we guard against zero-length files here.
         let is_empty = file.metadata().or_else(marshall_os_error)?.len() == 0;
         if is_empty {
-            return Err(PyValueError::new_err("Cannot parse SRF from empty file.".to_string()));
+            return Err(PyValueError::new_err(
+                "Cannot parse SRF from empty file.".to_string(),
+            ));
         }
         let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
         // If we tell the OS we intend to read sequentially it will aggressively
@@ -74,6 +76,7 @@ pub fn write_srf(py: Python<'_>, py_srf_file: Py<PySrfFile>, file_path: &str) ->
     let vs = metadata.vs.as_ref().map(|arr| arr.bind(py).readonly());
     let density = metadata.density.as_ref().map(|arr| arr.bind(py).readonly());
     let row_ptr = slipt1.row_ptr.bind(py).readonly();
+    let indices = slipt1.indices.bind(py).readonly();
     let data = slipt1.data.bind(py).readonly();
 
     let base: SrfMetadataView = SrfMetadataView {
@@ -109,6 +112,7 @@ pub fn write_srf(py: Python<'_>, py_srf_file: Py<PySrfFile>, file_path: &str) ->
         metadata: metadata_view,
         slipt1: CsrMatrixView {
             row_ptr: row_ptr.as_slice()?,
+            indices: indices.as_slice()?,
             data: data.as_slice()?,
         },
     };

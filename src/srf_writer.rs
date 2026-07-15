@@ -263,6 +263,7 @@ POINTS 1\n\
             }),
             slipt1: CsrMatrixView {
                 row_ptr: &srf.slipt1.row_ptr,
+                indices: &srf.slipt1.indices,
                 data: &srf.slipt1.data,
             },
         };

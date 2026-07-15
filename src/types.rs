@@ -70,8 +70,14 @@ impl<'py> IntoPyObject<'py> for SrfPlane {
 
 /// CSR matrix over any storage: `Vec`s when parsing (the parser appends), or
 /// borrowed slices when writing data that another allocator (e.g. numpy) owns.
+///
+/// `row_ptr` follows the scipy `indptr` convention: an n-row matrix has n+1
+/// entries, `row_ptr[0] == 0`, `row_ptr[n] == data.len()`, and row i occupies
+/// `data[row_ptr[i]..row_ptr[i + 1]]`. This holds after every `add_row`, so the
+/// matrix can be handed to scipy or iterated at any point without a fixup pass.
 #[derive(Debug)]
 pub struct CsrMatrix<R = Vec<usize>, D = Vec<f32>> {
+    pub indices: R,
     pub row_ptr: R,
     pub data: D,
 }
@@ -84,15 +90,12 @@ impl<'py> IntoPyObject<'py> for CsrMatrix {
     type Error = PyErr;
 
     fn into_pyobject(mut self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        // from_vec keeps the Vec as the numpy array's backing store, so any
-        // excess capacity from the parser's size guess would stay reserved
-        // for the array's whole lifetime unless released here.
-        self.row_ptr.shrink_to_fit();
-        self.data.shrink_to_fit();
+        self.finalise();
         Ok(Py::new(
             py,
             PyCsrMatrix {
                 row_ptr: PyArray1::from_vec(py, self.row_ptr).unbind(),
+                indices: PyArray1::from_vec(py, self.indices).unbind(),
                 data: PyArray1::from_vec(py, self.data).unbind(),
             },
         )?
@@ -103,17 +106,31 @@ impl<'py> IntoPyObject<'py> for CsrMatrix {
 impl CsrMatrix {
     pub fn new(row_capacity: usize, data_capacity: usize) -> Self {
         CsrMatrix {
-            row_ptr: Vec::with_capacity(row_capacity),
+            row_ptr: {
+                let mut row_ptr = Vec::with_capacity(row_capacity + 1);
+                row_ptr.push(0);
+                row_ptr
+            },
+            indices: Vec::with_capacity(data_capacity),
             data: Vec::with_capacity(data_capacity),
         }
     }
 
-    pub fn push_row(&mut self) {
+    pub fn add_row<I>(&mut self, starting: usize, values: I)
+    where
+        I: Iterator<Item = f32>,
+    {
+        for (i, v) in values.enumerate() {
+            self.indices.push(starting + i);
+            self.data.push(v);
+        }
         self.row_ptr.push(self.data.len());
     }
 
-    pub fn push(&mut self, v: f32) {
-        self.data.push(v);
+    pub fn finalise(&mut self) {
+        self.row_ptr.shrink_to_fit();
+        self.data.shrink_to_fit();
+        self.indices.shrink_to_fit();
     }
 }
 
@@ -138,17 +155,17 @@ impl<'a> Iterator for CsrRowIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let i = self.index;
-        if i >= self.row_ptr.len() {
+        // n rows are described by n+1 row_ptr entries, so the last valid row
+        // index is row_ptr.len() - 2.
+        if i + 1 >= self.row_ptr.len() {
             return None;
         }
         self.index += 1;
-        let start = self.row_ptr[i];
-        let end = self.row_ptr.get(i + 1).copied().unwrap_or(self.data.len());
-        Some(&self.data[start..end])
+        Some(&self.data[self.row_ptr[i]..self.row_ptr[i + 1]])
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.row_ptr.len() - self.index;
+        let remaining = self.row_ptr.len().saturating_sub(self.index + 1);
         (remaining, Some(remaining))
     }
 }
@@ -161,6 +178,90 @@ impl<'a, R: AsRef<[usize]>, D: AsRef<[f32]>> IntoIterator for &'a CsrMatrix<R, D
 
     fn into_iter(self) -> Self::IntoIter {
         self.rows()
+    }
+}
+
+#[cfg(test)]
+mod csr_tests {
+    use super::*;
+
+    fn build(rows: &[&[f32]]) -> CsrMatrix {
+        let mut matrix = CsrMatrix::new(rows.len(), rows.iter().map(|row| row.len()).sum());
+        for row in rows {
+            matrix.add_row(0, row.iter().copied());
+        }
+        matrix
+    }
+
+    // row_ptr must be a valid scipy indptr after every add_row, not just once
+    // finalise has run.
+    fn assert_indptr_invariant(matrix: &CsrMatrix, rows: usize) {
+        assert_eq!(matrix.row_ptr.len(), rows + 1);
+        assert_eq!(matrix.row_ptr[0], 0);
+        assert_eq!(*matrix.row_ptr.last().unwrap(), matrix.data.len());
+        assert!(matrix.row_ptr.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn empty_matrix_has_zero_rows() {
+        let matrix = build(&[]);
+        assert_indptr_invariant(&matrix, 0);
+        assert_eq!(matrix.rows().count(), 0);
+    }
+
+    #[test]
+    fn invariant_holds_after_every_add_row() {
+        let mut matrix = CsrMatrix::new(3, 6);
+        for (i, row) in [&[1.0f32, 2.0][..], &[][..], &[3.0][..]].iter().enumerate() {
+            matrix.add_row(0, row.iter().copied());
+            assert_indptr_invariant(&matrix, i + 1);
+        }
+    }
+
+    // Each row's column indices start at the point's own offset on the global
+    // timeline (floor(tinit / dt)), so rows can sit at different columns.
+    #[test]
+    fn starting_offset_shifts_column_indices() {
+        let mut matrix = CsrMatrix::new(2, 4);
+        matrix.add_row(0, [1.0f32, 2.0].into_iter());
+        matrix.add_row(1, [3.0f32, 4.0].into_iter());
+        assert_eq!(matrix.indices, vec![0, 1, 1, 2]);
+        assert_eq!(matrix.row_ptr, vec![0, 2, 4]);
+        // Widest column touched is 2, so the matrix spans 3 columns.
+        assert_eq!(matrix.indices.iter().max().copied(), Some(2));
+    }
+
+    #[test]
+    fn rows_yields_exactly_the_added_rows() {
+        let matrix = build(&[&[1.0, 2.0], &[], &[3.0]]);
+        let rows: Vec<&[f32]> = matrix.rows().collect();
+        assert_eq!(rows, vec![&[1.0f32, 2.0][..], &[][..], &[3.0][..]]);
+    }
+
+    // The bug this guards: a trailing empty phantom row, previously produced by
+    // iterating a finalised row_ptr and masked downstream by zip().
+    #[test]
+    fn finalise_does_not_change_the_rows() {
+        let mut matrix = build(&[&[1.0, 2.0], &[3.0]]);
+        let before: Vec<Vec<f32>> = matrix.rows().map(|row| row.to_vec()).collect();
+        let row_ptr_before = matrix.row_ptr.clone();
+        matrix.finalise();
+        let after: Vec<Vec<f32>> = matrix.rows().map(|row| row.to_vec()).collect();
+        assert_eq!(before, after);
+        assert_eq!(matrix.row_ptr, row_ptr_before);
+    }
+
+    #[test]
+    fn exact_size_hint_matches_rows_produced() {
+        let matrix = build(&[&[1.0, 2.0], &[], &[3.0]]);
+        let mut iter = matrix.rows();
+        for expected in (0..=3).rev() {
+            assert_eq!(iter.len(), expected);
+            assert_eq!(iter.size_hint(), (expected, Some(expected)));
+            if iter.next().is_none() {
+                break;
+            }
+        }
     }
 }
 

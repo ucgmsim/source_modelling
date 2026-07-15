@@ -280,18 +280,11 @@ class SrfFile:
 
         row_ptr = py_srf.slipt1.row_ptr
         data = py_srf.slipt1.data
-        row_lengths = np.diff(np.append(row_ptr, len(data)))
-        start_cols = np.floor(metadata.tinit / metadata.dt).astype(np.int64)
-        indices = np.concatenate(
-            [
-                start_cols[i] + np.arange(row_lengths[i])
-                for i in range(len(row_ptr))
-            ]
-        )
-        indptr = np.append(row_ptr, len(data))
+        indices = py_srf.slipt1.indices
+
         n_timesteps = int(indices.max()) + 1 if len(indices) else 0
         slipt1_array = sp.sparse.csr_array(
-            (data, indices, indptr), shape=(len(row_ptr), n_timesteps)
+            (data, indices, row_ptr), shape=(len(row_ptr) - 1, n_timesteps)
         )
 
         return cls(
@@ -349,7 +342,8 @@ class SrfFile:
         )
 
         slipt1 = srf_parser.PyCsrMatrix(
-            row_ptr=self.slip.indptr[:-1].astype(np.uint64),
+            row_ptr=self.slip.indptr.astype(np.uint64),
+            indices=self.slip.indices.astype(np.uint64),
             data=self.slip.data.astype(np.float32),
         )
 
@@ -395,7 +389,9 @@ class SrfFile:
             ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
 
         points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
-        if self.version == "2.0":  # vs/den are mandatory in 2.0; missing columns will fail loudly
+        if (
+            self.version == "2.0"
+        ):  # vs/den are mandatory in 2.0; missing columns will fail loudly
             points_data["VS"] = self.points["vs"].to_numpy().astype(np.float32)
             points_data["DEN"] = self.points["den"].to_numpy().astype(np.float32)
 
