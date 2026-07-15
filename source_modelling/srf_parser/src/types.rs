@@ -18,6 +18,12 @@ pub struct SrfPlane {
     pub dhyp: f32,
 }
 
+impl SrfPlane {
+    pub fn points(&self) -> usize {
+        self.nstk * self.ndip
+    }
+}
+
 impl<'py> IntoPyObject<'py> for SrfPlane {
     type Target = PySrfPlane;
     type Output = Bound<'py, Self::Target>;
@@ -198,7 +204,7 @@ impl SrfMetadataV2 {
     }
 
     pub fn push(&mut self, point: &PointV2) {
-        self.base.push(point.base);
+        self.base.push(&point.base);
         self.vs.push(point.vs);
         self.density.push(point.density);
     }
@@ -250,7 +256,6 @@ impl<'py> IntoPyObject<'py> for SrfMetadataVersioned {
 
 #[derive(Debug)]
 pub struct SrfFile {
-    pub version: String,
     pub planes: Vec<SrfPlane>,
     pub metadata: SrfMetadataVersioned,
     pub slipt1: CsrMatrix,
@@ -271,7 +276,6 @@ impl<'py> IntoPyObject<'py> for SrfFile {
         Ok(Py::new(
             py,
             PySrfFile {
-                version: self.version,
                 planes,
                 metadata,
                 slipt1,

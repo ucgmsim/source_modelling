@@ -45,7 +45,17 @@ impl PySrfPlane {
         dhyp: f32,
     ) -> Self {
         PySrfPlane {
-            elon, elat, nstk, ndip, len, wid, stk, dip, dtop, shyp, dhyp,
+            elon,
+            elat,
+            nstk,
+            ndip,
+            len,
+            wid,
+            stk,
+            dip,
+            dtop,
+            shyp,
+            dhyp,
         }
     }
 }
@@ -118,7 +128,19 @@ impl PySrfMetadata {
         density: Option<Py<PyArray1<f32>>>,
     ) -> Self {
         PySrfMetadata {
-            lon, lat, dep, stk, dip, area, tinit, dt, rake, slip1, rise, vs, density,
+            lon,
+            lat,
+            dep,
+            stk,
+            dip,
+            area,
+            tinit,
+            dt,
+            rake,
+            slip1,
+            rise,
+            vs,
+            density,
         }
     }
 }
@@ -126,8 +148,6 @@ impl PySrfMetadata {
 #[pyclass]
 #[derive(Debug)]
 pub struct PySrfFile {
-    #[pyo3(get, set)]
-    pub version: String,
     #[pyo3(get, set)]
     pub planes: Vec<Py<PySrfPlane>>,
     #[pyo3(get, set)]
@@ -140,13 +160,11 @@ pub struct PySrfFile {
 impl PySrfFile {
     #[new]
     pub fn new(
-        version: String,
         planes: Vec<Py<PySrfPlane>>,
         metadata: Py<PySrfMetadata>,
         slipt1: Py<PyCsrMatrix>,
     ) -> Self {
         PySrfFile {
-            version,
             planes,
             metadata,
             slipt1,
