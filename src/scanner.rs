@@ -30,6 +30,10 @@ impl<'a> Scanner<'a> {
         self.data.len() - self.index
     }
 
+    pub fn peek(&self) -> u8 {
+        self.data[self.index]
+    }
+
     pub fn next<T: lexical_core::FromLexical>(&mut self) -> Result<T, ScannerError> {
         self.skip_spaces()?;
         let (val, read) =
@@ -44,7 +48,7 @@ impl<'a> Scanner<'a> {
         Ok(val)
     }
 
-    fn skip_spaces(&mut self) -> Result<(), ScannerError> {
+    pub fn skip_spaces(&mut self) -> Result<(), ScannerError> {
         let nonwhitespace = &self.data[self.index..]
             .iter()
             .enumerate()

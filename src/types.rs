@@ -83,7 +83,12 @@ impl<'py> IntoPyObject<'py> for CsrMatrix {
     type Output = Bound<'py, Self::Target>;
     type Error = PyErr;
 
-    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+    fn into_pyobject(mut self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        // from_vec keeps the Vec as the numpy array's backing store, so any
+        // excess capacity from the parser's size guess would stay reserved
+        // for the array's whole lifetime unless released here.
+        self.row_ptr.shrink_to_fit();
+        self.data.shrink_to_fit();
         Ok(Py::new(
             py,
             PyCsrMatrix {
