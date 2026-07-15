@@ -75,6 +75,11 @@ fn read_srf_header(
     Ok(plane_vec)
 }
 
+// Slip values dominate SRF files and are written fixed-width by EMOD3D (%13.5e
+// style: 11 chars + separator). This is especially true of large magnitude
+// ruptures with large slip histories.
+const APPROX_BYTES_PER_SLIP_VALUE: usize = 12;
+
 // Tiny PointHeader used to construct actual points later.
 struct PointHeader {
     lon: f32,
@@ -139,7 +144,7 @@ fn read_srf_points_v1(
             expected: plane_point_count,
         });
     }
-    let slipt1_capacity = scanner.remaining() / 8;
+    let slipt1_capacity = scanner.remaining() / APPROX_BYTES_PER_SLIP_VALUE;
     let mut metadata = SrfMetadata::with_capacity(point_count);
     let mut slipt1 = CsrMatrix::new(point_count, slipt1_capacity);
 
@@ -192,7 +197,7 @@ fn read_srf_points_v2(
     scanner: &mut scanner::Scanner,
 ) -> Result<(SrfMetadataV2, CsrMatrix), SrfParseError> {
     let point_count = planes.iter().map(|plane| plane.points()).sum();
-    let slipt1_capacity = scanner.remaining() / 8;
+    let slipt1_capacity = scanner.remaining() / APPROX_BYTES_PER_SLIP_VALUE;
 
     let mut metadata = SrfMetadataV2::with_capacity(point_count);
     let mut slipt1 = CsrMatrix::new(point_count, slipt1_capacity);
