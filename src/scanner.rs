@@ -18,7 +18,7 @@ pub enum ScannerError {
 
 pub struct Scanner<'a> {
     data: &'a [u8],
-    pub index: usize,
+    index: usize,
 }
 
 impl<'a> Scanner<'a> {
@@ -51,9 +51,7 @@ impl<'a> Scanner<'a> {
     pub fn skip_spaces(&mut self) -> Result<(), ScannerError> {
         let nonwhitespace = &self.data[self.index..]
             .iter()
-            .enumerate()
-            .find(|&(_, &x)| !x.is_ascii_whitespace())
-            .map(|(idx, _)| idx);
+            .position(|&c| !c.is_ascii_whitespace());
         match nonwhitespace {
             Some(x) => {
                 self.index += x;
@@ -68,37 +66,29 @@ impl<'a> Scanner<'a> {
     pub fn expect_end_of_line(&mut self) -> Result<(), ScannerError> {
         let mut i = self.index;
         let mut found_eol = false;
-
-        while i < self.data.len() && !found_eol {
-            let c = self.data[i];
-            if c == b'\n' {
-                found_eol = true;
-            } else if !c.is_ascii_whitespace() {
-                break;
+        let jump = &self.data[self.index..].iter().enumerate().find(|&(i, c)| c == b'\n' || !c.is_ascii_whitespace());
+        match jump {
+            Some((i, b'\n')) => {
+                self.index += i;
+                Ok(())
+            },
+            Some(_) => {
+                Err(ScannerError::NoNewlineFound {
+                    context: self.context_string(),
+                })
+            },
+            _ => {
+                Err(ScannerError::UnexpectedEof {
+                    context: self.context_string()
+                })
             }
-            i += 1;
-        }
-
-        if found_eol {
-            self.index = i;
-            Ok(())
-        } else if i == self.data.len() {
-            Err(ScannerError::UnexpectedEof {
-                context: self.context_string(),
-            })
-        } else {
-            Err(ScannerError::NoNewlineFound {
-                context: self.context_string(),
-            })
         }
     }
 
     pub fn line(&mut self) -> Result<&[u8], ScannerError> {
         let newline_index = &self.data[self.index..]
             .iter()
-            .enumerate()
-            .find(|&(_, &x)| x == b'\n')
-            .map(|(idx, _)| idx);
+            .position(|&c| => c == b"\n");
         match newline_index {
             Some(x) => {
                 let res = Ok(&self.data[self.index..self.index + x]);
