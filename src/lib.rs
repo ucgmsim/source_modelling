@@ -5,7 +5,7 @@ mod srf_writer;
 mod types;
 
 use memmap2::{Advice, MmapOptions};
-use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::PyArrayMethods;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
@@ -35,9 +35,7 @@ pub fn parse_srf<'py>(py: Python<'py>, file_path: &str) -> PyResult<Py<PySrfFile
         // mmap requires a non-zero length, so we guard against zero-length files here.
         let is_empty = file.metadata().or_else(marshall_os_error)?.len() == 0;
         if is_empty {
-            return Err(PyValueError::new_err(format!(
-                "Cannot parse SRF from empty file."
-            )));
+            return Err(PyValueError::new_err("Cannot parse SRF from empty file.".to_string()));
         }
         let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
         // If we tell the OS we intend to read sequentially it will aggressively
