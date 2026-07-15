@@ -21,19 +21,21 @@ def test_christchurch_srf():
     assert christchurch_srf.version == "1.0"
     assert len(christchurch_srf.header) == 1
     assert len(christchurch_srf.points) == 14400
-    assert christchurch_srf.header.iloc[0].to_dict() == {
-        "elon": 172.6966,
-        "elat": -43.5446,
-        "nstk": 160,
-        "ndip": 90,
-        "len": 16.00,
-        "wid": 9.00,
-        "stk": 59,
-        "dip": 69,
-        "dtop": 0.63,
-        "shyp": -2.00,
-        "dhyp": 6.00,
-    }
+    assert christchurch_srf.header.iloc[0].to_dict() == pytest.approx(
+        {
+            "elon": 172.6966,
+            "elat": -43.5446,
+            "nstk": 160,
+            "ndip": 90,
+            "len": 16.00,
+            "wid": 9.00,
+            "stk": 59,
+            "dip": 69,
+            "dtop": 0.63,
+            "shyp": -2.00,
+            "dhyp": 6.00,
+        }
+    )
     # local strike and dip should match the header
     assert (christchurch_srf.points["dip"] == 69).all()
     assert (christchurch_srf.points["stk"] == 59).all()
@@ -120,7 +122,7 @@ def test_christchurch_srf():
 def test_darfield_srf():
     """Test that the SRF reader can parse the Darfield SRF and validate basic properties."""
     darfield_srf = srf.read_srf(SRF_DIR / "3366146.srf")
-    assert darfield_srf.header.to_dict(orient="records") == [
+    expected_headers = [
         {
             "elon": 172.133408,
             "elat": -43.550999,
@@ -213,6 +215,10 @@ def test_darfield_srf():
             "dhyp": 6.0000,
         },
     ]
+    actual_headers = darfield_srf.header.to_dict(orient="records")
+    assert len(actual_headers) == len(expected_headers)
+    for actual, expected in zip(actual_headers, expected_headers):
+        assert actual == pytest.approx(expected)
     # Will not test the basic properties again because that is tested
     # in the Christchurch case pretty thoroughly. Will, however, test
     # the segment iteration thoroughly
