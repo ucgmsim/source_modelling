@@ -10,7 +10,7 @@ use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 use std::error;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{BufWriter, Error, Write};
 
 use crate::pytypes::{PyCsrMatrix, PySrfFile, PySrfMetadata, PySrfPlane};
