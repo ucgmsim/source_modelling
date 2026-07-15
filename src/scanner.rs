@@ -132,12 +132,11 @@ impl<'a> Scanner<'a> {
     }
 
     fn column(&self) -> usize {
-        let nl = self.data[..self.index]
+        // Columns are 1-indexed for readability
+        self.data[..self.index]
             .iter()
             .rposition(|&c| c == b'\n')
-            .unwrap_or(0);
-        // Columns are 1-indexed for human readability
-        self.index - nl + 1
+            .map_or(self.index + 1, |nl| self.index - nl)
     }
 }
 
@@ -187,7 +186,9 @@ mod tests {
     fn skip_token_mismatch_reports_both_tokens() {
         let mut scanner = Scanner::new(b"PLANES");
         match scanner.skip_token(b"POINTS").unwrap_err() {
-            ScannerError::InvalidToken { expected, found, .. } => {
+            ScannerError::InvalidToken {
+                expected, found, ..
+            } => {
                 assert_eq!(expected, "POINTS");
                 assert_eq!(found, "PLANES");
             }
@@ -231,7 +232,7 @@ mod tests {
         match err {
             ScannerError::InvalidNumber { line, column, .. } => {
                 assert_eq!(line, 2);
-                assert_eq!(column, 2);
+                assert_eq!(column, 1);
             }
             other => panic!("expected InvalidNumber, got {other:?}"),
         }
