@@ -143,11 +143,7 @@ impl<'a> Iterator for CsrRowIter<'a> {
         }
         self.index += 1;
         let start = self.row_ptr[i];
-        let end = self
-            .row_ptr
-            .get(i + 1)
-            .copied()
-            .unwrap_or(self.data.len());
+        let end = self.row_ptr.get(i + 1).copied().unwrap_or(self.data.len());
         Some(&self.data[start..end])
     }
 
@@ -435,15 +431,6 @@ impl<'py> IntoPyObject<'py> for SrfMetadataV2 {
 pub enum SrfMetadataVersioned<S = Vec<f32>> {
     V1(SrfMetadata<S>),
     V2(SrfMetadataV2<S>),
-}
-
-impl<S> SrfMetadataVersioned<S> {
-    pub fn base(&self) -> &SrfMetadata<S> {
-        match self {
-            Self::V1(metadata) => metadata,
-            Self::V2(metadata) => &metadata.base,
-        }
-    }
 }
 
 impl<'py> IntoPyObject<'py> for SrfMetadataVersioned {

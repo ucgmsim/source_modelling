@@ -31,6 +31,7 @@ pub struct PySrfPlane {
 #[pymethods]
 impl PySrfPlane {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         elon: f32,
         elat: f32,
@@ -112,6 +113,7 @@ pub struct PySrfMetadata {
 impl PySrfMetadata {
     #[new]
     #[pyo3(signature = (lon, lat, dep, stk, dip, area, tinit, dt, rake, slip1, rise, vs=None, density=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         lon: Py<PyArray1<f32>>,
         lat: Py<PyArray1<f32>>,
