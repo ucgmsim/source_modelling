@@ -84,6 +84,21 @@ impl CsrMatrix {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Point {
+    pub lon: f32,
+    pub lat: f32,
+    pub dep: f32,
+    pub stk: f32,
+    pub dip: f32,
+    pub area: f32,
+    pub tinit: f32,
+    pub dt: f32,
+    pub rake: f32,
+    pub slip1: f32,
+    pub rise: f32,
+}
+
 #[derive(Debug)]
 pub struct SrfMetadata {
     pub lon: Vec<f32>,
@@ -157,19 +172,33 @@ impl<'py> IntoPyObject<'py> for SrfMetadata {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct Point {
-    pub lon: f32,
-    pub lat: f32,
-    pub dep: f32,
-    pub stk: f32,
-    pub dip: f32,
-    pub area: f32,
-    pub tinit: f32,
-    pub dt: f32,
-    pub rake: f32,
-    pub slip1: f32,
-    pub rise: f32,
+pub struct PointV2 {
+    base: Point,
+    vs: f32,
+    density: f32,
+}
+
+#[derive(Debug)]
+pub struct SrfMetadataV2 {
+    pub base: SrfMetadata,
+    pub vs: Vec<f32>,
+    pub density: Vec<f32>,
+}
+
+impl SrfMetadataV2 {
+    pub fn with_capacity(n: usize) -> Self {
+        SrfMetadataV2 {
+            base: SrfMetadata::with_capacity(n),
+            vs: Vec::with_capacity(n),
+            density: Vec::with_capacity(n),
+        }
+    }
+
+    pub fn push(&mut self, point: &PointV2) {
+        self.base.push(point.base);
+        self.vs.push(point.vs);
+        self.density.push(point.density);
+    }
 }
 
 #[derive(Debug)]
