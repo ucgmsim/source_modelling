@@ -5,7 +5,7 @@ use crate::types::{
     CsrMatrix, Point, PointV2, SrfFile, SrfMetadata, SrfMetadataV2, SrfMetadataVersioned, SrfPlane,
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Version {
     V1,
     V2,
@@ -37,6 +37,8 @@ pub enum SrfParseError {
         declared: usize,
         expected: usize,
     },
+    #[error("SRF parser does not support slip{0} array ")]
+    UnsupportedSlipArray(usize),
 }
 
 fn read_srf_header(
@@ -105,9 +107,17 @@ fn read_slip_row(
     nt: usize,
 ) -> Result<(), SrfParseError> {
     let _slip2 = scanner.next::<f32>()?;
-    let _nt2 = scanner.next::<usize>()?;
+
+    let nt2 = scanner.next::<usize>()?;
+    if nt2 != 0 {
+        return Err(SrfParseError::UnsupportedSlipArray(2));
+    }
     let _slip3 = scanner.next::<f32>()?;
-    let _nt3 = scanner.next::<usize>()?;
+
+    let nt3 = scanner.next::<usize>()?;
+    if nt3 != 0 {
+        return Err(SrfParseError::UnsupportedSlipArray(3));
+    }
 
     slipt1.push_row();
     for _ in 0..nt {
