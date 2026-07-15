@@ -754,3 +754,56 @@ def test_sw4_hdf5_v2(tmp_path: Path):
         points = h5file["POINTS"]
         assert points["VS"] == pytest.approx(srf_v2.points["vs"].to_numpy())
         assert points["DEN"] == pytest.approx(srf_v2.points["den"].to_numpy())
+
+
+def test_read_srf_multiple_point_blocks(tmp_path: Path):
+    """Read a multi-segment SRF that stores one POINTS block per plane.
+
+    genslip writes segmented ruptures with a separate ``POINTS`` block for
+    each plane (rather than a single concatenated block). The reader must
+    consume every block so all segments carry their points. Each plane below
+    holds a single subfault, so the values are hand-verifiable against the
+    file. The two points also start at different times (tinit 0.0 vs 0.2), so
+    their slip-rate functions land in different columns, exercising the
+    combination of per-block sparse slip arrays with differing widths.
+    """
+    srf_ffp = tmp_path / "multi_block.srf"
+    srf_ffp.write_text(
+        "1.0\n"
+        "PLANE 2\n"
+        "  172.0  -43.0   1   1   1.0   1.0\n"
+        "  45   80   0.0   0.0   0.5\n"
+        "  172.5  -43.5   1   1   1.0   1.0\n"
+        "  45   80   0.0   0.0   0.5\n"
+        "POINTS 1\n"
+        "  172.0  -43.0   0.5   45   80   1.0e10   0.0   0.1\n"
+        "  90   10.0   1   0.0   0   0.0   0\n"
+        "  5.0\n"
+        "POINTS 1\n"
+        "  172.5  -43.5   0.6   45   80   1.0e10   0.2   0.1\n"
+        "  90   20.0   1   0.0   0   0.0   0\n"
+        "  7.0\n"
+    )
+    multi_block = srf.read_srf(srf_ffp)
+
+    # Both planes' points must be present, in file order.
+    assert len(multi_block.points) == 2
+    assert multi_block.points["lon"].tolist() == pytest.approx([172.0, 172.5])
+    assert multi_block.points["lat"].tolist() == pytest.approx([-43.0, -43.5])
+    assert multi_block.points["slip"].tolist() == pytest.approx([10.0, 20.0])
+
+    # Each segment must resolve to its own (non-empty) point.
+    assert len(multi_block.segments) == 2
+    assert len(multi_block.segments[0]) == 1
+    assert len(multi_block.segments[1]) == 1
+    assert multi_block.segments[0]["lon"].iloc[0] == pytest.approx(172.0)
+    assert multi_block.segments[1]["lon"].iloc[0] == pytest.approx(172.5)
+
+    # Per-block slip arrays (widths 1 and 3) combine into a single (2, 3) array:
+    # point 0 (floor(0.0/0.1)=0) fills column 0; point 1 (floor(0.2/0.1)=2)
+    # fills column 2.
+    assert multi_block.slipt1_array.shape == (2, 3)
+    assert np.array_equal(
+        multi_block.slipt1_array.toarray(),
+        np.array([[5.0, 0.0, 0.0], [0.0, 0.0, 7.0]], dtype=np.float32),
+    )

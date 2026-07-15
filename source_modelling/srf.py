@@ -38,6 +38,7 @@ Examples
 """
 
 import dataclasses
+import mmap
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -96,6 +97,98 @@ SW4_POINTS_DTYPE = np.dtype(
 )
 
 _SW4_POINTS_EXTERNAL_FIELDS = {"VS", "DEN", "NT1", "SLIP2", "NT2", "SLIP3", "NT3"}
+
+
+def _find_point_blocks(srf_ffp: Path | str, start: int) -> list[tuple[int, int]]:
+    """Locate every ``POINTS`` block in an SRF file.
+
+    A single-segment (or otherwise concatenated) SRF has one ``POINTS`` block
+    holding all subfaults, whereas genslip writes multi-segment ruptures with
+    one ``POINTS`` block per plane. This returns each block so the reader can
+    consume them all.
+
+    Parameters
+    ----------
+    srf_ffp : Path | str
+        The path to the SRF file.
+    start : int
+        Byte offset to begin scanning from (i.e. the end of the plane
+        headers), so ``POINTS`` tokens inside the leading comment lines are
+        never matched.
+
+    Returns
+    -------
+    list[tuple[int, int]]
+        A ``(data_offset, point_count)`` pair for each ``POINTS`` block, in
+        file order. ``data_offset`` is the byte offset of the first point line
+        (immediately after the ``POINTS N`` header line).
+    """
+    blocks = []
+    with open(srf_ffp, mode="rb") as srf_file_handle:
+        srf_bytes = mmap.mmap(srf_file_handle.fileno(), 0, access=mmap.ACCESS_READ)
+        try:
+            pos = srf_bytes.find(b"POINTS", start)
+            while pos != -1:
+                line_end = srf_bytes.find(b"\n", pos)
+                if line_end == -1:
+                    line_end = len(srf_bytes)
+                # Only treat "POINTS" as a header when it begins a line, so it
+                # cannot be confused with point data or comment text.
+                at_line_start = pos == 0 or srf_bytes[pos - 1 : pos] in (b"\n", b"\r")
+                if at_line_start:
+                    header = srf_bytes[pos:line_end].decode("utf-8", "replace").strip()
+                    match = re.match(POINT_COUNT_RE, header)
+                    if match:
+                        blocks.append((line_end + 1, int(match.group(1))))
+                pos = srf_bytes.find(b"POINTS", line_end + 1)
+        finally:
+            srf_bytes.close()
+    return blocks
+
+
+def _combine_slip_blocks(
+    slip_blocks: list[tuple["sp.sparse.csr_array | None", int]],
+) -> "sp.sparse.csr_array | None":
+    """Vertically stack per-block slip-rate arrays into one array.
+
+    Each block's slip-rate array may have a different number of columns
+    (timesteps), since floor(tinit / dt) + nt differs between segments. Blocks
+    are padded to the widest column count before stacking. Empty blocks (no
+    slip samples) contribute all-zero rows so the row count stays aligned with
+    the points.
+
+    Parameters
+    ----------
+    slip_blocks : list[tuple[csr_array | None, int]]
+        A ``(slip_array, point_count)`` pair per block, in file order. The slip
+        array is ``None`` when the block records no slip samples.
+
+    Returns
+    -------
+    csr_array | None
+        The combined slip-rate array, or ``None`` when no block records any
+        slip.
+    """
+    if all(slip is None for slip, _ in slip_blocks):
+        return None
+    if len(slip_blocks) == 1:
+        return slip_blocks[0][0]
+    max_columns = max(
+        (slip.shape[1] for slip, _ in slip_blocks if slip is not None), default=0
+    )
+    padded = []
+    for slip, point_count in slip_blocks:
+        if slip is None:
+            padded.append(sp.sparse.csr_array((point_count, max_columns)))
+        else:
+            # Re-widen to the common column count; column indices are unchanged.
+            padded.append(
+                sp.sparse.csr_array(
+                    (slip.data, slip.indices, slip.indptr),
+                    shape=(slip.shape[0], max_columns),
+                )
+            )
+    return sp.sparse.csr_array(sp.sparse.vstack(padded, format="csr"))
 
 
 class Segments(Sequence):
@@ -271,18 +364,32 @@ class SrfFile:
             headers["nstk"] = headers["nstk"].astype(int)
             headers["ndip"] = headers["ndip"].astype(int)
 
-            points_count_line = srf_file_handle.readline().strip()
-            points_count_match = re.match(POINT_COUNT_RE, points_count_line)
-            if not points_count_match:
-                raise parse_utils.ParseError(
-                    f'Expecting POINTS header line, got: "{points_count_line}"'
-                )
-            point_count = int(points_count_match.group(1))
-            position = srf_file_handle.tell()
+            # The points section begins here. A rupture stores its subfaults
+            # either in a single POINTS block (all segments concatenated) or,
+            # as genslip writes for multi-segment ruptures, in one POINTS block
+            # per plane. Both layouts are read by consuming every POINTS block.
+            points_section_start = srf_file_handle.tell()
 
-        points_metadata, slipt1_array = srf_parser.parse_srf(  # type: ignore
-            str(srf_ffp), position, point_count, version == "2.0"
+        read_vs_den = version == "2.0"
+        point_blocks = _find_point_blocks(srf_ffp, points_section_start)
+        if not point_blocks:
+            raise parse_utils.ParseError("Expecting POINTS header line, found none")
+
+        metadata_blocks = []
+        slip_blocks = []
+        for data_offset, point_count in point_blocks:
+            points_metadata, slip = srf_parser.parse_srf(  # type: ignore
+                str(srf_ffp), data_offset, point_count, read_vs_den
+            )
+            metadata_blocks.append(points_metadata)
+            slip_blocks.append((slip, point_count))
+
+        points_metadata = (
+            metadata_blocks[0]
+            if len(metadata_blocks) == 1
+            else np.concatenate(metadata_blocks)
         )
+        slipt1_array = _combine_slip_blocks(slip_blocks)
 
         columns = ["lon", "lat", "dep", "stk", "dip", "area", "tinit", "dt"]
         if version == "2.0":
