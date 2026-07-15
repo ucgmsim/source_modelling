@@ -50,7 +50,7 @@ import shapely
 import xarray as xr
 
 from qcore import coordinates
-from source_modelling import parse_utils, srf_parser
+from source_modelling import parse_utils, srf_parser  # ty: ignore[unresolved-import]
 from source_modelling.sources import Plane
 
 SW4_PLANE_DTYPE = np.dtype(
