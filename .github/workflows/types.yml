@@ -26,4 +26,4 @@ jobs:
           enable-cache: true
 
       - name: Run type checking with ty
-        run: uv run --all-groups ty check --exclude source_modelling/ccldpy.py --exclude setup.py
+        run: uv run --all-groups --all-extras ty check --exclude source_modelling/ccldpy.py --exclude setup.py
