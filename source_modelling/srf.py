@@ -239,7 +239,7 @@ class SrfFile:
                     mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm,
                 ):
                     # Windows doesn't have madvise
-                    if getattr(mm, "madvise"):
+                    if getattr(mm, "madvise", None):
                         mm.madvise(mmap.MADV_SEQUENTIAL)
                     py_srf = srf_parser.parse_srf(mm)
             else:
