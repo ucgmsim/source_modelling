@@ -40,8 +40,11 @@ impl<'a> Scanner<'a> {
         self.data.len() - self.index
     }
 
-    pub fn peek(&self) -> u8 {
-        self.data[self.index]
+    pub fn peek(&self) -> Result<u8, ScannerError> {
+        self.data
+            .get(self.index)
+            .map(|&x| x)
+            .ok_or(ScannerError::UnexpectedEof)
     }
 
     pub fn next<T: lexical_core::FromLexical>(&mut self) -> Result<T, ScannerError> {
