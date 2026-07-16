@@ -134,3 +134,10 @@ exclude = [ # don't report on objects that match any of these regex
   '\.__repr__$',
 ]
 
+
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "Cargo.toml" },
+  { file = "**/*.rs" },
+]

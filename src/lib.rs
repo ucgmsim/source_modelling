@@ -4,8 +4,8 @@ mod srf_parser;
 mod srf_writer;
 mod types;
 
-use memmap2::{Advice, MmapOptions};
 use numpy::PyArrayMethods;
+use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
@@ -28,22 +28,24 @@ fn marshall_value_error<T, U: error::Error>(e: U) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
 }
 
+fn buffer_bytes(buf: &PyBuffer<u8>) -> &[u8] {
+    // SAFETY: caller guarantees a live, C-contiguous, readable u8 export.
+    // Lifetime is tied to `buf`, so the borrow checker forbids dropping the
+    // PyBuffer while this slice is in use.
+    unsafe { std::slice::from_raw_parts(buf.buf_ptr().cast(), buf.item_count()) }
+}
+
 #[pyfunction]
-pub fn parse_srf<'py>(py: Python<'py>, file_path: &str) -> PyResult<Py<PySrfFile>> {
+pub fn parse_srf<'py>(py: Python<'py>, buffer: PyBuffer<u8>) -> PyResult<Py<PySrfFile>> {
+    if !buffer.is_c_contiguous() {
+        return Err(PyValueError::new_err("SRF buffer must be C-contiguous"));
+    }
+    let bytes = buffer_bytes(&buffer);
+    if bytes.is_empty() {
+        return Err(PyValueError::new_err("Cannot parse SRF from empty buffer"));
+    }
     let srf_file = py.detach(|| {
-        let file = File::open(file_path).or_else(marshall_os_error)?;
-        // mmap requires a non-zero length, so we guard against zero-length files here.
-        let is_empty = file.metadata().or_else(marshall_os_error)?.len() == 0;
-        if is_empty {
-            return Err(PyValueError::new_err(
-                "Cannot parse SRF from empty file.".to_string(),
-            ));
-        }
-        let mmap = unsafe { MmapOptions::new().map(&file) }.or_else(marshall_os_error)?;
-        // If we tell the OS we intend to read sequentially it will aggressively
-        // page into memory before we need it.
-        let _ = mmap.advise(Advice::Sequential);
-        let mut scanner = scanner::Scanner::new(&mmap);
+        let mut scanner = scanner::Scanner::new(bytes);
         srf_parser::read_srf_struct(&mut scanner).or_else(marshall_value_error)
     })?;
     Ok(srf_file.into_pyobject(py)?.unbind())
@@ -136,5 +138,6 @@ fn srf_utils(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySrfFile>()?;
     m.add_function(wrap_pyfunction!(write_srf, m)?)?;
     m.add_function(wrap_pyfunction!(parse_srf, m)?)?;
+
     Ok(())
 }

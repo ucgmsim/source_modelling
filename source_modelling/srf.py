@@ -38,9 +38,10 @@ Examples
 """
 
 import dataclasses
+import mmap
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Self
+from typing import IO, Self
 
 import h5py
 import numpy as np
@@ -218,7 +219,7 @@ class SrfFile:
     slipt1_array: sp.sparse.csr_array
 
     @classmethod
-    def from_file(cls, srf_ffp: Path | str) -> Self:
+    def from_file(cls, srf_ffp: Path | str | IO[bytes]) -> Self:
         """Read an srf file from a filepath.
 
         Parameters
@@ -232,7 +233,15 @@ class SrfFile:
             The SRFFile instance for this path.
         """
         try:
-            py_srf = srf_parser.parse_srf(str(srf_ffp))
+            if isinstance(srf_ffp, (Path, str)):
+                with (
+                    open(srf_ffp, "rb") as f,
+                    mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm,
+                ):
+                    mm.madvise(mmap.MADV_SEQUENTIAL)
+                    py_srf = srf_parser.parse_srf(mm)
+            else:
+                py_srf = srf_parser.parse_srf(srf_ffp)
         except ValueError as parse_error:
             raise parse_utils.ParseError(str(parse_error)) from parse_error
 
@@ -684,7 +693,7 @@ class SrfFile:
         return planes
 
 
-def read_srf(srf_ffp: Path | str) -> SrfFile:
+def read_srf(srf_ffp: Path | str | IO[bytes]) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
     Parameters
