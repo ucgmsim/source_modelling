@@ -32,8 +32,5 @@ jobs:
       - name: cargo test
         run: cargo test
 
-      - name: cargo doc-tests
-        run: cargo test --doc
-
       - name: Clippy (Rust linter)
         run: cargo clippy -- -D warnings
