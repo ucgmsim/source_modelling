@@ -39,7 +39,7 @@ Examples
 
 import dataclasses
 import mmap
-from collections.abc import Sequence
+from collections.abc import Buffer, Sequence
 from pathlib import Path
 from typing import IO, Self
 
@@ -219,13 +219,13 @@ class SrfFile:
     slipt1_array: sp.sparse.csr_array
 
     @classmethod
-    def from_file(cls, srf_ffp: Path | str | IO[bytes]) -> Self:
+    def from_file(cls, srf_ffp: Path | str | Buffer) -> Self:
         """Read an srf file from a filepath.
 
         Parameters
         ----------
-        srf_ffp : Path
-            The path to the srf file.
+        srf_ffp : Path | str | Buffer
+            Either a path-like pointing to a file, or a buffer containg raw SRF bytes.
 
         Returns
         -------
@@ -238,7 +238,9 @@ class SrfFile:
                     open(srf_ffp, "rb") as f,
                     mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm,
                 ):
-                    mm.madvise(mmap.MADV_SEQUENTIAL)
+                    # Windows doesn't have madvise
+                    if getattr(mm, "madvise"):
+                        mm.madvise(mmap.MADV_SEQUENTIAL)
                     py_srf = srf_parser.parse_srf(mm)
             else:
                 py_srf = srf_parser.parse_srf(srf_ffp)
