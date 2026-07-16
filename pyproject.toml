@@ -24,7 +24,7 @@ dependencies = [
   "xarray[io]",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 test = [
   "pytest",
   "pytest-cov",
@@ -38,8 +38,9 @@ types = [
   "scipy-stubs",
   "pandas-stubs",
   "types-networkx",
-  "ty",
 ]
+
+[dependency-groups]
 dev = ["ruff", "deptry", "ty", "numpydoc"]
 
 
@@ -141,3 +142,7 @@ cache-keys = [
   { file = "Cargo.toml" },
   { file = "**/*.rs" },
 ]
+
+
+[tool.deptry]
+optional_dependencies_dev_groups = ["test", "types"]

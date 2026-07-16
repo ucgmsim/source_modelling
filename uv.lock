@@ -2158,13 +2158,7 @@ dependencies = [
     { name = "xarray", extra = ["io"] },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "deptry" },
-    { name = "numpydoc" },
-    { name = "ruff" },
-    { name = "ty" },
-]
+[package.optional-dependencies]
 test = [
     { name = "coverage" },
     { name = "hypothesis", extra = ["numpy", "pandas"] },
@@ -2175,27 +2169,45 @@ test = [
 types = [
     { name = "pandas-stubs" },
     { name = "scipy-stubs" },
-    { name = "ty" },
     { name = "types-geopandas" },
     { name = "types-networkx" },
     { name = "types-shapely" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "deptry" },
+    { name = "numpydoc" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "coverage", extras = ["toml"], marker = "extra == 'test'" },
     { name = "fiona" },
     { name = "geopandas" },
     { name = "h5py" },
+    { name = "hypothesis", extras = ["numpy", "pandas"], marker = "extra == 'test'" },
+    { name = "hypothesis-networkx", marker = "extra == 'test'" },
     { name = "networkx" },
     { name = "numba", specifier = ">=0.65.1" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "pandas" },
+    { name = "pandas-stubs", marker = "extra == 'types'" },
     { name = "parse" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
     { name = "qcore-utils" },
     { name = "scipy" },
+    { name = "scipy-stubs", marker = "extra == 'types'" },
     { name = "shapely" },
+    { name = "types-geopandas", marker = "extra == 'types'" },
+    { name = "types-networkx", marker = "extra == 'types'" },
+    { name = "types-shapely", marker = "extra == 'types'" },
     { name = "xarray", extras = ["io"] },
 ]
+provides-extras = ["test", "types"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2203,21 +2215,6 @@ dev = [
     { name = "numpydoc" },
     { name = "ruff" },
     { name = "ty" },
-]
-test = [
-    { name = "coverage", extras = ["toml"] },
-    { name = "hypothesis", extras = ["pandas", "numpy"] },
-    { name = "hypothesis-networkx" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-types = [
-    { name = "pandas-stubs" },
-    { name = "scipy-stubs" },
-    { name = "ty" },
-    { name = "types-geopandas" },
-    { name = "types-networkx" },
-    { name = "types-shapely" },
 ]
 
 [[package]]
