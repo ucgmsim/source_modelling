@@ -38,8 +38,8 @@ Examples
 """
 
 import dataclasses
-import re
-from collections.abc import Sequence
+import mmap
+from collections.abc import Buffer, Sequence
 from pathlib import Path
 from typing import Self
 
@@ -51,11 +51,8 @@ import shapely
 import xarray as xr
 
 from qcore import coordinates
-from source_modelling import parse_utils, srf_parser
+from source_modelling import parse_utils, srf_parser  # ty: ignore[unresolved-import]
 from source_modelling.sources import Plane
-
-PLANE_COUNT_RE = r"PLANE (\d+)"
-POINT_COUNT_RE = r"POINTS (\d+)"
 
 SW4_PLANE_DTYPE = np.dtype(
     [
@@ -222,76 +219,83 @@ class SrfFile:
     slipt1_array: sp.sparse.csr_array
 
     @classmethod
-    def from_file(cls, srf_ffp: Path | str) -> Self:
+    def from_file(cls, srf_ffp: Path | str | Buffer) -> Self:
         """Read an srf file from a filepath.
 
         Parameters
         ----------
-        srf_ffp : Path
-            The path to the srf file.
+        srf_ffp : Path | str | Buffer
+            Either a path-like pointing to a file, or a buffer containg raw SRF bytes.
 
         Returns
         -------
         Self
             The SRFFile instance for this path.
         """
-        with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
-            version = srf_file_handle.readline().strip()
-            if version not in {"1.0", "2.0"}:
-                raise parse_utils.ParseError(f"Unsupported SRF version: {version}")
+        try:
+            if isinstance(srf_ffp, (Path, str)):
+                with (
+                    open(srf_ffp, "rb") as f,
+                    mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm,
+                ):
+                    # Windows doesn't have madvise
+                    if hasattr(mm, "madvise"):
+                        mm.madvise(mmap.MADV_SEQUENTIAL)
+                    py_srf = srf_parser.parse_srf(mm)
+            else:
+                py_srf = srf_parser.parse_srf(srf_ffp)
+        except ValueError as parse_error:
+            raise parse_utils.ParseError(str(parse_error)) from parse_error
 
-            plane_count_line = srf_file_handle.readline().strip()
-            while plane_count_line.startswith("#"):  # genslip writes comments after the version line
-                plane_count_line = srf_file_handle.readline().strip()
-            plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
-            if not plane_count_match:
-                raise parse_utils.ParseError(
-                    f'Expecting PLANE header line, got: "{plane_count_line}"'
-                )
-            plane_count = int(plane_count_match.group(1))
-            segments = []
+        version = "2.0" if py_srf.metadata.vs is not None else "1.0"
 
-            for _ in range(plane_count):
-                segments.append(
-                    {
-                        "elon": parse_utils.read_float(srf_file_handle),
-                        "elat": parse_utils.read_float(srf_file_handle),
-                        "nstk": parse_utils.read_int(srf_file_handle),
-                        "ndip": parse_utils.read_int(srf_file_handle),
-                        "len": parse_utils.read_float(srf_file_handle),
-                        "wid": parse_utils.read_float(srf_file_handle),
-                        "stk": parse_utils.read_float(srf_file_handle),
-                        "dip": parse_utils.read_float(srf_file_handle),
-                        "dtop": parse_utils.read_float(srf_file_handle),
-                        "shyp": parse_utils.read_float(srf_file_handle),
-                        "dhyp": parse_utils.read_float(srf_file_handle),
-                    }
-                )
-            headers = pd.DataFrame(segments)
-            headers["nstk"] = headers["nstk"].astype(int)
-            headers["ndip"] = headers["ndip"].astype(int)
-
-            points_count_line = srf_file_handle.readline().strip()
-            points_count_match = re.match(POINT_COUNT_RE, points_count_line)
-            if not points_count_match:
-                raise parse_utils.ParseError(
-                    f'Expecting POINTS header line, got: "{points_count_line}"'
-                )
-            point_count = int(points_count_match.group(1))
-            position = srf_file_handle.tell()
-
-        points_metadata, slipt1_array = srf_parser.parse_srf(  # type: ignore
-            str(srf_ffp), position, point_count, version == "2.0"
+        headers = pd.DataFrame(
+            [
+                {
+                    "elon": plane.elon,
+                    "elat": plane.elat,
+                    "nstk": plane.nstk,
+                    "ndip": plane.ndip,
+                    "len": plane.len,
+                    "wid": plane.wid,
+                    "stk": plane.stk,
+                    "dip": plane.dip,
+                    "dtop": plane.dtop,
+                    "shyp": plane.shyp,
+                    "dhyp": plane.dhyp,
+                }
+                for plane in py_srf.planes
+            ]
         )
+        headers["nstk"] = headers["nstk"].astype(int)
+        headers["ndip"] = headers["ndip"].astype(int)
 
-        columns = ["lon", "lat", "dep", "stk", "dip", "area", "tinit", "dt"]
+        metadata = py_srf.metadata
+        points_data = {
+            "lon": metadata.lon,
+            "lat": metadata.lat,
+            "dep": metadata.dep,
+            "stk": metadata.stk,
+            "dip": metadata.dip,
+            "area": metadata.area,
+            "tinit": metadata.tinit,
+            "dt": metadata.dt,
+        }
         if version == "2.0":
-            columns += ["vs", "den"]
-        columns += ["rake", "slip", "rise"]
+            points_data["vs"] = metadata.vs
+            points_data["den"] = metadata.density
+        points_data["rake"] = metadata.rake
+        points_data["slip"] = metadata.slip1
+        points_data["rise"] = metadata.rise
+        points_df = pd.DataFrame(points_data)
 
-        points_df = pd.DataFrame(
-            points_metadata.reshape((-1, len(columns))),
-            columns=columns,
+        row_ptr = py_srf.slipt1.row_ptr
+        data = py_srf.slipt1.data
+        indices = py_srf.slipt1.indices
+
+        n_timesteps = int(indices.max()) + 1 if len(indices) else 0
+        slipt1_array = sp.sparse.csr_array(
+            (data, indices, row_ptr), shape=(len(row_ptr) - 1, n_timesteps)
         )
 
         return cls(
@@ -311,30 +315,51 @@ class SrfFile:
 
         """
 
-        with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
-            srf_file_handle.write(f"{self.version}\n")
-            srf_file_handle.write(f"PLANE {len(self.header)}\n")
-            # Cannot use self.header.to_string because the newline separating headers is significant!
-            # This is ok because the number of headers is typically very small (< 100)
-            for _, plane in self.header.iterrows():
-                srf_file_handle.write(
-                    "\n".join(
-                        [
-                            f"{plane['elon']:.6f} {plane['elat']:.6f} {int(plane['nstk'])} {int(plane['ndip'])} {plane['len']:.4f} {plane['wid']:.4f}",
-                            f"{plane['stk']:.4f} {plane['dip']:.4f} {plane['dtop']:.4f} {plane['shyp']:.4f} {plane['dhyp']:.4f}",
-                            "",
-                        ]
-                    )
-                )
+        planes = [
+            srf_parser.PySrfPlane(
+                elon=row["elon"],
+                elat=row["elat"],
+                nstk=int(row["nstk"]),
+                ndip=int(row["ndip"]),
+                len=row["len"],
+                wid=row["wid"],
+                stk=row["stk"],
+                dip=row["dip"],
+                dtop=row["dtop"],
+                shyp=row["shyp"],
+                dhyp=row["dhyp"],
+            )
+            for _, row in self.header.iterrows()
+        ]
 
-            srf_file_handle.write(f"POINTS {len(self.points)}\n")
-
-        srf_parser.write_srf_points(  # type: ignore
-            str(srf_ffp),
-            self.points.values.astype(np.float32),
-            self.slip.indptr,
-            self.slip.data,
+        metadata = srf_parser.PySrfMetadata(
+            lon=self.points["lon"].to_numpy(dtype=np.float32),
+            lat=self.points["lat"].to_numpy(dtype=np.float32),
+            dep=self.points["dep"].to_numpy(dtype=np.float32),
+            stk=self.points["stk"].to_numpy(dtype=np.float32),
+            dip=self.points["dip"].to_numpy(dtype=np.float32),
+            area=self.points["area"].to_numpy(dtype=np.float32),
+            tinit=self.points["tinit"].to_numpy(dtype=np.float32),
+            dt=self.points["dt"].to_numpy(dtype=np.float32),
+            rake=self.points["rake"].to_numpy(dtype=np.float32),
+            slip1=self.points["slip"].to_numpy(dtype=np.float32),
+            rise=self.points["rise"].to_numpy(dtype=np.float32),
+            vs=self.points["vs"].to_numpy(dtype=np.float32)
+            if "vs" in self.points
+            else None,
+            density=self.points["den"].to_numpy(dtype=np.float32)
+            if "den" in self.points
+            else None,
         )
+
+        slipt1 = srf_parser.PyCsrMatrix(
+            row_ptr=self.slip.indptr.astype(np.uint64),
+            indices=self.slip.indices.astype(np.uint64),
+            data=self.slip.data.astype(np.float32),
+        )
+
+        py_srf_file = srf_parser.PySrfFile(planes, metadata, slipt1)
+        srf_parser.write_srf(py_srf_file, str(srf_ffp))
 
     def write_sw4_hdf5(
         self,
@@ -375,7 +400,9 @@ class SrfFile:
             ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
 
         points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
-        if self.version == "2.0":  # vs/den are mandatory in 2.0; missing columns will fail loudly
+        if (
+            self.version == "2.0"
+        ):  # vs/den are mandatory in 2.0; missing columns will fail loudly
             points_data["VS"] = self.points["vs"].to_numpy().astype(np.float32)
             points_data["DEN"] = self.points["den"].to_numpy().astype(np.float32)
 
@@ -668,7 +695,7 @@ class SrfFile:
         return planes
 
 
-def read_srf(srf_ffp: Path | str) -> SrfFile:
+def read_srf(srf_ffp: Path | str | Buffer) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
     Parameters
