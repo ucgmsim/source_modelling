@@ -41,7 +41,7 @@ import dataclasses
 import mmap
 from collections.abc import Buffer, Sequence
 from pathlib import Path
-from typing import IO, Self
+from typing import Self
 
 import h5py
 import numpy as np
@@ -695,7 +695,7 @@ class SrfFile:
         return planes
 
 
-def read_srf(srf_ffp: Path | str | IO[bytes]) -> SrfFile:
+def read_srf(srf_ffp: Path | str | Buffer) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
     Parameters
