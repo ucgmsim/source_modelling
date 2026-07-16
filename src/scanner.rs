@@ -42,8 +42,7 @@ impl<'a> Scanner<'a> {
 
     pub fn peek(&self) -> Result<u8, ScannerError> {
         self.data
-            .get(self.index)
-            .map(|&x| x)
+            .get(self.index).copied()
             .ok_or(ScannerError::UnexpectedEof)
     }
 

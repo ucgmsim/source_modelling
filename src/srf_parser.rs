@@ -188,7 +188,7 @@ fn read_srf_points_v1(
 
 fn skip_comments(scanner: &mut scanner::Scanner) -> Result<(), SrfParseError> {
     scanner.skip_spaces()?;
-    while scanner.peek() == b'#' {
+    while scanner.peek()? == b'#' {
         let _ = scanner.line()?;
         // Technically you could have whitespace here, but again we're parsing a very strict subset.
     }
