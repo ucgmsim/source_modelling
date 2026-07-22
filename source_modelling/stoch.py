@@ -158,21 +158,6 @@ class StochFile:
     This class handles the parsing of stochastic slip model files and provides
     access to the contained planes and their properties.
 
-    Parameters
-    ----------
-    data : list[StochPlane]
-        List of stoch planes.
-
-    Raises
-    ------
-    ValueError
-        If the number of planes specified in the file is not a positive integer.
-
-    Notes
-    -----
-    Stochastic slip model files contain information about fault planes and their
-    properties such as slip, rise time, and rupture time.
-
     Examples
     --------
     >>> # Assuming 'stoch_model.stoch' exists with valid stochastic slip model data
