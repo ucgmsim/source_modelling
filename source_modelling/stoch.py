@@ -242,7 +242,7 @@ class StochFile:
 
         Examples
         --------
-        >>> stoch_file = StochFile('stoch_model.stoch')
+        >>> stoch_file = StochFile.from_file('stoch_model.stoch')
         >>> planes = stoch_file.planes
         >>> print(f"Number of planes: {len(planes)}")
         """
