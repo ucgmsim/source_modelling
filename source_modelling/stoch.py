@@ -12,8 +12,9 @@ References
 .. [0] https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+In+Ground+Motion+Simulation#FileFormatsUsedInGroundMotionSimulation-Stochformat
 """
 
+import dataclasses
 from pathlib import Path
-from typing import NamedTuple, TextIO, TypeAlias, cast
+from typing import IO, NamedTuple, Self, TextIO, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -149,6 +150,7 @@ def _read_stoch_plane(handle: TextIO) -> StochPlane:
     return StochPlane(header, slip, rise, trup)
 
 
+@dataclasses.dataclass
 class StochFile:
     """
     Class for reading and accessing stochastic slip model files.
@@ -156,30 +158,10 @@ class StochFile:
     This class handles the parsing of stochastic slip model files and provides
     access to the contained planes and their properties.
 
-    Parameters
-    ----------
-    filename : Path
-        Path to the stochastic slip model file.
-
-    Attributes
-    ----------
-    data : list[StochPlane]
-        Structured raw data read from the stoch file.
-
-    Raises
-    ------
-    ValueError
-        If the number of planes specified in the file is not a positive integer.
-
-    Notes
-    -----
-    Stochastic slip model files contain information about fault planes and their
-    properties such as slip, rise time, and rupture time.
-
     Examples
     --------
     >>> # Assuming 'stoch_model.stoch' exists with valid stochastic slip model data
-    >>> stoch_file = StochFile('stoch_model.stoch')
+    >>> stoch_file = StochFile.from_file('stoch_model.stoch')
     >>> planes = stoch_file.planes
     >>> slips = stoch_file.slip
     >>> rise_times = stoch_file.rise
@@ -190,14 +172,22 @@ class StochFile:
     ...     print(f"Slip array shape for the first plane: {slips[0].shape}")
     """
 
-    def __init__(self, filename: Path):
+    data: list[StochPlane]
+
+    @classmethod
+    def from_file(cls, filename: Path) -> Self:
         """
-        Initialize a StochFile instance by reading data from the specified file.
+        Initialise a StochFile instance by reading data from the specified file.
 
         Parameters
         ----------
         filename : Path
             Path to the stochastic slip model file.
+
+        Returns
+        -------
+        StochFile
+            The stoch file parsed from the filename.
 
         Raises
         ------
@@ -209,10 +199,36 @@ class StochFile:
             n_planes = parse_utils.read_int(handle, "n_planes")
             if n_planes <= 0:
                 raise parse_utils.ParseError(
-                    f"Expected non-negative integer number of planes, received: {n_planes}."
+                    f"Expected positive integer number of planes, received: {n_planes}."
                 )
             planes = [_read_stoch_plane(handle) for _ in range(n_planes)]
-            self.data: list[StochPlane] = planes
+            return cls(planes)
+
+    def dump(self, handle: IO[str]) -> None:
+        """Write a stoch file to a file-like object.
+
+        Parameters
+        ----------
+        handle : File-like object
+          The object to write the stoch file output to.
+        """
+        if not self.data:
+            raise ValueError("Cannot dump empty stoch file")
+        handle.write(f"{len(self.data)}\n")
+        for plane in self.data:
+            header = plane.header
+            handle.write(
+                f"{header.longitude:10.4f} {header.latitude:10.4f} {header.nx:5d} {header.ny:5d} {header.dx:8.2f} {header.dy:8.2f}\n"
+            )
+            handle.write(
+                f"{header.strike:4.0f} {header.dip:4.0f} {header.average_rake:4.0f} {header.dtop:8.2f} {header.shypo:8.2f} {header.dhypo:8.2f}\n"
+            )
+            np.savetxt(
+                handle,
+                np.vstack((plane.slip, plane.rise, plane.trup)),
+                fmt="%13.5e",
+                delimiter="",
+            )
 
     @property
     def planes(self) -> list[Plane]:
@@ -226,7 +242,7 @@ class StochFile:
 
         Examples
         --------
-        >>> stoch_file = StochFile('stoch_model.stoch')
+        >>> stoch_file = StochFile.from_file('stoch_model.stoch')
         >>> planes = stoch_file.planes
         >>> print(f"Number of planes: {len(planes)}")
         """
