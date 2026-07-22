@@ -14,7 +14,7 @@ References
 
 import dataclasses
 from pathlib import Path
-from typing import IO, NamedTuple, TextIO, TypeAlias, cast
+from typing import IO, NamedTuple, Self, TextIO, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -175,7 +175,7 @@ class StochFile:
     data: list[StochPlane]
 
     @classmethod
-    def from_file(cls, filename: Path):
+    def from_file(cls, filename: Path) -> Self:
         """
         Initialise a StochFile instance by reading data from the specified file.
 
@@ -183,6 +183,11 @@ class StochFile:
         ----------
         filename : Path
             Path to the stochastic slip model file.
+
+        Returns
+        -------
+        StochFile
+            The stoch file parsed from the filename.
 
         Raises
         ------
