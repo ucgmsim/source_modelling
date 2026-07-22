@@ -160,13 +160,8 @@ class StochFile:
 
     Parameters
     ----------
-    filename : Path
-        Path to the stochastic slip model file.
-
-    Attributes
-    ----------
     data : list[StochPlane]
-        Structured raw data read from the stoch file.
+        List of stoch planes.
 
     Raises
     ------
@@ -197,7 +192,7 @@ class StochFile:
     @classmethod
     def from_file(cls, filename: Path):
         """
-        Initialize a StochFile instance by reading data from the specified file.
+        Initialise a StochFile instance by reading data from the specified file.
 
         Parameters
         ----------
