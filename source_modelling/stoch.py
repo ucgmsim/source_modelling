@@ -212,6 +212,8 @@ class StochFile:
         handle : File-like object
           The object to write the stoch file output to.
         """
+        if not self.data:
+            raise ValueError("Cannot dump empty stoch file")
         handle.write(f"{len(self.data)}\n")
         for plane in self.data:
             header = plane.header
