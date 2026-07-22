@@ -221,10 +221,12 @@ class StochFile:
             handle.write(
                 f"{header.strike:4.0f} {header.dip:4.0f} {header.average_rake:4.0f} {header.dtop:8.2f} {header.shypo:8.2f} {header.dhypo:8.2f}\n"
             )
-            for variables in (plane.slip, plane.rise, plane.trup):
-                for row in variables:
-                    handle.write("".join(f"{v:13.5e}" for v in row))
-                    handle.write("\n")
+            np.savetxt(
+                handle,
+                np.vstack((plane.slip, plane.rise, plane.trup)),
+                fmt="%13.5e",
+                delimiter="",
+            )
 
     @property
     def planes(self) -> list[Plane]:
