@@ -278,7 +278,7 @@ def test_stoch_file_invalid_planes(bad_header_file: Path):
 
     # Test that ValueError is raised
     with pytest.raises(
-        parse_utils.ParseError, match="Expected non-negative integer number of planes"
+        parse_utils.ParseError, match="Expected positive integer number of planes"
     ):
         StochFile.from_file(file_path)
 

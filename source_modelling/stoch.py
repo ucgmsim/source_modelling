@@ -199,7 +199,7 @@ class StochFile:
             n_planes = parse_utils.read_int(handle, "n_planes")
             if n_planes <= 0:
                 raise parse_utils.ParseError(
-                    f"Expected non-negative integer number of planes, received: {n_planes}."
+                    f"Expected positive integer number of planes, received: {n_planes}."
                 )
             planes = [_read_stoch_plane(handle) for _ in range(n_planes)]
             return cls(planes)
