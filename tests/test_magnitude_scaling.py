@@ -99,10 +99,10 @@ def relation_with_magnitude(
 # The coefficients are not invertible, so we cannot test the inversion of the area to magnitude function.
 @given(
     relation_with_magnitude(
-        [
+        (
             magnitude_scaling.ScalingRelation.LEONARD2014,
             magnitude_scaling.ScalingRelation.CONTRERAS_INTERFACE2017,
-        ]
+        )
     )
 )
 def test_inversion(
