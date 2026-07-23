@@ -62,19 +62,23 @@ fn write_slip_row<W: Write>(
 
 fn write_srf_points_v1<W: Write, S: AsRef<[f32]>, R: AsRef<[usize]>, D: AsRef<[f32]>>(
     writer: &mut W,
+    planes: &[SrfPlane],
     metadata: &SrfMetadata<S>,
     slipt1: &CsrMatrix<R, D>,
 ) -> Result<()> {
     let mut buffer = [0u8; BUFFER_SIZE];
-    writer.write_all(POINTS)?;
-    lexical_write(writer, metadata.iter().len(), &mut buffer)?;
-    writer.write_all(b"\n")?;
-
-    for (point, slip) in metadata.iter().zip(slipt1.rows()) {
-        write_point(writer, &point, &mut buffer)?;
+    let mut point_iter = metadata.iter().zip(slipt1.rows());
+    for plane in planes {
+        writer.write_all(POINTS)?;
+        let plane_point_count = plane.points();
+        lexical_write(writer, plane_point_count, &mut buffer)?;
         writer.write_all(b"\n")?;
-        write_slip_row(writer, &point, slip, &mut buffer)?;
-        writer.write_all(b"\n")?;
+        for (point, slip) in point_iter.by_ref().take(plane_point_count) {
+            write_point(writer, &point, &mut buffer)?;
+            writer.write_all(b"\n")?;
+            write_slip_row(writer, &point, slip, &mut buffer)?;
+            writer.write_all(b"\n")?;
+        }
     }
 
     Ok(())
@@ -113,18 +117,13 @@ fn write_plane_header<W: Write>(writer: &mut W, planes: &[SrfPlane]) -> Result<(
     for plane in planes {
         writeln!(
             writer,
-            "{} {} {} {} {} {} {} {} {} {} {}",
-            plane.elon,
-            plane.elat,
-            plane.nstk,
-            plane.ndip,
-            plane.len,
-            plane.wid,
-            plane.stk,
-            plane.dip,
-            plane.dtop,
-            plane.shyp,
-            plane.dhyp
+            "{} {} {} {} {} {}",
+            plane.elon, plane.elat, plane.nstk, plane.ndip, plane.len, plane.wid,
+        )?;
+        writeln!(
+            writer,
+            "{} {} {} {} {}",
+            plane.stk, plane.dip, plane.dtop, plane.shyp, plane.dhyp
         )?;
     }
     Ok(())
@@ -148,7 +147,7 @@ pub fn write_srf<W: Write, S: AsRef<[f32]>, R: AsRef<[usize]>>(
     write_plane_header(writer, &srf_file.planes)?;
     match &srf_file.metadata {
         SrfMetadataVersioned::V1(metadata) => {
-            write_srf_points_v1(writer, metadata, &srf_file.slipt1)
+            write_srf_points_v1(writer, &srf_file.planes, metadata, &srf_file.slipt1)
         }
         SrfMetadataVersioned::V2(metadata) => {
             write_srf_points_v2(writer, &srf_file.planes, metadata, &srf_file.slipt1)
@@ -165,7 +164,8 @@ mod tests {
 
     const SRF_V1: &[u8] = b"1.0\n\
 PLANE 1\n\
-0.0 0.0 2 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 2 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 2\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1\n\
 30.0 1.5 3 0.0 0 0.0 0\n\
@@ -176,8 +176,10 @@ POINTS 2\n\
 
     const SRF_V2_TWO_PLANES: &[u8] = b"2.0\n\
 PLANE 2\n\
-0.0 0.0 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
-0.5 0.5 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
+0.5 0.5 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 1\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1 3.5 2.7\n\
 30.0 1.5 2 0.0 0 0.0 0\n\
@@ -275,7 +277,8 @@ POINTS 1\n\
     fn empty_slip_row_roundtrips() {
         let data = b"1.0\n\
 PLANE 1\n\
-0.0 0.0 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 1\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1\n\
 30.0 1.5 0 0.0 0 0.0 0\n";
