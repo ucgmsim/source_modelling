@@ -19,6 +19,7 @@ MAGNITUDE_TO_AREA = {
     magnitude_scaling.ScalingRelation.CONTRERAS_INTERFACE2017: magnitude_scaling.contreras_interface_magnitude_to_area,
     magnitude_scaling.ScalingRelation.CONTRERAS_SLAB2020: magnitude_scaling.strasser_slab_magnitude_to_area,
 }
+RELATIONS = tuple(MAGNITUDE_TO_AREA)
 
 AREA_TO_MAGNITUDE = {
     magnitude_scaling.ScalingRelation.LEONARD2014: magnitude_scaling.leonard_area_to_magnitude,
@@ -69,7 +70,7 @@ def test_rake_type(rake: float, expected: magnitude_scaling.RakeType):
 
 
 def relation_with_magnitude(
-    relations: list[magnitude_scaling.ScalingRelation] = list(MAGNITUDE_TO_AREA),
+    relations: tuple[magnitude_scaling.ScalingRelation, ...] = RELATIONS,
 ):
     @st.composite
     def sampler(
@@ -277,7 +278,7 @@ def test_normal_error_contreras_interface(area_to_mag: RandomFunction, area: flo
         sp.stats.norm,
         samples,
         statistic="ad",
-        known_params=dict(loc=area_to_mag(area), scale=0.73 / np.log(10)),
+        known_params={"loc": area_to_mag(area), "scale": 0.73 / np.log(10)},
     )
     assert result.pvalue > 0.05
 
@@ -306,7 +307,7 @@ def test_normal_error_contreras_interface_aspect_ratio(
         sp.stats.norm,
         np.log(samples),
         statistic="ad",
-        known_params=dict(loc=np.log(aspect_ratio(magnitude)), scale=sigma),
+        known_params={"loc": np.log(aspect_ratio(magnitude)), "scale": sigma},
     )
     assert result.pvalue > 0.05
 
@@ -358,10 +359,7 @@ def test_normal_error_strasser_slab(area_to_mag: RandomFunction, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
     samples = [area_to_mag(area, random=True) for _ in range(100)]
     result = sp.stats.goodness_of_fit(
-        sp.stats.norm,
-        samples,
-        statistic="ad",
-        known_params=dict(loc=area_to_mag(area)),
+        sp.stats.norm, samples, statistic="ad", known_params={"loc": area_to_mag(area)}
     )
     assert result.pvalue > 0.05
 
@@ -415,7 +413,7 @@ def test_normal_error_contreras_slab_aspect_ratio(
         sp.stats.norm,
         np.log(samples),
         statistic="ad",
-        known_params=dict(loc=np.log(aspect_ratio(magnitude)), scale=sigma),
+        known_params={"loc": np.log(aspect_ratio(magnitude)), "scale": sigma},
     )
     assert result.pvalue > 0.05
 

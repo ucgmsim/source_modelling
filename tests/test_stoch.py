@@ -116,8 +116,10 @@ def test_read_stoch_plane_from_file(sample_stoch_file_plane: Path):
         np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
     )
 
-    plane.rise == pytest.approx(np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32))
-    plane.trup == pytest.approx(
+    assert plane.rise == pytest.approx(
+        np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32)
+    )
+    assert plane.trup == pytest.approx(
         np.array([[0.01, 0.02], [0.03, 0.04]], dtype=np.float32)
     )
 
@@ -144,7 +146,7 @@ def test_stoch_file_initialization(sample_stoch_file: Path):
 
     # Check specific values in slip array
     expected_slip = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32)
-    plane.slip == pytest.approx(expected_slip)
+    assert plane.slip == pytest.approx(expected_slip)
 
 
 def test_stoch_file_properties(sample_stoch_file: Path):
