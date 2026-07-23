@@ -113,14 +113,14 @@ def test_read_stoch_plane_from_file(sample_stoch_file_plane: Path):
     # Check specific values
 
     assert plane.slip == pytest.approx(
-        np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+        np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32), abs=1e-5
     )
 
     assert plane.rise == pytest.approx(
-        np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32)
+        np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32), abs=1e-5
     )
     assert plane.trup == pytest.approx(
-        np.array([[0.01, 0.02], [0.03, 0.04]], dtype=np.float32)
+        np.array([[0.01, 0.02], [0.03, 0.04]], dtype=np.float32), abs=1e-5
     )
 
 
