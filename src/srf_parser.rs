@@ -29,6 +29,8 @@ pub enum SrfParseError {
     Scanner(#[from] scanner::ScannerError),
     #[error("unknown SRF version: {0}")]
     UnknownVersion(String),
+    #[error("PLANE headers expect {expected} total points but POINTS declares {declared}")]
+    PointCountMismatch { declared: usize, expected: usize },
     #[error("plane {plane} expects {expected} points but its POINTS block declares {declared}")]
     PlanePointCountMismatch {
         plane: usize,
@@ -136,48 +138,51 @@ fn read_srf_points_v1(
     planes: &[SrfPlane],
     scanner: &mut scanner::Scanner,
 ) -> Result<(SrfMetadata, CsrMatrix), SrfParseError> {
-    let point_count = planes.iter().map(|plane| plane.points()).sum();
+    scanner.skip_token(b"POINTS")?;
+    let plane_point_count = planes.iter().map(|plane| plane.points()).sum();
+    let point_count = scanner.next()?;
+    if point_count != plane_point_count {
+        return Err(SrfParseError::PointCountMismatch {
+            declared: point_count,
+            expected: plane_point_count,
+        });
+    }
     let slipt1_capacity = scanner.remaining() / APPROX_BYTES_PER_SLIP_VALUE;
-
     let mut metadata = SrfMetadata::with_capacity(point_count);
     let mut slipt1 = CsrMatrix::new(point_count, slipt1_capacity);
 
-    for (i, plane) in planes.iter().enumerate() {
-        scanner.skip_token(b"POINTS")?;
-        let plane_point_count = scanner.next()?;
-        if plane.points() != plane_point_count {
-            return Err(SrfParseError::PlanePointCountMismatch {
-                plane: i,
-                declared: plane_point_count,
-                expected: plane.points(),
-            });
-        }
+    for _ in 0..point_count {
+        let header = read_point_header(scanner)?;
+        // technically the read_srf routines in EMOD3D don't need to have a
+        // newline here but it allows us to distinguish between a mislabelled
+        // version 1.0 SRF and a version 2.0 SRF because EOL conveniently
+        // follows the point header (where-as SRF V2.0 has two vs/density still
+        // to go):
+        //
+        // - read_srf (in the srf_subs.c versions): reads the floats with scanf() that is newline tolerant.
+        // - write_srf (same files): always writes a newline after the header (header + vs + density in SRF 2.0).
+        scanner.expect_end_of_line()?;
+        let rake = scanner.next()?;
+        let slip1 = scanner.next()?;
+        let nt = scanner.next::<usize>()?;
+        let rise = (nt as f32) * header.dt;
 
-        for _ in 0..plane_point_count {
-            let header = read_point_header(scanner)?;
-            scanner.expect_end_of_line()?;
-            let rake = scanner.next()?;
-            let slip1 = scanner.next()?;
+        let point = Point {
+            lon: header.lon,
+            lat: header.lat,
+            dep: header.dep,
+            stk: header.stk,
+            dip: header.dip,
+            area: header.area,
+            tinit: header.tinit,
+            dt: header.dt,
+            rake,
+            slip1,
+            rise,
+        };
+        metadata.push(&point);
 
-            let nt = scanner.next::<usize>()?;
-            let rise = (nt as f32) * header.dt;
-
-            let point = Point {
-                lon: header.lon,
-                lat: header.lat,
-                dep: header.dep,
-                stk: header.stk,
-                dip: header.dip,
-                area: header.area,
-                tinit: header.tinit,
-                dt: header.dt,
-                rake,
-                slip1,
-                rise,
-            };
-            metadata.push(&point);
-            read_slip_row(scanner, &mut slipt1, header.tinit, header.dt, nt)?;
-        }
+        read_slip_row(scanner, &mut slipt1, header.tinit, header.dt, nt)?;
     }
     Ok((metadata, slipt1))
 }
@@ -376,18 +381,16 @@ POINTS 1\n\
         assert_eq!(srf.slipt1.data, vec![0.1, 0.2, 0.4]);
     }
 
-    // Two 1x1 planes, each with its own POINTS block.
     const SRF_V1_TWO_PLANES: &[u8] = b"1.0\n\
 PLANE 2\n\
 0.0 0.0 1 1 4.0 2.0\n\
 90.0 45.0 0.0 0.0 1.0\n\
 0.5 0.5 1 1 4.0 2.0\n\
 90.0 45.0 0.0 0.0 1.0\n\
-POINTS 1\n\
+POINTS 2\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1\n\
 30.0 1.5 2 0.0 0 0.0 0\n\
 0.1 0.2\n\
-POINTS 1\n\
 0.2 -43.1 5.5 90.0 45.0 1.0e10 0.6 0.1\n\
 45.0 2.0 1 0.0 0 0.0 0\n\
 0.4\n";
@@ -415,8 +418,7 @@ POINTS 1\n\
         println!("Error = {}", err);
         assert!(matches!(
             err,
-            SrfParseError::PlanePointCountMismatch {
-                plane: 0,
+            SrfParseError::PointCountMismatch {
                 declared: 3,
                 expected: 2,
             }
