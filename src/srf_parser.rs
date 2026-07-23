@@ -82,6 +82,7 @@ fn read_srf_header(
 const APPROX_BYTES_PER_SLIP_VALUE: usize = 12;
 
 // Tiny PointHeader used to construct actual points later.
+#[derive(Debug)]
 struct PointHeader {
     lon: f32,
     lat: f32,
@@ -415,7 +416,6 @@ POINTS 2\n\
         let data = replace_once(SRF_V1, b"POINTS 2", b"POINTS 3");
         let mut scanner = scanner::Scanner::new(&data);
         let err = read_srf_struct(&mut scanner).unwrap_err();
-        println!("Error = {}", err);
         assert!(matches!(
             err,
             SrfParseError::PointCountMismatch {
@@ -487,6 +487,18 @@ POINTS 2\n\
         let data = replace_once(SRF_V1, b"1.0\n", b"1.0 \r\n");
         let mut scanner = scanner::Scanner::new(&data);
         assert!(read_srf_struct(&mut scanner).is_ok());
+    }
+
+    const SRF_BAD_PLANE_HEADER: &[u8] = b"0.0 0.0 2 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0";
+
+    #[test]
+    fn plane_header_rejects_no_newline() {
+        let mut scanner = scanner::Scanner::new(SRF_BAD_PLANE_HEADER);
+        let err = read_srf_header(&mut scanner, 1).unwrap_err();
+        assert!(matches!(
+            err,
+            SrfParseError::Scanner(scanner::ScannerError::NoNewlineFound { .. })
+        ));
     }
 
     fn replace_once(data: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
