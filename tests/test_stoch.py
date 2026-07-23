@@ -9,6 +9,7 @@ from source_modelling import parse_utils
 from source_modelling.stoch import (
     StochFile,
     StochHeader,
+    StochPlane,
     _read_stoch_header,
     _read_stoch_plane,
 )
@@ -124,7 +125,7 @@ def test_read_stoch_plane_from_file(sample_stoch_file_plane: Path):
 def test_stoch_file_initialization(sample_stoch_file: Path):
     """Test initializing a StochFile from a real file."""
     # Initialize the StochFile with the sample file
-    stoch_file = StochFile(sample_stoch_file)
+    stoch_file = StochFile.from_file(sample_stoch_file)
 
     # Verify the file was read correctly
     assert len(stoch_file.data) == 1
@@ -149,7 +150,7 @@ def test_stoch_file_initialization(sample_stoch_file: Path):
 def test_stoch_file_properties(sample_stoch_file: Path):
     """Test the properties of a StochFile."""
     # Initialize the StochFile with the sample file
-    stoch_file = StochFile(sample_stoch_file)
+    stoch_file = StochFile.from_file(sample_stoch_file)
 
     # Test the slip property
     slip_arrays = stoch_file.slip
@@ -182,7 +183,7 @@ def test_stoch_file_properties(sample_stoch_file: Path):
 def test_multiple_planes(sample_stoch_file_multi_plane: Path):
     """Test reading a file with multiple planes."""
     # Initialize the StochFile with the multi-plane sample file
-    stoch_file = StochFile(sample_stoch_file_multi_plane)
+    stoch_file = StochFile.from_file(sample_stoch_file_multi_plane)
 
     # Verify the file was read correctly
     assert len(stoch_file.data) == 2
@@ -212,7 +213,7 @@ def test_multiple_planes(sample_stoch_file_multi_plane: Path):
 
 def test_real_world_stoch():
     """Test reading a real-world stochastic file."""
-    stoch_file = StochFile(STOCH_PATH)
+    stoch_file = StochFile.from_file(STOCH_PATH)
 
     # Check the plane headers
     headers = [plane.header for plane in stoch_file.data]
@@ -277,6 +278,135 @@ def test_stoch_file_invalid_planes(bad_header_file: Path):
 
     # Test that ValueError is raised
     with pytest.raises(
-        parse_utils.ParseError, match="Expected non-negative integer number of planes"
+        parse_utils.ParseError, match="Expected positive integer number of planes"
     ):
-        StochFile(file_path)
+        StochFile.from_file(file_path)
+
+
+def dump_and_reload(stoch_file: StochFile, tmp_path: Path) -> StochFile:
+    """Dump a StochFile and read the result back in."""
+    dumped = tmp_path / "dumped.stoch"
+    with open(dumped, "w") as handle:
+        stoch_file.dump(handle)
+    return StochFile.from_file(dumped)
+
+
+def assert_stoch_files_equal(left: StochFile, right: StochFile) -> None:
+    """Assert two StochFile objects hold equivalent data."""
+    assert len(left.data) == len(right.data)
+    for left_plane, right_plane in zip(left.data, right.data):
+        assert left_plane.header == right_plane.header
+        assert left_plane.slip == pytest.approx(right_plane.slip, rel=1e-5)
+        assert left_plane.rise == pytest.approx(right_plane.rise, rel=1e-5)
+        assert left_plane.trup == pytest.approx(right_plane.trup, rel=1e-5)
+
+
+@pytest.fixture
+def simple_stoch() -> StochFile:
+    """A single-plane StochFile built in memory."""
+    header = StochHeader(174.5, -41.3, 3, 2, 1.0, 1.0, 45, 60, 90, 0.5, 2.5, 1.5)
+    slip = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32)
+    rise = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=np.float32)
+    trup = np.array([[0.01, 0.02, 0.03], [0.04, 0.05, 0.06]], dtype=np.float32)
+    return StochFile([StochPlane(header, slip, rise, trup)])
+
+
+def test_dump_exact_format(simple_stoch: StochFile):
+    """Test that dump writes the expected fixed-width columns."""
+    handle = io.StringIO()
+    simple_stoch.dump(handle)
+    lines = handle.getvalue().split("\n")
+
+    # One plane count line, two header lines, and 3 * ny data lines.
+    assert lines[-1] == ""  # trailing newline
+    assert len(lines) == 1 + 1 + 2 + 3 * 2
+
+    assert lines[0] == "1"
+    assert lines[1] == "  174.5000   -41.3000     3     2     1.00     1.00"
+    assert lines[2] == "  45   60   90     0.50     2.50     1.50"
+    assert lines[3] == "  1.00000e+00  2.00000e+00  3.00000e+00"
+    assert lines[4] == "  4.00000e+00  5.00000e+00  6.00000e+00"
+    assert lines[5] == "  1.00000e-01  2.00000e-01  3.00000e-01"
+    assert lines[6] == "  4.00000e-01  5.00000e-01  6.00000e-01"
+    assert lines[7] == "  1.00000e-02  2.00000e-02  3.00000e-02"
+    assert lines[8] == "  4.00000e-02  5.00000e-02  6.00000e-02"
+
+
+def test_dump_round_trip_in_memory(simple_stoch: StochFile, tmp_path: Path):
+    """Test that dumping and re-reading an in-memory StochFile is lossless."""
+    assert_stoch_files_equal(simple_stoch, dump_and_reload(simple_stoch, tmp_path))
+
+
+def test_dump_round_trip(sample_stoch_file: Path, tmp_path: Path):
+    """Test that a parsed stoch file survives a dump/read round trip."""
+    stoch_file = StochFile.from_file(sample_stoch_file)
+    assert_stoch_files_equal(stoch_file, dump_and_reload(stoch_file, tmp_path))
+
+
+def test_dump_round_trip_multi_plane(
+    sample_stoch_file_multi_plane: Path, tmp_path: Path
+):
+    """Test that a multi-plane stoch file survives a dump/read round trip."""
+    stoch_file = StochFile.from_file(sample_stoch_file_multi_plane)
+    reloaded = dump_and_reload(stoch_file, tmp_path)
+    assert len(reloaded.data) == 2
+    assert_stoch_files_equal(stoch_file, reloaded)
+
+
+def test_dump_round_trip_real_world(tmp_path: Path):
+    """Test that the real-world stoch file survives a dump/read round trip."""
+    stoch_file = StochFile.from_file(STOCH_PATH)
+    reloaded = dump_and_reload(stoch_file, tmp_path)
+    assert_stoch_files_equal(stoch_file, reloaded)
+    # Planes have differing dimensions, so check the shapes are preserved too.
+    assert [(plane.header.ny, plane.header.nx) for plane in reloaded.data] == [
+        slip.shape for slip in reloaded.slip
+    ]
+
+
+def test_dump_is_idempotent(tmp_path: Path):
+    """Test that dumping an already-dumped file produces identical output."""
+    stoch_file = StochFile.from_file(STOCH_PATH)
+    first = io.StringIO()
+    stoch_file.dump(first)
+    second = io.StringIO()
+    dump_and_reload(stoch_file, tmp_path).dump(second)
+    assert first.getvalue() == second.getvalue()
+
+
+def test_dump_negative_values_remain_separated(tmp_path: Path):
+    """Test that negative array values do not run their columns together."""
+    header = StochHeader(174.5, -41.3, 2, 1, 1.0, 1.0, 45, 60, 90, 0.5, 2.5, 1.5)
+    negative = np.array([[-1.5, -2.5]], dtype=np.float32)
+    stoch_file = StochFile([StochPlane(header, negative, negative, negative)])
+
+    handle = io.StringIO()
+    stoch_file.dump(handle)
+    assert " -1.50000e+00 -2.50000e+00" in handle.getvalue()
+
+    assert_stoch_files_equal(stoch_file, dump_and_reload(stoch_file, tmp_path))
+
+
+def test_dump_sentinel_hypocentre_values(tmp_path: Path):
+    """Test that the -999 hypocentre sentinels survive a round trip."""
+    header = StochHeader(
+        172.1255, -43.5728, 2, 1, 2.0, 2.0, 35, 70, 39, 0.97, -999.0, -999.0
+    )
+    data = np.array([[1.0, 2.0]], dtype=np.float32)
+    stoch_file = StochFile([StochPlane(header, data, data, data)])
+
+    reloaded = dump_and_reload(stoch_file, tmp_path)
+    assert reloaded.data[0].header.shypo == -999.0
+    assert reloaded.data[0].header.dhypo == -999.0
+    assert_stoch_files_equal(stoch_file, reloaded)
+
+
+def test_dump_plane_count_matches_data(sample_stoch_file_multi_plane: Path):
+    """Test that the plane count written matches the number of planes dumped."""
+    stoch_file = StochFile.from_file(sample_stoch_file_multi_plane)
+    handle = io.StringIO()
+    stoch_file.dump(handle)
+    lines = handle.getvalue().splitlines()
+    assert int(lines[0]) == len(stoch_file.data)
+    expected_lines = 1 + sum(2 + 3 * plane.header.ny for plane in stoch_file.data)
+    assert len(lines) == expected_lines
