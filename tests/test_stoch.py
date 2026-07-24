@@ -67,7 +67,7 @@ def sample_stoch_file_plane(tmp_path: Path) -> Path:
     plane_file = tmp_path / "stoch_file"
     with open(plane_file, "w") as f:
         f.write(
-            "174.5  -41.3  2  2  1.0  1.0  45  60 90  0.5  2.5 1.5 1.0 2.0 3.0 4.0 1.0 2.0 3.0 4.0 1.0 2.0 3.0 4.0"
+            "174.5  -41.3  2  2  1.0  1.0  45  60 90  0.5  2.5 1.5 1.0 2.0 3.0 4.0 0.1 0.2 0.3 0.4 0.01 0.02 0.03 0.04"
         )
     return plane_file
 
