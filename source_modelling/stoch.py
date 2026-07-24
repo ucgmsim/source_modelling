@@ -14,7 +14,7 @@ References
 
 import dataclasses
 from pathlib import Path
-from typing import IO, NamedTuple, Self, TextIO, TypeAlias, cast
+from typing import IO, NamedTuple, Self, TextIO, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -24,9 +24,9 @@ from source_modelling import parse_utils
 from source_modelling.sources import Plane
 
 # Type aliases for NumPy arrays with specific shapes and dtypes
-FloatArray2D: TypeAlias = NDArray[np.float32]  # 2D array of float32
-LatLonArray: TypeAlias = NDArray[np.float64]  # Array for latitude/longitude
-CoordinateArray: TypeAlias = NDArray[np.float64]  # Array for coordinates
+type FloatArray2D = NDArray[np.float32]  # 2D array of float32
+type LatLonArray = NDArray[np.float64]  # Array for latitude/longitude
+type CoordinateArray = NDArray[np.float64]  # Array for coordinates
 
 
 class StochHeader(NamedTuple):

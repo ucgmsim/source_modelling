@@ -113,18 +113,13 @@ fn write_plane_header<W: Write>(writer: &mut W, planes: &[SrfPlane]) -> Result<(
     for plane in planes {
         writeln!(
             writer,
-            "{} {} {} {} {} {} {} {} {} {} {}",
-            plane.elon,
-            plane.elat,
-            plane.nstk,
-            plane.ndip,
-            plane.len,
-            plane.wid,
-            plane.stk,
-            plane.dip,
-            plane.dtop,
-            plane.shyp,
-            plane.dhyp
+            "{} {} {} {} {} {}",
+            plane.elon, plane.elat, plane.nstk, plane.ndip, plane.len, plane.wid,
+        )?;
+        writeln!(
+            writer,
+            "{} {} {} {} {}",
+            plane.stk, plane.dip, plane.dtop, plane.shyp, plane.dhyp
         )?;
     }
     Ok(())
@@ -165,7 +160,8 @@ mod tests {
 
     const SRF_V1: &[u8] = b"1.0\n\
 PLANE 1\n\
-0.0 0.0 2 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 2 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 2\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1\n\
 30.0 1.5 3 0.0 0 0.0 0\n\
@@ -176,8 +172,10 @@ POINTS 2\n\
 
     const SRF_V2_TWO_PLANES: &[u8] = b"2.0\n\
 PLANE 2\n\
-0.0 0.0 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
-0.5 0.5 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
+0.5 0.5 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 1\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1 3.5 2.7\n\
 30.0 1.5 2 0.0 0 0.0 0\n\
@@ -275,7 +273,8 @@ POINTS 1\n\
     fn empty_slip_row_roundtrips() {
         let data = b"1.0\n\
 PLANE 1\n\
-0.0 0.0 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 1\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1\n\
 30.0 1.5 0 0.0 0 0.0 0\n";

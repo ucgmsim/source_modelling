@@ -53,6 +53,7 @@ fn read_srf_header(
         let ndip = scanner.next()?;
         let len = scanner.next()?;
         let wid = scanner.next()?;
+        scanner.expect_end_of_line()?;
         let stk = scanner.next()?;
         let dip = scanner.next()?;
         let dtop = scanner.next()?;
@@ -81,6 +82,7 @@ fn read_srf_header(
 const APPROX_BYTES_PER_SLIP_VALUE: usize = 12;
 
 // Tiny PointHeader used to construct actual points later.
+#[derive(Debug)]
 struct PointHeader {
     lon: f32,
     lat: f32,
@@ -206,11 +208,6 @@ fn read_srf_points_v2(
     let mut slipt1 = CsrMatrix::new(point_count, slipt1_capacity);
 
     for (i, plane) in planes.iter().enumerate() {
-        // In version 2.0 (and version 2.0 only), it is possible to construct SRFs
-        // with multiple POINT instantiations. Technically V1.0 SRFs could be
-        // constructed with multiple POINTS instantiations but we are deliberately
-        // parsing a stricter subset of the format.
-
         scanner.skip_token(b"POINTS")?;
         let plane_point_count = scanner.next()?;
         if plane.points() != plane_point_count {
@@ -293,7 +290,8 @@ mod tests {
 
     const SRF_V1: &[u8] = b"1.0\n\
 PLANE 1\n\
-0.0 0.0 2 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 2 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 2\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1\n\
 30.0 1.5 3 0.0 0 0.0 0\n\
@@ -304,7 +302,8 @@ POINTS 2\n\
 
     const SRF_V2: &[u8] = b"2.0\n\
 PLANE 1\n\
-0.0 0.0 2 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 2 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 2\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1 3.5 2.7\n\
 30.0 1.5 3 0.0 0 0.0 0\n\
@@ -347,8 +346,10 @@ POINTS 2\n\
     // Two 1x1 planes, each with its own POINTS block.
     const SRF_V2_TWO_PLANES: &[u8] = b"2.0\n\
 PLANE 2\n\
-0.0 0.0 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
-0.5 0.5 1 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0\n\
+0.0 0.0 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
+0.5 0.5 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
 POINTS 1\n\
 0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1 3.5 2.7\n\
 30.0 1.5 2 0.0 0 0.0 0\n\
@@ -377,6 +378,34 @@ POINTS 1\n\
         assert_eq!(metadata.base.lon, vec![0.1, 0.2]);
         assert_eq!(metadata.vs, vec![3.5, 3.6]);
         assert_eq!(metadata.density, vec![2.7, 2.8]);
+        assert_eq!(srf.slipt1.row_ptr, vec![0, 2, 3]);
+        assert_eq!(srf.slipt1.data, vec![0.1, 0.2, 0.4]);
+    }
+
+    const SRF_V1_TWO_PLANES: &[u8] = b"1.0\n\
+PLANE 2\n\
+0.0 0.0 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
+0.5 0.5 1 1 4.0 2.0\n\
+90.0 45.0 0.0 0.0 1.0\n\
+POINTS 2\n\
+0.1 -43.0 5.0 90.0 45.0 1.0e10 0.5 0.1\n\
+30.0 1.5 2 0.0 0 0.0 0\n\
+0.1 0.2\n\
+0.2 -43.1 5.5 90.0 45.0 1.0e10 0.6 0.1\n\
+45.0 2.0 1 0.0 0 0.0 0\n\
+0.4\n";
+
+    #[test]
+    fn parses_v1_with_multiple_planes() {
+        let mut scanner = scanner::Scanner::new(SRF_V1_TWO_PLANES);
+        let srf = read_srf_struct(&mut scanner).unwrap();
+        assert_eq!(srf.planes.len(), 2);
+        let metadata = match &srf.metadata {
+            SrfMetadataVersioned::V1(metadata) => metadata,
+            SrfMetadataVersioned::V2(_) => panic!("expected V1 metadata"),
+        };
+        assert_eq!(metadata.lon, vec![0.1, 0.2]);
         assert_eq!(srf.slipt1.row_ptr, vec![0, 2, 3]);
         assert_eq!(srf.slipt1.data, vec![0.1, 0.2, 0.4]);
     }
@@ -460,25 +489,16 @@ POINTS 1\n\
         assert!(read_srf_struct(&mut scanner).is_ok());
     }
 
+    const SRF_BAD_PLANE_HEADER: &[u8] = b"0.0 0.0 2 1 4.0 2.0 90.0 45.0 0.0 0.0 1.0";
+
     #[test]
-    fn mismatch_messages_read_correctly() {
-        let err = SrfParseError::PointCountMismatch {
-            declared: 3,
-            expected: 2,
-        };
-        assert_eq!(
-            err.to_string(),
-            "PLANE headers expect 2 total points but POINTS declares 3"
-        );
-        let err = SrfParseError::PlanePointCountMismatch {
-            plane: 1,
-            declared: 2,
-            expected: 1,
-        };
-        assert_eq!(
-            err.to_string(),
-            "plane 1 expects 1 points but its POINTS block declares 2"
-        );
+    fn plane_header_rejects_no_newline() {
+        let mut scanner = scanner::Scanner::new(SRF_BAD_PLANE_HEADER);
+        let err = read_srf_header(&mut scanner, 1).unwrap_err();
+        assert!(matches!(
+            err,
+            SrfParseError::Scanner(scanner::ScannerError::NoNewlineFound { .. })
+        ));
     }
 
     fn replace_once(data: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {

@@ -154,7 +154,7 @@ def test_random_sampling_root(graph: nx.Graph, n: int):
     random.seed(1)
     probability_of_spanning_trees = 0.0
     tree_probabilities: dict[str, float] = {}
-    for tree in mst.SpanningTreeIterator(graph):  # type: ignore
+    for tree in mst.SpanningTreeIterator(graph):  # ty: ignore[invalid-argument-type]
         p_tree = 1.0
         for u, v in graph.edges:
             if tree.has_edge(u, v):
@@ -289,15 +289,7 @@ def test_select_top_spanning_trees(graph: nx.Graph, probability_threshold: float
                 (2, 0, {"weight": 0.7}),
             ]
         ),
-        # Test case 2: Simple graph with a higher probability threshold
-        nx.Graph(
-            [
-                (0, 1, {"weight": 0.8}),
-                (1, 2, {"weight": 0.6}),
-                (2, 0, {"weight": 0.7}),
-            ]
-        ),
-        # Test case 3: Larger graph with a moderate probability threshold
+        # Test case 2: Larger graph with a moderate probability threshold
         nx.Graph(
             [
                 (0, 1, {"weight": 0.5}),
@@ -307,7 +299,7 @@ def test_select_top_spanning_trees(graph: nx.Graph, probability_threshold: float
                 (0, 2, {"weight": 0.1}),
             ]
         ),
-        # Test case 4: Graph with edges having very low probabilities
+        # Test case 3: Graph with edges having very low probabilities
         nx.Graph(
             [
                 (0, 1, {"weight": 0.01}),
@@ -315,7 +307,7 @@ def test_select_top_spanning_trees(graph: nx.Graph, probability_threshold: float
                 (2, 0, {"weight": 0.03}),
             ]
         ),
-        # Test case 5: Graph with edges having very high probabilities
+        # Test case 4: Graph with edges having very high probabilities
         nx.Graph(
             [
                 (0, 1, {"weight": 0.99}),

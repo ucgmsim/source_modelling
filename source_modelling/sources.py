@@ -1042,7 +1042,7 @@ class Fault:
 
         # This relation can now be used to identify if the list of planes given is a line.
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation,  # type: ignore
+            points_into_relation,  # ty: ignore[invalid-argument-type]
             create_using=nx.DiGraph,
         )
         try:
@@ -1221,12 +1221,12 @@ class Fault:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(  # type: ignore
+        return shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 
@@ -1376,8 +1376,8 @@ class Fault:
         float
             The Rjb distance (in metres) to the point.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        return shapely.distance(
+            self.geometry, shapely.Point(coordinates.wgs_depth_to_nztm(point))
         )
 
     def rx_ry_distance(self, point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -1512,15 +1512,14 @@ class CoordinateBounds(NamedTuple):
     """float: Maximum normalised dip coordinate, in the range of [0, 1]."""
 
 
+DEFAULT_BOUNDS = CoordinateBounds(min_strike=0, min_dip=0, max_strike=1, max_dip=1)
+
+
 def closest_point_between_sources(
     source_a: IsSource,
     source_b: IsSource,
-    source_a_coordinate_bounds: CoordinateBounds = CoordinateBounds(
-        min_strike=0, min_dip=0, max_strike=1, max_dip=1
-    ),
-    source_b_coordinate_bounds: CoordinateBounds = CoordinateBounds(
-        min_strike=0, min_dip=0, max_strike=1, max_dip=1
-    ),
+    source_a_coordinate_bounds: CoordinateBounds = DEFAULT_BOUNDS,
+    source_b_coordinate_bounds: CoordinateBounds = DEFAULT_BOUNDS,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 

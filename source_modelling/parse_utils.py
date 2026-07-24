@@ -6,7 +6,6 @@ from typing import TextIO
 class ParseError(Exception):
     """Error for parsing files in source modelling."""
 
-    pass
 
 
 def _is_seperator(char: str) -> bool:

@@ -65,8 +65,6 @@ def _normalise_value(value: float) -> float | None:
 class FSPParseError(Exception):
     """Exception raised for errors in parsing FSP files."""
 
-    pass
-
 
 @dataclasses.dataclass
 class Segment:
@@ -278,11 +276,7 @@ class FSPFile:
             for line in fsp_file_handle:
                 if line.startswith("% Data"):
                     break
-                if (
-                    line.startswith("% -")
-                    or line.strip() == "%"
-                    or line.startswith("% Event :")
-                ):
+                if line.startswith(("% -", "% Event :")) or line.strip() == "%":
                     continue
                 # Strip the leading "% ", and deduplicate the spaces in the line.
                 # This is required to normalise the string so that the parse
