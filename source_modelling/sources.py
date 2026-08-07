@@ -792,42 +792,63 @@ class Plane:
             raise ValueError("Specified coordinates do not lie in plane")
         return np.clip(fault_local_coordinates, 0, 1)
 
-    def rrup_distance(self, point: np.ndarray) -> float:
+    def rrup_distance(self, points: np.ndarray) -> float:
         """Compute RRup Distance between a fault and a point.
 
         Parameters
         ----------
-        point : np.ndarray
-            The point to compute distance to (in lat, lon, depth format)
+        points : np.ndarray
+            The points to compute distance to.
+            Shape [N, 3] where N is the number of points
+                and each point is in (lat, lon, depth) format.
 
         Returns
         -------
         float
             The rrup distance (in metres) between the point and the fault geometry.
         """
-        point_nztm = coordinates.wgs_depth_to_nztm(point)
+        points_nztm = coordinates.wgs_depth_to_nztm(np.atleast_2d(points))
         frame = np.array(
             [self.bounds[1] - self.bounds[0], self.bounds[-1] - self.bounds[0]]
         )
         local_coords, _, _, _ = np.linalg.lstsq(
             frame.T,
-            point_nztm - self.bounds[0],
+            (points_nztm - self.bounds[0]).T,
             rcond=None,
         )
-        projected_point = local_coords @ frame + self.bounds[0]
-        out_of_plane_distance = np.linalg.norm(point_nztm - projected_point)
-        if np.allclose(local_coords, np.clip(local_coords, 0, 1)):
-            # solution lies in fault, ergo just return projected distance
-            return float(out_of_plane_distance)
+        local_coords = local_coords.T
+        projected_points = local_coords @ frame + self.bounds[0]
+        out_of_plane_distance = np.linalg.norm(points_nztm - projected_points, axis=1)
 
-        in_plane_distance = min(
-            geo.point_to_segment_distance(
-                projected_point, self.bounds[i], self.bounds[(i + 1) % 4]
-            )
-            for i in range(4)
+        projected_points_in_bounds = np.all(
+            np.isclose(local_coords, np.clip(local_coords, 0, 1)), axis=1
         )
 
-        return np.sqrt(in_plane_distance**2 + out_of_plane_distance**2)
+        rrup = np.zeros(points_nztm.shape[0])
+        if np.any(projected_points_in_bounds):
+            rrup[projected_points_in_bounds] = out_of_plane_distance[
+                projected_points_in_bounds
+            ]
+
+        if np.any(projected_points_out_bounds := ~projected_points_in_bounds):
+            in_plane_distance = np.minimum.reduce(
+                [
+                    geo.point_to_segment_distance(
+                        projected_points[projected_points_out_bounds],
+                        self.bounds[i],
+                        self.bounds[(i + 1) % 4],
+                    )
+                    for i in range(4)
+                ]
+            )
+            rrup[projected_points_out_bounds] = np.sqrt(
+                in_plane_distance**2
+                + out_of_plane_distance[projected_points_out_bounds] ** 2
+            )
+
+        if rrup.shape[0] == 1:
+            return float(rrup[0])
+        return rrup
 
     def rjb_distance(self, point: np.ndarray) -> float:
         """Return the closest projected distance between the fault and the point.
@@ -1306,21 +1327,22 @@ class Fault:
             )
         )
 
-    def rrup_distance(self, point: np.ndarray) -> float:
+    def rrup_distance(self, points: np.ndarray) -> float:
         """Compute RRup Distance between a fault and a point.
 
         Parameters
         ----------
-        point : np.ndarray
-            The point to compute distance to (in lat, lon, depth format)
+        points : np.ndarray
+            The points to compute distance.
+            Shape [N, 3] where N is the number of points
+                and each point is in (lat, lon, depth) format.
 
         Returns
         -------
         float
-            The rrup distance (in metres) between the point and the fault geometry.
+            The rrup distances (in metres) between the points and the fault geometry.
         """
-
-        return min(plane.rrup_distance(point) for plane in self.planes)
+        return np.min([plane.rrup_distance(points) for plane in self.planes])
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
