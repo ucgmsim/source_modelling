@@ -754,17 +754,36 @@ def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
     plane=fault_plane,
     distance=st.floats(1, 1000),
 )
+@settings(deadline=None)
 def test_plane_rjb(plane: Plane, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
     assume(plane.dip_dir_nztm >= plane.strike_nztm + 1)
     assume(plane.dip != 90)
     buffer = shapely.buffer(plane.geometry, distance * 1000)
-    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
-        assert np.isclose(
-            plane.rjb_distance(point),
-            distance * 1000,
-            atol=1e-4,
-        )
+    points = coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords))
+    np.testing.assert_allclose(
+        plane.rjb_distance(points),
+        distance * 1000,
+        atol=1e-4,
+    )
+
+
+def test_plane_rjb_single_point():
+    plane = Plane.from_centroid_strike_dip(
+        centroid=coordinate(-43.5, 172.5, 5),
+        length=10,
+        width=10,
+        strike_nztm=0,
+        dip_dir_nztm=90,
+        dip=45,
+    )
+    distance = 10_000
+    point = coordinates.nztm_to_wgs_depth(
+        np.array(shapely.buffer(plane.geometry, distance).exterior.coords[0])
+    )
+    rjb = plane.rjb_distance(point)
+    assert isinstance(rjb, float)
+    assert np.isclose(rjb, distance, atol=1e-4)
 
 
 @given(

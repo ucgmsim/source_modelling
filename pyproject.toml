@@ -20,7 +20,7 @@ dependencies = [
   "parse",
   "qcore-utils",
   "scipy",
-  "shapely",
+  "shapely>=2.0",
   "xarray[io]",
 ]
 
