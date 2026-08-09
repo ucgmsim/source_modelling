@@ -1346,7 +1346,13 @@ class Fault:
         float
             The rrup distances (in metres) between the points and the fault geometry.
         """
-        return np.min([plane.rrup_distance(points) for plane in self.planes])
+        rrup = np.min(
+            [np.atleast_1d(plane.rrup_distance(points)) for plane in self.planes],
+            axis=0,
+        )
+        if rrup.shape[0] == 1:
+            return float(rrup[0])
+        return rrup
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
@@ -1388,23 +1394,27 @@ class Fault:
             np.array([segment_proportion, fault_coordinates[1]])
         )
 
-    def rjb_distance(self, point: np.ndarray) -> float:
-        """Return the closest projected distance between the fault and the point.
+    def rjb_distance(self, points: np.ndarray) -> float:
+        """Return the closest projected distance between the fault and the points.
 
         Parameters
         ----------
-        point : np.ndarray
-            The point to compute distance to.
-
+        points : np.ndarray
+            The points to compute distance to.
+            Shape [N, 3] where N is the number of points
+                and each point is in (lat, lon, depth) format.
 
         Returns
         -------
         float
-            The Rjb distance (in metres) to the point.
+            The Rjb distance (in metres) to the points.
         """
-        return shapely.distance(
-            self.geometry, shapely.Point(coordinates.wgs_depth_to_nztm(point))
-        )
+        points_nztm = coordinates.wgs_depth_to_nztm(np.atleast_2d(points))
+        rjb = self.geometry.distance(shapely.points(points_nztm))
+
+        if rjb.shape[0] == 1:
+            return float(rjb[0])
+        return rjb
 
     def rx_ry_distance(self, point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Calculate the rx and ry distance between the fault and a given set of points

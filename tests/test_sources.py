@@ -908,12 +908,12 @@ def test_fault_reordering(fault: Fault):
 def test_fault_rjb(fault: Fault, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
     buffer = shapely.buffer(fault.geometry, distance * 1000)
-    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
-        assert np.isclose(
-            fault.rjb_distance(point),
-            distance * 1000,
-            atol=1e-4,
-        )
+    points = coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords))
+    np.testing.assert_allclose(
+        fault.rjb_distance(points),
+        distance * 1000,
+        atol=1e-4,
+    )
 
 
 @given(
@@ -926,19 +926,28 @@ def test_fault_rjb(fault: Fault, distance: float):
             coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
         ),
     ),
-    point=st.builds(
-        coordinate,
-        lat=st.floats(-50, -31),
-        lon=st.floats(160, 180),
-        depth=st.floats(0, 100),
+    points=st.lists(
+        st.builds(
+            coordinate,
+            lat=st.floats(-50, -31),
+            lon=st.floats(160, 180),
+            depth=st.floats(0, 100),
+        ),
+        min_size=1,
+        max_size=5,
     ),
 )
-def test_fault_rrup(fault: Fault, point: np.ndarray):
-    # The fault rrup should be equal to the smallest rrup among the planes in the fault.
-    fault_rrup = fault.rrup_distance(point)
-    assert np.isclose(
-        min(plane.rrup_distance(point) for plane in fault.planes), fault_rrup, atol=1e-3
+@settings(deadline=None)
+def test_fault_rrup(fault: Fault, points: list[np.ndarray]):
+    # The fault rrup should be equal to the smallest rrup among the planes in the fault,
+    # computed independently for each point.
+    points_array = np.array(points)
+    fault_rrup = np.atleast_1d(fault.rrup_distance(points_array))
+    plane_rrup = np.min(
+        [np.atleast_1d(plane.rrup_distance(points_array)) for plane in fault.planes],
+        axis=0,
     )
+    np.testing.assert_allclose(plane_rrup, fault_rrup, atol=1e-3)
 
 
 @given(
