@@ -51,7 +51,7 @@ source_modelling = ['NZ_CFM/*']
 source_modelling = "source_modelling"
 
 [tool.ty.src]
-exclude = ["source_modelling/ccldpy.py"]
+exclude = ["source_modelling/ccldpy.py", "setup.py"]
 
 [tool.ruff]
 extend-exclude = ["source_modelling/ccldpy.py"]

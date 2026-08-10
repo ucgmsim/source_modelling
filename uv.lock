@@ -2085,7 +2085,7 @@ requires-dist = [
     { name = "qcore-utils" },
     { name = "scipy" },
     { name = "scipy-stubs", marker = "extra == 'types'" },
-    { name = "shapely" },
+    { name = "shapely", specifier = ">=2.0" },
     { name = "types-geopandas", marker = "extra == 'types'" },
     { name = "types-networkx", marker = "extra == 'types'" },
     { name = "types-shapely", marker = "extra == 'types'" },
