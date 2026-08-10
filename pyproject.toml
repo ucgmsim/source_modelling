@@ -45,7 +45,7 @@ dev = ["ruff", "deptry", "ty", "numpydoc"]
 
 
 [tool.setuptools.package-data]
-source_modelling = ['NZ_CFM/*']
+source_modelling = ['NZ_CFM/*', 'py.typed', 'srf_parser.pyi']
 
 [tool.setuptools.package-dir]
 source_modelling = "source_modelling"
