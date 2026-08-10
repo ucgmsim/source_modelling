@@ -416,7 +416,8 @@ class Plane:
     def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the plane (projected onto the surface).
 
-        Geometry will be a LineString if `dip = 90`."""
+        Geometry will be a LineString if `dip = 90`.
+        """
         if self.dip == 90:
             return shapely.LineString(self.bounds[:2])
         return shapely.Polygon(self.bounds)
@@ -792,7 +793,7 @@ class Plane:
             raise ValueError("Specified coordinates do not lie in plane")
         return np.clip(fault_local_coordinates, 0, 1)
 
-    def rrup_distance(self, points: np.ndarray) -> float:
+    def rrup_distance(self, points: np.ndarray) -> np.ndarray | float:
         """Compute RRup Distance between a fault and a point.
 
         Parameters
@@ -850,7 +851,7 @@ class Plane:
             return float(rrup[0])
         return rrup
 
-    def rjb_distance(self, points: np.ndarray) -> float:
+    def rjb_distance(self, points: np.ndarray) -> np.ndarray | float:
         """Return the closest projected distance between the fault and the points.
 
         Parameters
@@ -866,8 +867,10 @@ class Plane:
             The Rjb distance (in metres) to the points.
         """
         points_nztm = coordinates.wgs_depth_to_nztm(np.atleast_2d(points))
-        rjb = self.geometry.distance(shapely.points(points_nztm))
-        
+        rjb = np.atleast_1d(
+            shapely.distance(self.geometry, shapely.points(points_nztm))
+        )
+
         if rjb.shape[0] == 1:
             return float(rjb[0])
         return rjb
@@ -1246,14 +1249,33 @@ class Fault:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
+    def geometry(
+        self,
+    ) -> (
+        shapely.Polygon
+        | shapely.LineString
+        | shapely.MultiPolygon
+        | shapely.MultiLineString
+    ):  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(
+        geometry = shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
         )
+
+        # Make typechecker happy, since shapely.normalize returns a BaseGeometry
+        assert isinstance(
+            geometry,
+            (
+                shapely.Polygon,
+                shapely.LineString,
+                shapely.MultiPolygon,
+                shapely.MultiLineString,
+            ),
+        )
+        return geometry
 
     @property
     def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
@@ -1331,7 +1353,7 @@ class Fault:
             )
         )
 
-    def rrup_distance(self, points: np.ndarray) -> float:
+    def rrup_distance(self, points: np.ndarray) -> np.ndarray | float:
         """Compute RRup Distance between a fault and a point.
 
         Parameters
@@ -1394,7 +1416,7 @@ class Fault:
             np.array([segment_proportion, fault_coordinates[1]])
         )
 
-    def rjb_distance(self, points: np.ndarray) -> float:
+    def rjb_distance(self, points: np.ndarray) -> np.ndarray | float:
         """Return the closest projected distance between the fault and the points.
 
         Parameters
@@ -1410,7 +1432,9 @@ class Fault:
             The Rjb distance (in metres) to the points.
         """
         points_nztm = coordinates.wgs_depth_to_nztm(np.atleast_2d(points))
-        rjb = self.geometry.distance(shapely.points(points_nztm))
+        rjb = np.atleast_1d(
+            shapely.distance(self.geometry, shapely.points(points_nztm))
+        )
 
         if rjb.shape[0] == 1:
             return float(rjb[0])
