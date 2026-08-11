@@ -18,7 +18,7 @@ dependencies = [
   "numpy>=2.0",
   "pandas",
   "parse",
-  "qcore-utils>=2026.8.1",
+  "qcore-utils>=2026.8.2",
   "scipy",
   "shapely>=2.0",
   "xarray[io]",
