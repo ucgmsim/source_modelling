@@ -413,7 +413,7 @@ class Plane:
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
     @property
-    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the plane (projected onto the surface).
 
         Geometry will be a LineString if `dip = 90`.
@@ -1251,12 +1251,7 @@ class Fault:
     @property
     def geometry(
         self,
-    ) -> (
-        shapely.Polygon
-        | shapely.LineString
-        | shapely.MultiPolygon
-        | shapely.MultiLineString
-    ):  # numpydoc ignore=RT01
+    ) -> shapely.Geometry:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.
@@ -1265,16 +1260,6 @@ class Fault:
             shapely.union_all([plane.geometry for plane in self.planes])
         )
 
-        # Make typechecker happy, since shapely.normalize returns a BaseGeometry
-        assert isinstance(
-            geometry,
-            (
-                shapely.Polygon,
-                shapely.LineString,
-                shapely.MultiPolygon,
-                shapely.MultiLineString,
-            ),
-        )
         return geometry
 
     @property
