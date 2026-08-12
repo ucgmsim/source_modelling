@@ -47,10 +47,11 @@ def test_plane_gsf():  # Use tmp_path fixture
     assert gsf_df["dep"].min() >= 10 and gsf_df["dep"].max() <= 20
 
     for _, point in gsf_df.iterrows():
-        assert plane.geometry.contains(
+        assert shapely.contains(
+            plane.geometry,
             shapely.Point(
                 coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].to_numpy())
-            )
+            ),
         )
 
 

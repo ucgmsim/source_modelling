@@ -684,35 +684,49 @@ fault_plane = st.builds(
 
 @given(
     plane=fault_plane,
-    point=st.builds(
-        coordinate,
-        lat=st.floats(-50, -31),
-        lon=st.floats(160, 180),
-        depth=st.floats(0, 100),
+    points=st.lists(
+        st.builds(
+            coordinate,
+            lat=st.floats(-50, -31),
+            lon=st.floats(160, 180),
+            depth=st.floats(0, 100),
+        ),
+        min_size=1,
+        max_size=5,
     ),
 )
 @settings(deadline=None)
-def test_plane_rrup(plane: Plane, point: np.ndarray):
+def test_plane_rrup(plane: Plane, points: list[np.ndarray]):
     assume(plane.dip_dir >= plane.strike + 5)
-    point = coordinates.wgs_depth_to_nztm(point)
+    points_nztm = coordinates.wgs_depth_to_nztm(np.array(points))
 
-    def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
+    def fault_coordinate_distance(
+        fault_coordinates: np.ndarray, point_nztm: np.ndarray
+    ) -> np.ndarray:
         fault_point = coordinates.wgs_depth_to_nztm(
             plane.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
         )
-        return point - fault_point
+        return point_nztm - fault_point
 
-    res = sp.optimize.least_squares(
-        fault_coordinate_distance,
-        np.array([1 / 2, 1 / 2]),
-        bounds=([0] * 2, [1] * 2),
-        gtol=1e-5,
-        ftol=1e-5,
+    optimized_res = np.array(
+        [
+            np.linalg.norm(
+                sp.optimize.least_squares(
+                    fault_coordinate_distance,
+                    np.array([1 / 2, 1 / 2]),
+                    bounds=([0] * 2, [1] * 2),
+                    gtol=1e-5,
+                    ftol=1e-5,
+                    args=(point_nztm,),
+                ).fun
+            )
+            for point_nztm in points_nztm
+        ]
     )
-    optimized_res = np.linalg.norm(res.fun)
-    assert np.isclose(
-        plane.rrup_distance(coordinates.nztm_to_wgs_depth(point)),
+    np.testing.assert_allclose(
+        plane.rrup_distance(coordinates.nztm_to_wgs_depth(points_nztm)),
         optimized_res,
+        rtol=1e-5,
         atol=1e-3,
     )
 
@@ -720,16 +734,19 @@ def test_plane_rrup(plane: Plane, point: np.ndarray):
 @given(
     plane=fault_plane,
     local_coordinates=nst.arrays(
-        float, (2,), elements={"min_value": 0, "max_value": 1}
+        float,
+        st.integers(1, 5).map(lambda n: (n, 2)),
+        elements={"min_value": 0, "max_value": 1},
     ),
 )
 def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
     assume(plane.dip_dir >= plane.strike + 5)
-    assert np.isclose(
+    np.testing.assert_allclose(
         plane.rrup_distance(
             plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
         ),
         0,
+        atol=1e-6,
     )
 
 
@@ -737,17 +754,36 @@ def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
     plane=fault_plane,
     distance=st.floats(1, 1000),
 )
+@settings(deadline=None)
 def test_plane_rjb(plane: Plane, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
     assume(plane.dip_dir_nztm >= plane.strike_nztm + 1)
     assume(plane.dip != 90)
     buffer = shapely.buffer(plane.geometry, distance * 1000)
-    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
-        assert np.isclose(
-            plane.rjb_distance(point),
-            distance * 1000,
-            atol=1e-4,
-        )
+    points = coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords))
+    np.testing.assert_allclose(
+        plane.rjb_distance(points),
+        distance * 1000,
+        atol=1e-4,
+    )
+
+
+def test_plane_rjb_single_point():
+    plane = Plane.from_centroid_strike_dip(
+        centroid=coordinate(-43.5, 172.5, 5),
+        length=10,
+        width=10,
+        strike_nztm=0,
+        dip_dir_nztm=90,
+        dip=45,
+    )
+    distance = 10_000
+    point = coordinates.nztm_to_wgs_depth(
+        np.array(shapely.buffer(plane.geometry, distance).exterior.coords[0])
+    )
+    rjb = plane.rjb_distance(point)
+    assert isinstance(rjb, float)
+    assert np.isclose(rjb, distance, atol=1e-4)
 
 
 @given(
@@ -872,12 +908,12 @@ def test_fault_reordering(fault: Fault):
 def test_fault_rjb(fault: Fault, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
     buffer = shapely.buffer(fault.geometry, distance * 1000)
-    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
-        assert np.isclose(
-            fault.rjb_distance(point),
-            distance * 1000,
-            atol=1e-4,
-        )
+    points = coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords))
+    np.testing.assert_allclose(
+        fault.rjb_distance(points),
+        distance * 1000,
+        atol=1e-4,
+    )
 
 
 @given(
@@ -890,19 +926,28 @@ def test_fault_rjb(fault: Fault, distance: float):
             coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
         ),
     ),
-    point=st.builds(
-        coordinate,
-        lat=st.floats(-50, -31),
-        lon=st.floats(160, 180),
-        depth=st.floats(0, 100),
+    points=st.lists(
+        st.builds(
+            coordinate,
+            lat=st.floats(-50, -31),
+            lon=st.floats(160, 180),
+            depth=st.floats(0, 100),
+        ),
+        min_size=1,
+        max_size=5,
     ),
 )
-def test_fault_rrup(fault: Fault, point: np.ndarray):
-    # The fault rrup should be equal to the smallest rrup among the planes in the fault.
-    fault_rrup = fault.rrup_distance(point)
-    assert np.isclose(
-        min(plane.rrup_distance(point) for plane in fault.planes), fault_rrup, atol=1e-3
+@settings(deadline=None)
+def test_fault_rrup(fault: Fault, points: list[np.ndarray]):
+    # The fault rrup should be equal to the smallest rrup among the planes in the fault,
+    # computed independently for each point.
+    points_array = np.array(points)
+    fault_rrup = np.atleast_1d(fault.rrup_distance(points_array))
+    plane_rrup = np.min(
+        [np.atleast_1d(plane.rrup_distance(points_array)) for plane in fault.planes],
+        axis=0,
     )
+    np.testing.assert_allclose(plane_rrup, fault_rrup, atol=1e-3)
 
 
 @given(

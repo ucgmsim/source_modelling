@@ -18,9 +18,9 @@ dependencies = [
   "numpy>=2.0",
   "pandas",
   "parse",
-  "qcore-utils",
+  "qcore-utils>=2026.8.2",
   "scipy",
-  "shapely",
+  "shapely>=2.0",
   "xarray[io]",
 ]
 
@@ -45,13 +45,13 @@ dev = ["ruff", "deptry", "ty", "numpydoc"]
 
 
 [tool.setuptools.package-data]
-source_modelling = ['NZ_CFM/*']
+source_modelling = ['NZ_CFM/*', 'py.typed', 'srf_parser.pyi']
 
 [tool.setuptools.package-dir]
 source_modelling = "source_modelling"
 
 [tool.ty.src]
-exclude = ["source_modelling/ccldpy.py"]
+exclude = ["source_modelling/ccldpy.py", "setup.py"]
 
 [tool.ruff]
 extend-exclude = ["source_modelling/ccldpy.py"]

@@ -7,7 +7,6 @@ class ParseError(Exception):
     """Error for parsing files in source modelling."""
 
 
-
 def _is_seperator(char: str) -> bool:
     """Check if a character is a space or end of file.
 
