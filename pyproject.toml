@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
-  "fiona",
   "geopandas",
   "h5py",
   "networkx",
@@ -38,6 +37,9 @@ types = [
   "scipy-stubs",
   "pandas-stubs",
   "types-networkx",
+]
+fiona = [
+  "fiona"
 ]
 
 [dependency-groups]
