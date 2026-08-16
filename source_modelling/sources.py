@@ -60,13 +60,13 @@ class Point:
     dip_dir: float
 
     @property
-    def top_m(self):
+    def top_m(self) -> float:
         """float: The top of the point source pseudo-geometry"""
         depth = self.bounds[-1]
         return depth - np.sin(np.radians(self.dip)) / 2
 
     @property
-    def bottom_m(self):
+    def bottom_m(self) -> float:
         """float: The bottom of the point source pseudo-geometry"""
         depth = self.bounds[-1]
         return depth + np.sin(np.radians(self.dip)) / 2
