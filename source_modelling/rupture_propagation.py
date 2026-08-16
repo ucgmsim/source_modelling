@@ -525,8 +525,15 @@ def jump_points_from_rupture_tree(
         if parent is None:
             continue
         elif min_depth:
+            source_a = source_map[source]
+            source_b = source_map[parent]
+            depth = min(
+                min_depth,
+                0.99 * source_a.bottom_m / 1000,
+                0.99 * source_b.bottom_m / 1000,
+            )
             source_point, parent_point = sources.closest_points_beneath(
-                source_map[source], source_map[parent], min_depth
+                source_a, source_b, depth
             )
         else:
             source_point, parent_point = sources.closest_point_between_sources(
