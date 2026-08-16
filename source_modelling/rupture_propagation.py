@@ -497,7 +497,7 @@ def sample_rupture_propagation(
 def jump_points_from_rupture_tree(
     source_map: dict[str, sources.IsSource],
     rupture_causality_tree: Tree,
-    min_depth: float | None = None
+    min_depth: float | None = None,
 ) -> dict[str, JumpPair]:
     """
     Extract jump points between faults from a rupture causality tree.
@@ -530,7 +530,8 @@ def jump_points_from_rupture_tree(
             )
         else:
             source_point, parent_point = sources.closest_point_between_sources(
-                source_map[source], source_map[parent],
+                source_map[source],
+                source_map[parent],
             )
         jump_points[source] = JumpPair(parent_point, source_point)
     return jump_points
