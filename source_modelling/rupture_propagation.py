@@ -524,7 +524,7 @@ def jump_points_from_rupture_tree(
     for source, parent in rupture_causality_tree.items():
         if parent is None:
             continue
-        elif min_depth:
+        elif min_depth is not None:
             source_a = source_map[source]
             source_b = source_map[parent]
             depth = min(
