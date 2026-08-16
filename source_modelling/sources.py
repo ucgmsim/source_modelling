@@ -62,8 +62,8 @@ class Point:
     @property
     def top_m(self) -> float:
         """float: The top of the point source pseudo-geometry"""
-        depth = self.bounds[-1]
-        return depth - self.width_m * np.sin(np.radians(self.dip)) / 2
+        centroid_depth = self.bounds[-1]
+        return centroid_depth - self.width_m * np.sin(np.radians(self.dip)) / 2
 
     @property
     def bottom_m(self) -> float:
