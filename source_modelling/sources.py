@@ -59,6 +59,19 @@ class Point:
     dip: float
     dip_dir: float
 
+    @property
+    def top_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The top of the point source pseudo-geometry"""
+        centroid_depth = self.bounds[-1]
+        return centroid_depth - self.width_m * np.sin(np.radians(self.dip)) / 2
+
+    @property
+    def bottom_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The bottom of the point source pseudo-geometry"""
+        centroid_depth = self.bounds[-1]
+
+        return centroid_depth + self.width_m * np.sin(np.radians(self.dip)) / 2
+
     @classmethod
     def from_lat_lon_depth(cls, point_coordinates: np.ndarray, **kwargs) -> Self:
         """Construct a point source from a lat, lon, depth format.
@@ -1643,7 +1656,7 @@ def closest_point_between_sources(
 
 
 def closest_points_beneath(
-    source_a: Fault | Plane, source_b: Fault | Plane, min_depth: float
+    source_a: IsSource, source_b: IsSource, min_depth: float
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest points between two sources beneath a minimum depth.
 
