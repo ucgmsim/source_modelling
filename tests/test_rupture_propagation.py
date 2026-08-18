@@ -619,7 +619,7 @@ def test_jump_points_from_rupture_tree_min_depth(
     }
 
     result_jump_points = rupture_propagation.jump_points_from_rupture_tree(
-        source_map,
+        source_map,  # ty: ignore[invalid-argument-type]
         {"A": None, "B": "A"},
         min_depth,
     )
