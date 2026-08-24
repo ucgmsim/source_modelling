@@ -529,6 +529,12 @@ def jump_points_from_rupture_tree(
             source_b = source_map[parent]
             depth = min(
                 min_depth,
+                # HACK: factor of 0.99 is used here because the closest points
+                # solver will not work if the minimum depth is precisely the
+                # bottom-edge of the fault. If the closest point is the bottom
+                # depth then this will still recover that, but a proper
+                # treatment of the degenerate case would require specialising
+                # the solver.
                 0.99 * source_a.bottom_m / 1000,
                 0.99 * source_b.bottom_m / 1000,
             )
