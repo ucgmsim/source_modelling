@@ -14,7 +14,7 @@ from hypothesis.extra import numpy as nst
 
 from qcore import coordinates, geo
 from source_modelling import sources
-from source_modelling.sources import Fault, Plane, multi_fault_rx_ry_distance
+from source_modelling.sources import Fault, Plane, Point, multi_fault_rx_ry_distance
 
 DATA_PATH = Path("tests") / "data"
 np.random.seed(0)
@@ -72,6 +72,20 @@ def test_point_construction(
     )
     assert np.isclose(point.width_m, point.width * 1000)
     assert np.allclose(point.centroid, point_coordinates)
+
+
+def test_top_bottom_point():
+    point = Point(
+        coordinates.nztm_to_wgs_depth(np.array([-43.0, 172.0, 1000.0])),
+        1000.0,
+        1000.0,
+        0,
+        60.0,
+        90.0,
+    )
+    sin_dip = np.sqrt(3) / 2
+    assert point.bottom_m == 1000.0 + sin_dip / 2 * 1000.0
+    assert point.top_m == 1000.0 - sin_dip / 2 * 1000.0
 
 
 @given(

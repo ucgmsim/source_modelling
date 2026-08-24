@@ -502,7 +502,7 @@ def test_sample_rupture_propagation(
 
 
 @pytest.mark.parametrize(
-    "source_map, rupture_causality_tree, expected_jump_points",
+    "source_map, rupture_causality_tree, min_depth, expected_jump_points",
     [
         # Test case 1: Simple rupture causality tree
         (
@@ -518,6 +518,7 @@ def test_sample_rupture_propagation(
                 ),
             },
             {"A": None, "B": "A", "C": "B"},
+            None,
             {
                 "B": rupture_propagation.JumpPair(
                     np.array([0.5, 0.5]), np.array([0.5, 0.5])
@@ -541,6 +542,7 @@ def test_sample_rupture_propagation(
                 ),
             },
             {"A": None, "B": "A", "C": "A"},
+            None,
             {
                 "B": rupture_propagation.JumpPair(
                     np.array([0.5, 0.5]), np.array([0.5, 0.5])
@@ -555,11 +557,13 @@ def test_sample_rupture_propagation(
 def test_jump_points_from_rupture_tree(
     source_map: dict[str, sources.Point],
     rupture_causality_tree: dict[str, str | None],
+    min_depth: float | None,
     expected_jump_points: dict[str, rupture_propagation.JumpPair],
 ):
     result_jump_points = rupture_propagation.jump_points_from_rupture_tree(
         source_map,  # ty: ignore[invalid-argument-type]
         rupture_causality_tree,
+        min_depth,
     )
 
     # Check if the jump points match the expected values
@@ -568,3 +572,67 @@ def test_jump_points_from_rupture_tree(
             result_jump_points[fault].from_point, expected_jump.from_point
         )
         assert np.allclose(result_jump_points[fault].to_point, expected_jump.to_point)
+
+
+# The bottom depth (in metres) of the sources used in the minimum depth
+# tests below (planes 10km wide dipping at 45 degrees from the surface).
+_DIPPING_PLANE_BOTTOM_M = 10_000 * np.sin(np.radians(45))
+
+
+@pytest.mark.parametrize(
+    "min_depth, expected_jump_depth_m",
+    [
+        # No minimum depth: the sources dip away from each other, so the
+        # closest points are at the surface.
+        (None, 0),
+        # The minimum depth lies within both sources and so is respected exactly.
+        (5, 5000),
+        # The minimum depth is below the bottom of both sources and so is
+        # clamped to just above their bottom depth.
+        (100, 0.99 * _DIPPING_PLANE_BOTTOM_M),
+    ],
+)
+def test_jump_points_from_rupture_tree_min_depth(
+    min_depth: float | None, expected_jump_depth_m: float
+):
+    # Two planes dipping away from each other, so that the distance
+    # between them increases with depth.
+    source_map = {
+        "A": sources.Plane.from_centroid_strike_dip(
+            np.array([-41.2865, 174.7762]),
+            dip=45,
+            length=10,
+            width=10,
+            dtop=0,
+            strike_nztm=0,
+            dip_dir_nztm=270,
+        ),
+        "B": sources.Plane.from_centroid_strike_dip(
+            np.array([-41.2865, 174.8762]),
+            dip=45,
+            length=10,
+            width=10,
+            dtop=0,
+            strike_nztm=0,
+            dip_dir_nztm=90,
+        ),
+    }
+
+    result_jump_points = rupture_propagation.jump_points_from_rupture_tree(
+        source_map,  # ty: ignore[invalid-argument-type]
+        {"A": None, "B": "A"},
+        min_depth,
+    )
+
+    jump = result_jump_points["B"]
+    from_depth_m = source_map["A"].fault_coordinates_to_wgs_depth_coordinates(
+        jump.from_point
+    )[-1]
+    to_depth_m = source_map["B"].fault_coordinates_to_wgs_depth_coordinates(
+        jump.to_point
+    )[-1]
+
+    # The sources dip away from each other, so the jump is made as
+    # shallow as the minimum depth allows.
+    assert from_depth_m == pytest.approx(expected_jump_depth_m, abs=1)
+    assert to_depth_m == pytest.approx(expected_jump_depth_m, abs=1)
