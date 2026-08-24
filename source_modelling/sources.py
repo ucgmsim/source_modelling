@@ -63,6 +63,18 @@ class Point:
     def top_m(self) -> float:  # numpydoc ignore=RT01
         """float: The top of the point source pseudo-geometry"""
         centroid_depth = self.bounds[-1]
+        #   -------------------------+--------
+        #     \-       /             |
+        #       \--   / dip          |
+        #          \-/               |
+        #            \--             |
+        #       fault   o------------+ centroid depth
+        #                 \--        |
+        #                    \-      |  sin(dip) / 2 * width
+        #                      \--   |
+        #                         \- |
+        #                           \+
+
         return centroid_depth - self.width_m * np.sin(np.radians(self.dip)) / 2
 
     @property
