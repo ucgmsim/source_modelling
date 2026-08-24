@@ -512,7 +512,7 @@ def jump_points_from_rupture_tree(
     rupture_causality_tree : Tree
         A rupture causality tree.
     min_depth : float | None, optional
-        The minimum depth to consider jumping between, or ``None`` to allow jumps at all depth.
+        The minimum depth to consider jumping between, or ``None`` to allow jumps at all depths.
 
     Returns
     -------
