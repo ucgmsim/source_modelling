@@ -612,7 +612,13 @@ class SrfFile:
                     segment_header["len"]
                     * 1000
                     / 2
-                    * np.array([np.cos(strike_nztm), np.sin(strike_nztm), 0])
+                    * np.array(
+                        [
+                            np.cos(np.radians(strike_nztm)),
+                            np.sin(np.radians(strike_nztm)),
+                            0,
+                        ]
+                    )
                 )
                 top = coordinates.wgs_depth_to_nztm(
                     segment[["lat", "lon", "dep"]].iloc[0].values
