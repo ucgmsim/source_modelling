@@ -75,14 +75,18 @@ def test_point_construction(
 
 
 def test_top_bottom_point():
+    point_coordinates = np.array([-43.0, 172.0, 1000.0])
     point = Point(
-        coordinates.nztm_to_wgs_depth(np.array([-43.0, 172.0, 1000.0])),
+        coordinates.wgs_depth_to_nztm(point_coordinates),
         1000.0,
         1000.0,
         0,
         60.0,
         90.0,
     )
+    # Point.bounds is NZTM, so the location must round-trip back to the
+    # lat/lon/depth the test was written against.
+    assert np.allclose(point.coordinates, point_coordinates)
     sin_dip = np.sqrt(3) / 2
     assert point.bottom_m == 1000.0 + sin_dip / 2 * 1000.0
     assert point.top_m == 1000.0 - sin_dip / 2 * 1000.0
