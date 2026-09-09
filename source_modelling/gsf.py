@@ -112,12 +112,15 @@ def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
         The path to the GSF file to write.
     """
 
+    if "loc_rake" not in gsf_df:
+        raise ValueError("The DataFrame must have a 'loc_rake' column.")
+    # Defaults are filled on a copy: write_gsf serialises the frame it is
+    # given and must not modify the caller's DataFrame.
+    gsf_df = gsf_df.copy(deep=False)
     if "init_time" not in gsf_df:
         gsf_df["init_time"] = -1
     if "slip" not in gsf_df:
         gsf_df["slip"] = -1
-    if "loc_rake" not in gsf_df:
-        raise ValueError("The DataFrame must have a 'loc_rake' column.")
     with open(gsf_filepath, "w") as gsf_file:
         gsf_file.write(f"{len(gsf_df)}\n")
         gsf_df.to_csv(
