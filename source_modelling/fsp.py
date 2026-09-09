@@ -117,7 +117,7 @@ class Segment:
                 "Cannot convert segment to Plane: missing required attributes."
             )
         strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
-            self.top_centre, self.width, self.strike
+            self.top_centre, self.length, self.strike
         )
         top_centre_nztm = coordinates.wgs_depth_to_nztm(self.top_centre)
         dip_dir = strike_nztm + 90
