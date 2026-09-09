@@ -28,6 +28,16 @@ from source_modelling import gc2_distances
 _KM_TO_M = 1000
 
 
+class CoordinatesNotOnPlaneError(ValueError):
+    """Raised when global coordinates do not lie within a plane.
+
+    Subclasses :class:`ValueError` for backwards compatibility. It exists so
+    that "this point is not on this plane" can be told apart from "this point
+    cannot be located on this plane", which callers iterating over planes must
+    not treat as a miss.
+    """
+
+
 @dataclasses.dataclass
 class Point:
     """A representation of a point source.
@@ -778,19 +788,31 @@ class Plane:
 
         Raises
         ------
-        ValueError
+        CoordinatesNotOnPlaneError
             If the given coordinates do not lie in the fault plane.
+        ValueError
+            If the plane is vertical (``dip == 90``) and no depth is given,
+            because the dip coordinate is then undetermined.
 
         Notes
         -----
         While not passing depth information is supported, depth information
         *greatly* improves the accuracy of the estimation. No guarantees
         are made about the accuracy of the inversion if you do not pass
-        depth information.
+        depth information. Vertical planes are the exception: they project
+        onto a line in plan view, so depth is required rather than merely
+        recommended.
         """
-        coordinate_length = (
-            3 if global_coordinates.shape[-1] == 3 or self.dip == 90 else 2
-        )
+        coordinate_length = 3 if global_coordinates.shape[-1] == 3 else 2
+        if coordinate_length == 2 and self.dip == 90:
+            # A vertical plane projects onto a line in plan view, so a
+            # (lat, lon) pair maps to every depth on the plane and the dip
+            # coordinate is genuinely undetermined. Fail loudly rather than
+            # invent one.
+            raise ValueError(
+                "Depth is required to locate coordinates on a vertical plane "
+                "(dip == 90); the dip coordinate is undetermined without it."
+            )
         strike_direction = (
             self.bounds[1, :coordinate_length] - self.bounds[0, :coordinate_length]
         )
@@ -815,7 +837,9 @@ class Plane:
                 | np.isclose(fault_local_coordinates, 1, atol=tolerance)
             )
         ):
-            raise ValueError("Specified coordinates do not lie in plane")
+            raise CoordinatesNotOnPlaneError(
+                "Specified coordinates do not lie in plane"
+            )
         return np.clip(fault_local_coordinates, 0, 1)
 
     def rrup_distance(self, points: np.ndarray) -> np.ndarray | float:
@@ -1349,7 +1373,7 @@ class Fault:
                 return np.array([left_edges[i], 0]) + plane_coordinates * np.array(
                     [left_edges[i + 1] - left_edges[i], 1]
                 )
-            except ValueError:
+            except CoordinatesNotOnPlaneError:
                 continue
         raise ValueError("Given coordinates are not on fault.")
 

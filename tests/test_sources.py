@@ -1490,3 +1490,57 @@ def test_multi_fault_rx_ry():
 
     assert rx == pytest.approx(0.0)
     assert ry == pytest.approx(0.0)
+
+
+def _vertical_plane() -> Plane:
+    """Build a strictly vertical plane (dip == 90) from NZTM corners."""
+    origin = coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.6, 0.0]))
+    along_strike = np.array([10000.0, 10000.0, 0.0])
+    down_dip = np.array([0.0, 0.0, 10000.0])
+    return Plane(
+        np.array(
+            [
+                origin,
+                origin + along_strike,
+                origin + along_strike + down_dip,
+                origin + down_dip,
+            ]
+        )
+    )
+
+
+def test_vertical_plane_with_depth_is_unaffected():
+    """A vertical plane still inverts exactly when depth is supplied."""
+    plane = _vertical_plane()
+    assert plane.dip == 90.0
+    assert np.allclose(
+        plane.wgs_depth_coordinates_to_fault_coordinates(plane.centroid), [0.5, 0.5]
+    )
+
+
+def test_vertical_plane_without_depth_reports_the_real_cause():
+    """A vertical plane queried without depth must say depth is required.
+
+    Regression test: ``coordinate_length`` was forced to 3 whenever
+    ``dip == 90``, regardless of the input's dimensionality, so a 2D query
+    raised a broadcast error ("operands could not be broadcast together with
+    shapes (2,) (3,)") which ``Fault`` then swallowed and reported as "not on
+    fault" -- for a point that is on the fault.
+    """
+    plane = _vertical_plane()
+    centroid_2d = plane.centroid[:2]
+
+    with pytest.raises(ValueError, match="Depth is required"):
+        plane.wgs_depth_coordinates_to_fault_coordinates(centroid_2d)
+
+    # and the cause must survive Fault's per-plane loop rather than being
+    # reported as a geometric miss
+    with pytest.raises(ValueError, match="Depth is required"):
+        Fault([plane]).wgs_depth_coordinates_to_fault_coordinates(centroid_2d)
+
+
+def test_fault_still_reports_genuine_misses_as_not_on_fault():
+    """Points genuinely off the fault must still raise "not on fault"."""
+    fault = Fault([_vertical_plane()])
+    with pytest.raises(ValueError, match="not on fault"):
+        fault.wgs_depth_coordinates_to_fault_coordinates(np.array([-41.0, 174.0, 0.0]))
