@@ -1619,7 +1619,6 @@ wheels = [
 name = "source-modelling"
 source = { editable = "." }
 dependencies = [
-    { name = "fiona" },
     { name = "geopandas" },
     { name = "h5py" },
     { name = "networkx" },
@@ -1634,6 +1633,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+fiona = [
+    { name = "fiona" },
+]
 test = [
     { name = "coverage" },
     { name = "hypothesis", extra = ["numpy", "pandas"] },
@@ -1660,7 +1662,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", extras = ["toml"], marker = "extra == 'test'" },
-    { name = "fiona" },
+    { name = "fiona", marker = "extra == 'fiona'" },
     { name = "geopandas" },
     { name = "h5py" },
     { name = "hypothesis", extras = ["numpy", "pandas"], marker = "extra == 'test'" },
@@ -1682,7 +1684,7 @@ requires-dist = [
     { name = "types-shapely", marker = "extra == 'types'" },
     { name = "xarray", extras = ["io"] },
 ]
-provides-extras = ["test", "types"]
+provides-extras = ["test", "types", "fiona"]
 
 [package.metadata.requires-dev]
 dev = [

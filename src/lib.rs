@@ -105,7 +105,7 @@ pub fn write_srf(py: Python<'_>, py_srf_file: Py<PySrfFile>, file_path: &str) ->
         _ => {
             return Err(PyErr::new::<PyValueError, _>(
                 "vs and density must both be set (SRF v2) or both be None (SRF v1)",
-            ))
+            ));
         }
     };
 
