@@ -26,7 +26,6 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import NamedTuple
 
-import fiona
 import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
@@ -281,6 +280,15 @@ def load_community_fault_model(
         A list of CommunityFault objects.
     """
     faults = []
+    # fiona is imported here so that the other functions of the cfm module may
+    # be used without requiring it be imported.
+    try:
+        import fiona
+    except ImportError as e:
+        e.add_note(
+            "Fiona can be installed using the optional dependency group fiona, pip install source-modelling[fiona]."
+        )
+        raise
     with fiona.open(community_fault_model_shp_ffp) as fault_model_reader:
         fault_status_map = {
             "A-LS": FaultStatus.ACTIVE_SEISOGENIC,
