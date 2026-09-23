@@ -1,5 +1,5 @@
 from setuptools import setup
-from setuptools_rust import Binding, RustExtension
+from setuptools_rust import Binding, RustExtension  # ty: ignore[unresolved-import]
 
 setup(
     name="source_modelling",
@@ -7,8 +7,9 @@ setup(
     rust_extensions=[
         RustExtension(
             "source_modelling.srf_parser",
-            "source_modelling/srf_parser/Cargo.toml",
+            "Cargo.toml",
             binding=Binding.PyO3,
+            debug=False,
         )
     ],
     include_package_data=True,

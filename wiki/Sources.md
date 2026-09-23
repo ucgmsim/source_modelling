@@ -97,7 +97,7 @@ Q: How do I find the corners of a geometry?
 A: Using the `corners` property for either the `Plane` or `Fault` class.
 
 ```python
-source = Plane(...) # or Fault
+source = Plane(...)  # or Fault
 source.corners
 ```
 
@@ -127,9 +127,9 @@ xv, yv = np.meshgrid(np.linspace(0, 1, num=50), np.linspace(0, 1, num=100))
 fault_local_meshgrid = np.vstack([xv.ravel(), yv.ravel()])
 # Convert the fault local coordinates into global coordinates
 global_point_meshgrid = (
-     complicated_fault_geometry.fault_coordinates_to_wgs_depth_coordinates(
-         fault_local_meshgrid
-     )
+    complicated_fault_geometry.fault_coordinates_to_wgs_depth_coordinates(
+        fault_local_meshgrid
+    )
 )
 ```
 
@@ -141,7 +141,9 @@ A: You can use `sources.closest_point_between_sources` to find the closest point
 source_a = Plane(...)
 source_b = Fault(...)
 
-point_on_a_local, point_on_b_local = sources.closest_point_between_sources(source_a, source_b)
+point_on_a_local, point_on_b_local = sources.closest_point_between_sources(
+    source_a, source_b
+)
 distance_between_sources = coordinates.distance_between_wgs_depth_coordinates(
     source_a.fault_local_coordinates_to_wgs_depth_coordinates(point_on_a_local),
     source_b.fault_local_coordinates_to_wgs_depth_coordinates(point_on_b_local),

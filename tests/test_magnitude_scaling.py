@@ -11,13 +11,15 @@ import pytest
 import scipy as sp
 from hypothesis import assume, given
 
-from source_modelling import magnitude_scaling
+from source_modelling import magnitude_scaling, moment
+from source_modelling.moment import BoldM, Mw
 
 MAGNITUDE_TO_AREA = {
     magnitude_scaling.ScalingRelation.LEONARD2014: magnitude_scaling.leonard_magnitude_to_area,
     magnitude_scaling.ScalingRelation.CONTRERAS_INTERFACE2017: magnitude_scaling.contreras_interface_magnitude_to_area,
     magnitude_scaling.ScalingRelation.CONTRERAS_SLAB2020: magnitude_scaling.strasser_slab_magnitude_to_area,
 }
+RELATIONS = tuple(MAGNITUDE_TO_AREA)
 
 AREA_TO_MAGNITUDE = {
     magnitude_scaling.ScalingRelation.LEONARD2014: magnitude_scaling.leonard_area_to_magnitude,
@@ -68,7 +70,7 @@ def test_rake_type(rake: float, expected: magnitude_scaling.RakeType):
 
 
 def relation_with_magnitude(
-    relations: list[magnitude_scaling.ScalingRelation] = list(MAGNITUDE_TO_AREA),
+    relations: tuple[magnitude_scaling.ScalingRelation, ...] = RELATIONS,
 ):
     @st.composite
     def sampler(
@@ -97,10 +99,10 @@ def relation_with_magnitude(
 # The coefficients are not invertible, so we cannot test the inversion of the area to magnitude function.
 @given(
     relation_with_magnitude(
-        [
+        (
             magnitude_scaling.ScalingRelation.LEONARD2014,
             magnitude_scaling.ScalingRelation.CONTRERAS_INTERFACE2017,
-        ]
+        )
     )
 )
 def test_inversion(
@@ -111,12 +113,12 @@ def test_inversion(
     """When executed with best-fit values, the magnitude to area function is an inverse of the area to magnitude function."""
     scaling_relation, rake, magnitude = relation_with_magnitude
     if scaling_relation == magnitude_scaling.ScalingRelation.LEONARD2014:
-        mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)
-        area_to_mag = functools.partial(AREA_TO_MAGNITUDE[scaling_relation], rake=rake)
+        mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)  # ty: ignore[unknown-argument, invalid-argument-type]
+        area_to_mag = functools.partial(AREA_TO_MAGNITUDE[scaling_relation], rake=rake)  # ty: ignore[unknown-argument, invalid-argument-type]
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
         area_to_mag = AREA_TO_MAGNITUDE[scaling_relation]
-    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)
+    assert area_to_mag(mag_to_area(magnitude)) == pytest.approx(magnitude)  # ty: ignore[missing-argument, invalid-argument-type]
 
 
 @pytest.mark.parametrize(
@@ -149,12 +151,13 @@ def test_inversion(
         (9.0, 180.0, 102329.29922807537),
     ],
 )
-def test_leonard_area(mw: float, rake: float, expected_area: float):
+def test_leonard_area(mw: Mw, rake: float, expected_area: float):
     """Test the Leonard 2014 area calculation against values from the old implementation in qcore.
 
     NOTE: this combined with the inversion test for leonard ensure that the area calculation is compatible with the old implementation as well."""
+    boldm = moment.mw_to_boldm(mw)
     assert magnitude_scaling.magnitude_to_area(
-        magnitude_scaling.ScalingRelation.LEONARD2014, mw, rake
+        magnitude_scaling.ScalingRelation.LEONARD2014, boldm, rake
     ) == pytest.approx(expected_area)
 
 
@@ -213,7 +216,7 @@ def test_leonard_area(mw: float, rake: float, expected_area: float):
         (7.8, 5211.947111050806),
     ],
 )
-def test_strasser_slab_expected_area(mw: float, expected_area: float):
+def test_strasser_slab_expected_area(mw: BoldM, expected_area: float):
     """Test the Strasser 2010 slab area calculation against values from the old implementation in qcore."""
     assert magnitude_scaling.strasser_slab_magnitude_to_area(mw) == pytest.approx(
         expected_area
@@ -221,8 +224,8 @@ def test_strasser_slab_expected_area(mw: float, expected_area: float):
 
 
 @given(st.floats(min_value=5.9, max_value=7.7))
-def test_strasser_monotonicity(mag1: float):
-    mag2 = mag1 + 0.1  # Slightly higher magnitude
+def test_strasser_monotonicity(mag1: BoldM):
+    mag2 = BoldM(mag1 + 0.1)  # Slightly higher magnitude
     assert magnitude_scaling.strasser_slab_magnitude_to_area(
         mag2
     ) > magnitude_scaling.strasser_slab_magnitude_to_area(mag1)
@@ -242,10 +245,10 @@ def test_monotonicity_mag_to_area(
         or magnitude <= 7.7
     )
     if scaling_relation == magnitude_scaling.ScalingRelation.LEONARD2014:
-        mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)
+        mag_to_area = functools.partial(MAGNITUDE_TO_AREA[scaling_relation], rake=rake)  # ty: ignore[unknown-argument, invalid-argument-type]
     else:
         mag_to_area = MAGNITUDE_TO_AREA[scaling_relation]
-    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)
+    assert mag_to_area(magnitude + 0.1) > mag_to_area(magnitude)  # ty: ignore[missing-argument, invalid-argument-type]
 
 
 class RandomFunction(Protocol):
@@ -260,8 +263,8 @@ class RandomFunction(Protocol):
         itertools.product(
             [magnitude_scaling.contreras_interface_area_to_magnitude],
             np.linspace(
-                magnitude_scaling.contreras_interface_magnitude_to_area(6.0),
-                magnitude_scaling.contreras_interface_magnitude_to_area(9.0),
+                magnitude_scaling.contreras_interface_magnitude_to_area(BoldM(6.0)),
+                magnitude_scaling.contreras_interface_magnitude_to_area(BoldM(9.0)),
                 10,
             ),
         )
@@ -275,7 +278,7 @@ def test_normal_error_contreras_interface(area_to_mag: RandomFunction, area: flo
         sp.stats.norm,
         samples,
         statistic="ad",
-        known_params=dict(loc=area_to_mag(area), scale=0.73 / np.log(10)),
+        known_params={"loc": area_to_mag(area), "scale": 0.73 / np.log(10)},
     )
     assert result.pvalue > 0.05
 
@@ -304,7 +307,7 @@ def test_normal_error_contreras_interface_aspect_ratio(
         sp.stats.norm,
         np.log(samples),
         statistic="ad",
-        known_params=dict(loc=np.log(aspect_ratio(magnitude)), scale=sigma),
+        known_params={"loc": np.log(aspect_ratio(magnitude)), "scale": sigma},
     )
     assert result.pvalue > 0.05
 
@@ -356,10 +359,7 @@ def test_normal_error_strasser_slab(area_to_mag: RandomFunction, area: float):
     """Generate samples with random = True set on area_to_mag and check that it approximates the value with random = False."""
     samples = [area_to_mag(area, random=True) for _ in range(100)]
     result = sp.stats.goodness_of_fit(
-        sp.stats.norm,
-        samples,
-        statistic="ad",
-        known_params=dict(loc=area_to_mag(area)),
+        sp.stats.norm, samples, statistic="ad", known_params={"loc": area_to_mag(area)}
     )
     assert result.pvalue > 0.05
 
@@ -413,7 +413,7 @@ def test_normal_error_contreras_slab_aspect_ratio(
         sp.stats.norm,
         np.log(samples),
         statistic="ad",
-        known_params=dict(loc=np.log(aspect_ratio(magnitude)), scale=sigma),
+        known_params={"loc": np.log(aspect_ratio(magnitude)), "scale": sigma},
     )
     assert result.pvalue > 0.05
 
@@ -485,7 +485,7 @@ def test_area_preservation_lw(
 )
 def test_area_preservation_lw_leonard(
     rake: float,
-    magnitude: float,
+    magnitude: Mw,
 ):
     """Test that the area is preserved when converting between area and length/width."""
     area = magnitude_scaling.leonard_magnitude_to_area(magnitude, rake)
@@ -534,18 +534,19 @@ def test_magnitude_to_length_width_calls_correct_function(
     func_name: str,
     rake_required: bool,
 ):
-    magnitude = 7.0
+    magnitude = Mw(7.0)
     rake = 90.0 if rake_required else None
     random = True
 
     with patch(f"source_modelling.magnitude_scaling.{func_name}") as mock_func:
         magnitude_scaling.magnitude_to_length_width(
-            scaling_relation, magnitude, rake, random
+            # We are not testing outputs here so we can ignore the invalid magnitude convention.
+            scaling_relation,
+            magnitude,  # ty: ignore[invalid-argument-type]
+            rake,
+            random,
         )
-        if rake_required:
-            mock_func.assert_called_once_with(magnitude, rake=rake, random=random)
-        else:
-            mock_func.assert_called_once_with(magnitude, random=random)
+        mock_func.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -573,16 +574,15 @@ def test_magnitude_to_area_calls_correct_function(
     func_name: str,
     rake_required: bool,
 ):
-    magnitude = 7.0
+    magnitude = Mw(7.0)
     rake = 90.0 if rake_required else None
     random = True
 
     with patch(f"source_modelling.magnitude_scaling.{func_name}") as mock_func:
-        magnitude_scaling.magnitude_to_area(scaling_relation, magnitude, rake, random)
-        if rake_required:
-            mock_func.assert_called_once_with(magnitude, rake=rake, random=random)
-        else:
-            mock_func.assert_called_once_with(magnitude, random=random)
+        # We are not checking outputs here, so it is ok to ignore the invalid magnitude convention
+        magnitude_scaling.magnitude_to_area(scaling_relation, magnitude, rake, random)  # ty: ignore[invalid-argument-type]
+
+        mock_func.assert_called_once()
 
 
 @pytest.mark.parametrize(

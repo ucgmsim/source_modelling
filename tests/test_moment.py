@@ -9,6 +9,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as nst
 
 from source_modelling import moment
+from source_modelling.magnitude_scaling import Mw
 from source_modelling.sources import Fault, Plane
 
 
@@ -55,6 +56,14 @@ def test_moment_to_magnitude():
     assert moment.moment_to_magnitude(2.82e20) == pytest.approx(7.6, abs=5e-02)
     # Kaikoura FSP Hayes 2017
     assert moment.moment_to_magnitude(8.96e20) == pytest.approx(7.89, abs=5e-02)
+
+
+def test_moment_to_magnitude_units():
+    # Dusky sound earthquake, nominal magnitude ~ 8.0 but GCMT provides the moment in dyne-cm.
+    # Should throw error because the magnitude is too large to be physically plausible.
+    mom = 1.44e28
+    with pytest.raises(ValueError, match="Magnitude for moment is unreasonably large"):
+        moment.moment_to_magnitude(mom)
 
 
 # The following test involves some patching to make it feasible to test properly.
@@ -118,48 +127,65 @@ def test_find_connected_faults(
         assert ds.connected("A", "B") == expected_connected
 
 
-@pytest.fixture
-def velocity_model_df():
-    """Subset of rows of the 1D velocity model for testing"""
-    return pd.DataFrame(
+def test_point_source_slip_top_depth():
+    bad_vm = pd.DataFrame(
         {
-            "depth_km": [0.05, 2, 1038.9999],
-            "thickness": [0.05, 0.2, 999.9999],
-            "Vp": [1.8, 3.27, 8.1],
-            "Vs": [0.5, 1.64, 4.6],
-            "rho": [1.81, 2.28, 3.33],
-            "Qp": [38, 164, 460],
-            "Qs": [19, 82, 230],
+            "depth_km": [1.0],
+            "Vs": [1.0],
+            "rho": [1.0],
         }
-    )
+    )  # Other qualities not included because point source slip should not use them
+
+    with pytest.raises(ValueError, match="Velocity model does not begin at 0km depth"):
+        moment.point_source_slip(1.0, 1.0, bad_vm, 1.0)
 
 
-@pytest.mark.parametrize(
-    "source_depth_km, fault_area_km2, magnitude, expected_slip",
-    [
-        (0.01, 100.0, 5.0, 78.41089598165419),
-        (2.0, 100.0, 5.0, 5.785920431607016),
-        (1040.0, 100.0, 5.0, 0.5035413073522274),
-    ],
-)
-def test_point_source_slip(
-    velocity_model_df: pd.DataFrame,
-    source_depth_km: float,
-    fault_area_km2: float,
-    magnitude: float,
-    expected_slip: float,
-):
-    """Test the point_source_slip function with different source depths."""
-    moment_newton_metre = moment.magnitude_to_moment(magnitude)
+def test_point_source_slip_simple():
+    """Test point source slip calculation for arbitrary example"""
+    simple_vm = pd.DataFrame(
+        {
+            "depth_km": [0.0],
+            "Vs": [1.0],
+            "rho": [1.0],
+        }
+    )  # Other qualities not included because point source slip should not use them
 
-    calculated_slip = moment.point_source_slip(
-        moment_newton_metre=moment_newton_metre,
-        fault_area_km2=fault_area_km2,
-        velocity_model_df=velocity_model_df,
-        source_depth_km=source_depth_km,
-    )
+    slip = moment.point_source_slip(1e12, 1.0, simple_vm, 1.0)
+    # 1e12 / (1e6 * 1e3 * 1e6) = 1e-3 m slip
+    # 1e-3 * 1e2 = 1e-1 cm slip
+    assert slip == pytest.approx(0.1)
 
-    assert calculated_slip == pytest.approx(expected_slip)
+
+def test_point_source_slip_middle():
+    "Test point source slip calculation in the middle of layers"
+    simple_vm = pd.DataFrame(
+        {
+            "depth_km": [0.0, 1.5],
+            "Vs": [1.0, 0.0],
+            "rho": [1.0, 0.0],
+        }
+    )  # Other qualities not included because point source slip should not use them
+
+    # Same calculation as the example, because source depth is 1.0km it should
+    # use the top layer (should crash if using the bottom).
+    slip = moment.point_source_slip(1e12, 1.0, simple_vm, 1.0)
+    assert slip == pytest.approx(0.1)
+
+
+def test_point_source_slip_boundary():
+    "Test point source slip calculation at boundary of layers"
+    simple_vm = pd.DataFrame(
+        {
+            "depth_km": [0.0, 1.0],
+            "Vs": [0.0, 1.0],
+            "rho": [0.0, 1.0],
+        }
+    )  # Other qualities not included because point source slip should not use them
+
+    # Same calculation as the example, because source depth is 1.0km it should
+    # use the bottom layer not the top (should crash if using the top).
+    slip = moment.point_source_slip(1e12, 1.0, simple_vm, 1.0)
+    assert slip == pytest.approx(0.1)
 
 
 def test_point_source_slip_bad_dataframe():
@@ -173,7 +199,7 @@ def test_point_source_slip_bad_dataframe():
         }
     )
 
-    moment_newton_metre = moment.magnitude_to_moment(5.0)
+    moment_newton_metre = moment.magnitude_to_moment(Mw(5.0), bold_m=False)
 
     # Should raise KeyError when trying to access missing columns
     with pytest.raises(KeyError):
@@ -183,3 +209,49 @@ def test_point_source_slip_bad_dataframe():
             velocity_model_df=bad_velocity_model_df,
             source_depth_km=2.0,
         )
+
+
+def test_velocity_model_layer_index():
+    """Test depth-to-velocity-layer mapping.
+
+    With layer top depths ``[0, 1, 2]`` km (three layers, the deepest unbounded), each
+    query depth is assigned the deepest layer whose top does not exceed it:
+
+    - an interior depth lands in its containing layer (``0.5 -> 0``, ``1.5 -> 1``);
+    - a depth exactly on a layer boundary takes the deeper layer, i.e. the one whose top
+      it is (``0.0 -> 0``, ``1.0 -> 1``, ``2.0 -> 2``);
+    - a depth beyond the last layer top falls in the deepest, unbounded layer
+      (``5.0 -> 2``);
+    - a depth above the surface (necessarily negative, as the model starts at 0) is
+      clamped to layer 0 rather than wrapping to the last layer (``-1.0 -> 0``);
+    - a scalar input returns an ``np.intp`` and an array input returns an ``np.intp``
+      array.
+    """
+    vm = pd.DataFrame({"depth_km": [0.0, 1.0, 2.0]})
+
+    assert (
+        moment.velocity_model_layer_index(vm, -1.0) == 0
+    )  # above surface -> clamp to 0
+    assert moment.velocity_model_layer_index(vm, 0.0) == 0
+    assert moment.velocity_model_layer_index(vm, 0.5) == 0
+    assert moment.velocity_model_layer_index(vm, 1.0) == 1  # boundary -> deeper layer
+    assert moment.velocity_model_layer_index(vm, 1.5) == 1
+    assert (
+        moment.velocity_model_layer_index(vm, 5.0) == 2
+    )  # below last top -> last layer
+
+    array_result = moment.velocity_model_layer_index(
+        vm, np.array([0.0, 1.0, 1.5, 2.0, 5.0])
+    )
+    np.testing.assert_array_equal(array_result, np.array([0, 1, 1, 2, 2]))
+
+    # Lock the overload type contract: scalar input -> int, array input -> np.intp array.
+    assert isinstance(moment.velocity_model_layer_index(vm, 0.5), int)
+    assert array_result.dtype == np.intp
+
+
+def test_velocity_model_must_start_at_zero():
+    """A velocity model not beginning at 0 km depth raises."""
+    bad_vm = pd.DataFrame({"depth_km": [1.0, 2.0]})
+    with pytest.raises(ValueError, match="Velocity model does not begin at 0km depth"):
+        moment.velocity_model_layer_index(bad_vm, 1.0)

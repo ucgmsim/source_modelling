@@ -4,16 +4,8 @@ This module provides classes and functions for representing fault planes and
 faults, along with methods for calculating various properties such as
 dimensions, orientation, and coordinate transformations.
 
-Classes
--------
-Point:
-    A representation of a point source.
-
-Plane:
-    A representation of a single plane of a Fault.
-
-Fault:
-    A representation of a fault, consisting of one or more Planes.
+Classes: ``Point`` (a point source), ``Plane`` (a single fault plane),
+``Fault`` (a fault consisting of one or more planes).
 """
 
 import copy
@@ -21,6 +13,7 @@ import dataclasses
 import itertools
 import json
 import warnings
+from collections.abc import Sequence
 from typing import NamedTuple, Self
 
 import networkx as nx
@@ -30,8 +23,19 @@ import scipy as sp
 import shapely
 
 from qcore import coordinates, geo, grid
+from source_modelling import gc2_distances
 
 _KM_TO_M = 1000
+
+
+class CoordinatesNotOnPlaneError(ValueError):
+    """Raised when global coordinates do not lie within a plane.
+
+    Subclasses :class:`ValueError` for backwards compatibility. It exists so
+    that "this point is not on this plane" can be told apart from "this point
+    cannot be located on this plane", which callers iterating over planes must
+    not treat as a miss.
+    """
 
 
 @dataclasses.dataclass
@@ -64,6 +68,31 @@ class Point:
     strike: float
     dip: float
     dip_dir: float
+
+    @property
+    def top_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The top of the point source pseudo-geometry"""
+        centroid_depth = self.bounds[-1]
+        #   -------------------------+--------
+        #     \-       /             |
+        #       \--   / dip          |
+        #          \-/               |
+        #            \--             |
+        #       fault   o------------+ centroid depth
+        #                 \--        |
+        #                    \-      |  sin(dip) / 2 * width
+        #                      \--   |
+        #                         \- |
+        #                           \+
+
+        return centroid_depth - self.width_m * np.sin(np.radians(self.dip)) / 2
+
+    @property
+    def bottom_m(self) -> float:  # numpydoc ignore=RT01
+        """float: The bottom of the point source pseudo-geometry"""
+        centroid_depth = self.bounds[-1]
+
+        return centroid_depth + self.width_m * np.sin(np.radians(self.dip)) / 2
 
     @classmethod
     def from_lat_lon_depth(cls, point_coordinates: np.ndarray, **kwargs) -> Self:
@@ -110,8 +139,8 @@ class Point:
         return shapely.Point(self.bounds)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -419,10 +448,11 @@ class Plane:
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
     @property
-    def geometry(self) -> shapely.Polygon | shapely.LineString:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the plane (projected onto the surface).
 
-        Geometry will be a LineString if `dip = 90`."""
+        Geometry will be a LineString if `dip = 90`.
+        """
         if self.dip == 90:
             return shapely.LineString(self.bounds[:2])
         return shapely.Polygon(self.bounds)
@@ -438,8 +468,8 @@ class Plane:
         return shapely.LineString(self.trace)
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -450,7 +480,7 @@ class Plane:
     @classmethod
     def from_nztm_trace(
         cls,
-        trace_points_nztm: npt.NDArray[float],
+        trace_points_nztm: npt.NDArray[np.float64],
         dtop: float,
         dbottom: float,
         dip: float,
@@ -523,6 +553,8 @@ class Plane:
                 (trace_points_nztm, np.array([dbottom, dbottom]))
             )
         else:
+            # Non-None guaranteed by validation above; assert narrows type for ty.
+            assert dip_dir_nztm is not None
             dip_dir_nztm_rad = np.deg2rad(dip_dir_nztm)
             proj_width = (dbottom - dtop) / np.tan(np.deg2rad(dip))
 
@@ -611,13 +643,14 @@ class Plane:
         if (
             dtop is not None
             and dbottom is not None
-            and not np.isclose(dbottom - dtop, np.sin(dip) * width)
+            and not np.isclose(dbottom - dtop, np.sin(np.radians(dip)) * width)
         ):
             raise ValueError(
                 "Top and bottom depths are not consistent with dip and width parameters."
             )
         elif (
-            dtop is not None
+            len(centroid) == 3
+            and dtop is not None
             and dbottom is not None
             and not np.isclose(centroid[2], (dtop + dbottom) / 2)
         ):
@@ -755,19 +788,31 @@ class Plane:
 
         Raises
         ------
-        ValueError
+        CoordinatesNotOnPlaneError
             If the given coordinates do not lie in the fault plane.
+        ValueError
+            If the plane is vertical (``dip == 90``) and no depth is given,
+            because the dip coordinate is then undetermined.
 
         Notes
         -----
         While not passing depth information is supported, depth information
         *greatly* improves the accuracy of the estimation. No guarantees
         are made about the accuracy of the inversion if you do not pass
-        depth information.
+        depth information. Vertical planes are the exception: they project
+        onto a line in plan view, so depth is required rather than merely
+        recommended.
         """
-        coordinate_length = (
-            3 if global_coordinates.shape[-1] == 3 or self.dip == 90 else 2
-        )
+        coordinate_length = 3 if global_coordinates.shape[-1] == 3 else 2
+        if coordinate_length == 2 and self.dip == 90:
+            # A vertical plane projects onto a line in plan view, so a
+            # (lat, lon) pair maps to every depth on the plane and the dip
+            # coordinate is genuinely undetermined. Fail loudly rather than
+            # invent one.
+            raise ValueError(
+                "Depth is required to locate coordinates on a vertical plane "
+                "(dip == 90); the dip coordinate is undetermined without it."
+            )
         strike_direction = (
             self.bounds[1, :coordinate_length] - self.bounds[0, :coordinate_length]
         )
@@ -792,63 +837,144 @@ class Plane:
                 | np.isclose(fault_local_coordinates, 1, atol=tolerance)
             )
         ):
-            raise ValueError("Specified coordinates do not lie in plane")
+            raise CoordinatesNotOnPlaneError(
+                "Specified coordinates do not lie in plane"
+            )
         return np.clip(fault_local_coordinates, 0, 1)
 
-    def rrup_distance(self, point: np.ndarray) -> float:
+    def rrup_distance(self, points: np.ndarray) -> np.ndarray | float:
         """Compute RRup Distance between a fault and a point.
 
         Parameters
         ----------
-        point : np.ndarray
-            The point to compute distance to (in lat, lon, depth format)
+        points : np.ndarray
+            The points to compute distance to.
+            Shape [N, 3] where N is the number of points
+                and each point is in (lat, lon, depth) format.
 
         Returns
         -------
         float
             The rrup distance (in metres) between the point and the fault geometry.
         """
-        point_nztm = coordinates.wgs_depth_to_nztm(point)
+        points_nztm = coordinates.wgs_depth_to_nztm(np.atleast_2d(points))
         frame = np.array(
             [self.bounds[1] - self.bounds[0], self.bounds[-1] - self.bounds[0]]
         )
         local_coords, _, _, _ = np.linalg.lstsq(
             frame.T,
-            point_nztm - self.bounds[0],
+            (points_nztm - self.bounds[0]).T,
             rcond=None,
         )
-        projected_point = local_coords @ frame + self.bounds[0]
-        out_of_plane_distance = np.linalg.norm(point_nztm - projected_point)
-        if np.allclose(local_coords, np.clip(local_coords, 0, 1)):
-            # solution lies in fault, ergo just return projected distance
-            return float(out_of_plane_distance)
+        local_coords = local_coords.T
+        projected_points = local_coords @ frame + self.bounds[0]
+        out_of_plane_distance = np.linalg.norm(points_nztm - projected_points, axis=1)
 
-        in_plane_distance = min(
-            geo.point_to_segment_distance(
-                projected_point, self.bounds[i], self.bounds[(i + 1) % 4]
-            )
-            for i in range(4)
+        projected_points_in_bounds = np.all(
+            np.isclose(local_coords, np.clip(local_coords, 0, 1)), axis=1
         )
 
-        return np.sqrt(in_plane_distance**2 + out_of_plane_distance**2)
+        rrup = np.zeros(points_nztm.shape[0])
+        if np.any(projected_points_in_bounds):
+            rrup[projected_points_in_bounds] = out_of_plane_distance[
+                projected_points_in_bounds
+            ]
 
-    def rjb_distance(self, point: np.ndarray) -> float:
-        """Return the closest projected distance between the fault and the point.
+        if np.any(projected_points_out_bounds := ~projected_points_in_bounds):
+            in_plane_distance = np.minimum.reduce(
+                [
+                    geo.point_to_segment_distance(
+                        projected_points[projected_points_out_bounds],
+                        self.bounds[i],
+                        self.bounds[(i + 1) % 4],
+                    )
+                    for i in range(4)
+                ]
+            )
+            rrup[projected_points_out_bounds] = np.sqrt(
+                in_plane_distance**2
+                + out_of_plane_distance[projected_points_out_bounds] ** 2
+            )
+
+        if rrup.shape[0] == 1:
+            return float(rrup[0])
+        return rrup
+
+    def rjb_distance(self, points: np.ndarray) -> np.ndarray | float:
+        """Return the closest projected distance between the fault and the points.
 
         Parameters
         ----------
-        point : np.ndarray
-            The point to compute distance to.
-
+        points : np.ndarray
+            The points to compute distance to.
+            Shape [N, 3] where N is the number of points
+                and each point is in (lat, lon, depth) format.
 
         Returns
         -------
         float
-            The Rjb distance (in metres) to the point.
+            The Rjb distance (in metres) to the points.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        points_nztm = coordinates.wgs_depth_to_nztm(np.atleast_2d(points))
+        rjb = np.atleast_1d(
+            shapely.distance(self.geometry, shapely.points(points_nztm))
         )
+
+        if rjb.shape[0] == 1:
+            return float(rjb[0])
+        return rjb
+
+    def rx_ry_distance(self, point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate the rx and ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
+        trace = self.bounds[:2, :2]
+        point = coordinates.wgs_depth_to_nztm(point)[..., :2]
+        rx, ry = gc2_distances.segment_rx_ry(trace, point)
+        return rx.squeeze(), ry.squeeze()
+
+    def rx_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the rx distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
+        return self.rx_ry_distance(point)[0]
+
+    def ry_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+        return self.rx_ry_distance(point)[1]
 
 
 @dataclasses.dataclass
@@ -993,7 +1119,8 @@ class Fault:
 
         # This relation can now be used to identify if the list of planes given is a line.
         points_into_graph: nx.DiGraph = nx.from_dict_of_lists(
-            points_into_relation, create_using=nx.DiGraph
+            points_into_relation,  # ty: ignore[invalid-argument-type]
+            create_using=nx.DiGraph,
         )
         try:
             self._validate_fault_plane_connectivity(points_into_graph)
@@ -1171,14 +1298,18 @@ class Fault:
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
-    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
+    def geometry(
+        self,
+    ) -> shapely.Geometry:  # numpydoc ignore=RT01
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.
         """
-        return shapely.normalize(
+        geometry = shapely.normalize(
             shapely.union_all([plane.geometry for plane in self.planes])
         )
+
+        return geometry
 
     @property
     def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
@@ -1242,13 +1373,13 @@ class Fault:
                 return np.array([left_edges[i], 0]) + plane_coordinates * np.array(
                     [left_edges[i + 1] - left_edges[i], 1]
                 )
-            except ValueError:
+            except CoordinatesNotOnPlaneError:
                 continue
         raise ValueError("Given coordinates are not on fault.")
 
     @property
-    def geojson(self) -> dict:  # numpydoc ignore=RT01
-        """dict: A GeoJSON representation of the fault."""
+    def geojson(self) -> str:  # numpydoc ignore=RT01
+        """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
                 self.geometry,
@@ -1256,21 +1387,28 @@ class Fault:
             )
         )
 
-    def rrup_distance(self, point: np.ndarray) -> float:
+    def rrup_distance(self, points: np.ndarray) -> np.ndarray | float:
         """Compute RRup Distance between a fault and a point.
 
         Parameters
         ----------
-        point : np.ndarray
-            The point to compute distance to (in lat, lon, depth format)
+        points : np.ndarray
+            The points to compute distance.
+            Shape [N, 3] where N is the number of points
+                and each point is in (lat, lon, depth) format.
 
         Returns
         -------
         float
-            The rrup distance (in metres) between the point and the fault geometry.
+            The rrup distances (in metres) between the points and the fault geometry.
         """
-
-        return min(plane.rrup_distance(point) for plane in self.planes)
+        rrup = np.min(
+            [np.atleast_1d(plane.rrup_distance(points)) for plane in self.planes],
+            axis=0,
+        )
+        if rrup.shape[0] == 1:
+            return float(rrup[0])
+        return rrup
 
     def fault_coordinates_to_wgs_depth_coordinates(
         self, fault_coordinates: np.ndarray
@@ -1312,34 +1450,126 @@ class Fault:
             np.array([segment_proportion, fault_coordinates[1]])
         )
 
-    def rjb_distance(self, point: np.ndarray) -> float:
-        """Return the closest projected distance between the fault and the point.
+    def rjb_distance(self, points: np.ndarray) -> np.ndarray | float:
+        """Return the closest projected distance between the fault and the points.
 
         Parameters
         ----------
-        point : np.ndarray
-            The point to compute distance to.
-
+        points : np.ndarray
+            The points to compute distance to.
+            Shape [N, 3] where N is the number of points
+                and each point is in (lat, lon, depth) format.
 
         Returns
         -------
         float
-            The Rjb distance (in metres) to the point.
+            The Rjb distance (in metres) to the points.
         """
-        return self.geometry.distance(
-            shapely.Point(coordinates.wgs_depth_to_nztm(point))
+        points_nztm = coordinates.wgs_depth_to_nztm(np.atleast_2d(points))
+        rjb = np.atleast_1d(
+            shapely.distance(self.geometry, shapely.points(points_nztm))
         )
+
+        if rjb.shape[0] == 1:
+            return float(rjb[0])
+        return rjb
+
+    def rx_ry_distance(self, point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate the rx and ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        rx : np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        ry : np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+        trace = self.trace[:, :2].reshape((-1, 2, 2))
+        point = coordinates.wgs_depth_to_nztm(point)[..., :2]
+
+        rx, ry = gc2_distances.segment_rx_ry(trace, point)
+        p_start = trace[:, 0, :]
+        p_end = trace[:, 1, :]
+        trace_lengths = np.linalg.norm(p_end - p_start, axis=-1)
+        origins = np.cumulative_sum(trace_lengths[:-1], include_initial=True)
+        t, u = gc2_distances.generalised_t_u_coordinates(trace_lengths, rx, ry, origins)
+        return t.squeeze(), u.squeeze()
+
+    def rx_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the rx distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+        """
+
+        return self.rx_ry_distance(point)[0]
+
+    def ry_distance(self, point: np.ndarray) -> np.ndarray:
+        """Calculate the ry distance between the fault and a given set of points
+
+        Parameters
+        ----------
+        point : np.ndarray
+            Points to calculate distance to, has shape (n, 2).
+
+        Returns
+        -------
+        np.ndarray
+            The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+        """
+        return self.rx_ry_distance(point)[1]
+
+
+def multi_fault_rx_ry_distance(
+    faults: list[Fault | Plane], point: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate the rx-ry distance between a set of (possibly disconnected) faults and a set of points.
+
+    Parameters
+    ----------
+    faults : list[Fault | Plane]
+        Faults to calculate distances from.
+    point : np.ndarray
+        Points to calculate to, has shape (n, 2).
+
+    Returns
+    -------
+    rx : np.ndarray
+        The generalised rx distance (in metres) between the faults and the points. Has shape (n,)
+    ry : np.ndarray
+        The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
+    """
+    point = coordinates.wgs_depth_to_nztm(point[..., :2])
+    traces = [fault.trace[:, :2] for fault in faults]
+    trace_points = np.concatenate(traces, axis=0)
+    trace_indices = np.cumulative_sum(
+        [len(trace) for trace in traces], include_initial=True
+    )
+    rx, ry = gc2_distances.segment_rx_ry(trace_points, point)
+    return gc2_distances.multi_trace_rx_ry(trace_points, trace_indices, rx, ry)
 
 
 IsSource = Plane | Fault | Point
 
 
-def sources_as_geojson_features(sources: list[IsSource]) -> str:
+def sources_as_geojson_features(sources: Sequence[IsSource]) -> str:
     """Convert a list of sources to a GeoJSON FeatureCollection.
 
     Parameters
     ----------
-    sources : list[IsSource]
+    sources : Sequence[IsSource]
             The sources to convert.
 
     Returns
@@ -1376,15 +1606,14 @@ class CoordinateBounds(NamedTuple):
     """float: Maximum normalised dip coordinate, in the range of [0, 1]."""
 
 
+DEFAULT_BOUNDS = CoordinateBounds(min_strike=0, min_dip=0, max_strike=1, max_dip=1)
+
+
 def closest_point_between_sources(
     source_a: IsSource,
     source_b: IsSource,
-    source_a_coordinate_bounds: CoordinateBounds = CoordinateBounds(
-        min_strike=0, min_dip=0, max_strike=1, max_dip=1
-    ),
-    source_b_coordinate_bounds: CoordinateBounds = CoordinateBounds(
-        min_strike=0, min_dip=0, max_strike=1, max_dip=1
-    ),
+    source_a_coordinate_bounds: CoordinateBounds = DEFAULT_BOUNDS,
+    source_b_coordinate_bounds: CoordinateBounds = DEFAULT_BOUNDS,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 
@@ -1463,7 +1692,7 @@ def closest_point_between_sources(
 
 
 def closest_points_beneath(
-    source_a: Fault | Plane, source_b: Fault | Plane, min_depth: float
+    source_a: IsSource, source_b: IsSource, min_depth: float
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest points between two sources beneath a minimum depth.
 

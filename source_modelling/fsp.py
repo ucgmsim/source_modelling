@@ -13,8 +13,8 @@ Exceptions
 ----------
 - FSPParseError: Exception raised for errors in parsing FSP files.
 
-Example
--------
+Examples
+--------
 >>> fsp_file = FSPFile.read_from_file(fsp_ffp)
 >>> (fsp_file.data['trup'] + fsp_file.data['rise']).max() # Get time of final rise for subfaults.
 """
@@ -64,8 +64,6 @@ def _normalise_value(value: float) -> float | None:
 
 class FSPParseError(Exception):
     """Exception raised for errors in parsing FSP files."""
-
-    pass
 
 
 @dataclasses.dataclass
@@ -119,7 +117,7 @@ class Segment:
                 "Cannot convert segment to Plane: missing required attributes."
             )
         strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
-            self.top_centre, self.width, self.strike
+            self.top_centre, self.length, self.strike
         )
         top_centre_nztm = coordinates.wgs_depth_to_nztm(self.top_centre)
         dip_dir = strike_nztm + 90
@@ -278,11 +276,7 @@ class FSPFile:
             for line in fsp_file_handle:
                 if line.startswith("% Data"):
                     break
-                if (
-                    line.startswith("% -")
-                    or line.strip() == "%"
-                    or line.startswith("% Event :")
-                ):
+                if line.startswith(("% -", "% Event :")) or line.strip() == "%":
                     continue
                 # Strip the leading "% ", and deduplicate the spaces in the line.
                 # This is required to normalise the string so that the parse

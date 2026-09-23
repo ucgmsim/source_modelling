@@ -4,8 +4,8 @@ Rupture Propagation Module
 This module provides functions for computing likely rupture paths from
 information about the distances between faults.
 
-Reference
----------
+References
+----------
 To understand the purpose and implementation of the algorithms in the
 'Rupture Propagation' page[0] on the source modelling wiki.
 
@@ -16,7 +16,7 @@ import random
 import warnings
 from collections import defaultdict, namedtuple
 from collections.abc import Generator
-from typing import Literal
+from typing import Literal, overload
 
 import networkx as nx
 import numpy as np
@@ -59,7 +59,7 @@ def spanning_tree_with_probabilities(
     trees = []
     probabilities = []
 
-    for tree in mst.SpanningTreeIterator(graph):
+    for tree in mst.SpanningTreeIterator(graph):  # ty: ignore[invalid-argument-type]
         p_tree = 1.0
         for u, v in graph.edges:
             if tree.has_edge(u, v):
@@ -70,6 +70,20 @@ def spanning_tree_with_probabilities(
         probabilities.append(p_tree)
 
     return trees, probabilities
+
+
+@overload
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: Literal[1] = ...
+) -> nx.Graph:  # numpydoc ignore=GL08
+    ...
+
+
+@overload
+def sampled_spanning_tree(
+    graph: nx.Graph, n_samples: int
+) -> list[nx.Graph] | nx.Graph:  # numpydoc ignore=GL08
+    ...
 
 
 def sampled_spanning_tree(
@@ -209,7 +223,7 @@ def select_top_spanning_trees(
     cumulative_tree_weight = 0.0
     spanning_trees = []
 
-    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):
+    for spanning_tree in mst.SpanningTreeIterator(weighted_graph, minimum=False):  # ty: ignore[invalid-argument-type]
         spanning_trees.append(spanning_tree)
         tree_log_probability = sum(
             spanning_tree[node_u][node_v]["weight"]
@@ -320,7 +334,7 @@ def prune_distance_graph(distances: DistanceGraph, cutoff: float) -> DistanceGra
 
 def probability_graph(
     distances: DistanceGraph, d0: float = 3, delta: float = 1
-) -> nx.DiGraph:
+) -> nx.Graph:
     """
     Convert a distance graph into a probability graph.
 
@@ -339,8 +353,8 @@ def probability_graph(
 
     Returns
     -------
-    nx.DiGraph
-        A directed graph where edges are weighted by probabilities of rupture
+    nx.Graph
+        An undirected graph where edges are weighted by probabilities of rupture
         propagation between faults.
     """
 
@@ -390,9 +404,11 @@ def distance_between(
     """
     global_point_a = source_a.fault_coordinates_to_wgs_depth_coordinates(source_a_point)
     global_point_b = source_b.fault_coordinates_to_wgs_depth_coordinates(source_b_point)
-    return float(coordinates.distance_between_wgs_depth_coordinates(
-        global_point_a, global_point_b
-    ))
+    return float(
+        coordinates.distance_between_wgs_depth_coordinates(
+            global_point_a, global_point_b
+        )
+    )
 
 
 def sample_rupture_propagation(
@@ -481,6 +497,7 @@ def sample_rupture_propagation(
 def jump_points_from_rupture_tree(
     source_map: dict[str, sources.IsSource],
     rupture_causality_tree: Tree,
+    min_depth: float | None = None,
 ) -> dict[str, JumpPair]:
     """
     Extract jump points between faults from a rupture causality tree.
@@ -494,6 +511,9 @@ def jump_points_from_rupture_tree(
         A mapping of fault names to their corresponding source objects.
     rupture_causality_tree : Tree
         A rupture causality tree.
+    min_depth : float | None, optional
+        The minimum depth to consider jumping between, in kilometres, or
+        ``None`` to allow jumps at all depths.
 
     Returns
     -------
@@ -505,9 +525,28 @@ def jump_points_from_rupture_tree(
     for source, parent in rupture_causality_tree.items():
         if parent is None:
             continue
-        source_point, parent_point = sources.closest_point_between_sources(
-            source_map[source], source_map[parent]
-        )
+        elif min_depth is not None:
+            source_a = source_map[source]
+            source_b = source_map[parent]
+            depth = min(
+                min_depth,
+                # HACK: factor of 0.99 is used here because the closest points
+                # solver will not work if the minimum depth is precisely the
+                # bottom-edge of the fault. If the closest point is the bottom
+                # depth then this will still recover that, but a proper
+                # treatment of the degenerate case would require specialising
+                # the solver.
+                0.99 * source_a.bottom_m / 1000,
+                0.99 * source_b.bottom_m / 1000,
+            )
+            source_point, parent_point = sources.closest_points_beneath(
+                source_a, source_b, depth
+            )
+        else:
+            source_point, parent_point = sources.closest_point_between_sources(
+                source_map[source],
+                source_map[parent],
+            )
         jump_points[source] = JumpPair(parent_point, source_point)
     return jump_points
 

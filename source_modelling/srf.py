@@ -5,8 +5,8 @@ as well as representing their contents.
 See https://wiki.canterbury.ac.nz/display/QuakeCore/File+Formats+Used+On+GM
 for details on the SRF format.
 
-Why Not qcore.srf?
-------------------
+**Why not qcore.srf?**
+
 You might use this module instead of the `qcore.srf` module because:
 
 1. The `qcore.srf` module does not support writing SRF files.
@@ -21,17 +21,13 @@ You should use `qcore.srf` if you do not eventually intend to read all
 points of the SRF file (it is memory efficient), or you are working
 with code that already uses `qcore.srf`.
 
-Classes
--------
-- SrfFile: Representation of an SRF file.
+Classes: ``SrfFile`` (representation of an SRF file).
 
-Functions
----------
-- read_srf: Read an SRF file into memory.
-- write_srf: Write an SRF object to a filepath.
+Functions: ``read_srf`` (read an SRF file into memory), ``write_srf`` (write an SRF
+object to a filepath).
 
-Example
--------
+Examples
+--------
 >>> srf_file = srf.read_srf('/path/to/srf')
 >>> srf_file.points['tinit'].max() # get the last time any point in the SRF ruptures
 >>> srf_file.points['tinit'] += 1 # delay all points by one second
@@ -42,11 +38,12 @@ Example
 """
 
 import dataclasses
-import re
-from collections.abc import Sequence
+import mmap
+from collections.abc import Buffer, Sequence
 from pathlib import Path
 from typing import Self
 
+import h5py
 import numpy as np
 import pandas as pd
 import scipy as sp
@@ -57,8 +54,45 @@ from qcore import coordinates
 from source_modelling import parse_utils, srf_parser
 from source_modelling.sources import Plane
 
-PLANE_COUNT_RE = r"PLANE (\d+)"
-POINT_COUNT_RE = r"POINTS (\d+)"
+SW4_PLANE_DTYPE = np.dtype(
+    [
+        ("ELON", "f4"),
+        ("ELAT", "f4"),
+        ("NSTK", "i4"),
+        ("NDIP", "i4"),
+        ("LEN", "f4"),
+        ("WID", "f4"),
+        ("STK", "f4"),
+        ("DIP", "f4"),
+        ("DTOP", "f4"),
+        ("SHYP", "f4"),
+        ("DHYP", "f4"),
+    ]
+)
+
+SW4_POINTS_DTYPE = np.dtype(
+    [
+        ("LON", "f4"),
+        ("LAT", "f4"),
+        ("DEP", "f4"),
+        ("STK", "f4"),
+        ("DIP", "f4"),
+        ("AREA", "f4"),
+        ("TINIT", "f4"),
+        ("DT", "f4"),
+        ("VS", "f4"),
+        ("DEN", "f4"),
+        ("RAKE", "f4"),
+        ("SLIP1", "f4"),
+        ("NT1", "i4"),
+        ("SLIP2", "f4"),
+        ("NT2", "i4"),
+        ("SLIP3", "f4"),
+        ("NT3", "i4"),
+    ]
+)
+
+_SW4_POINTS_EXTERNAL_FIELDS = {"VS", "DEN", "NT1", "SLIP2", "NT2", "SLIP3", "NT3"}
 
 
 class Segments(Sequence):
@@ -85,7 +119,9 @@ class Segments(Sequence):
         self._header = header
         self._points = points
 
-    def __getitem__(self, index: int) -> pd.DataFrame:
+    # ty: slice overload missing to satisfy Sequence LSP; fix by adding
+    # @overload stubs for int and slice once slice support is implemented.
+    def __getitem__(self, index: int) -> pd.DataFrame:  # ty: ignore[invalid-method-override]
         """Get the nth segment in the SRF.
 
         Parameters
@@ -148,8 +184,7 @@ class SrfFile:
 
 
     points : pd.DataFrame
-        A list of SrfPoint objects representing the points in the SRF
-        file. The columns of the points dataframe are:
+        A dataframe of the points (subfaults) in the SRF file. The columns are:
 
         - lon: longitude of the patch.
         - lat: latitude of the patch.
@@ -159,11 +194,15 @@ class SrfFile:
         - area: area of the patch (in cm^2).
         - tinit: initial rupture time for this patch (in seconds).
         - dt: the timestep for all slipt columns (in seconds).
+        - vs: shear-wave velocity at the patch (in cm/s). Version 2.0 only.
+        - den: density at the patch (in g/cm^3). Version 2.0 only.
         - rake: local rake.
-        - slip: total slip.
+        - slip: total slip (in cm).
+        - rise: total rise time (in seconds), computed as nt * dt.
 
-        The final two columns are computed from the SRF and are not saved to
-        disk. See the linked documentation on the SRF format for more details.
+        The vs and den columns are only present when version is "2.0". The
+        rise column is computed from the SRF and is not written to disk. See
+        the linked documentation on the SRF format for more details.
 
     slipt1_array : csr_array
         A sparse array containing the slip for each point and at each timestep, where
@@ -180,79 +219,83 @@ class SrfFile:
     slipt1_array: sp.sparse.csr_array
 
     @classmethod
-    def from_file(cls, srf_ffp: Path | str) -> Self:
+    def from_file(cls, srf_ffp: Path | str | Buffer) -> Self:
         """Read an srf file from a filepath.
 
         Parameters
         ----------
-        srf_ffp : Path
-            The path to the srf file.
+        srf_ffp : Path | str | Buffer
+            Either a path-like pointing to a file, or a buffer containg raw SRF bytes.
 
         Returns
         -------
         Self
             The SRFFile instance for this path.
         """
-        with open(srf_ffp, mode="r", encoding="utf-8") as srf_file_handle:
-            version = srf_file_handle.readline().strip()
+        try:
+            if isinstance(srf_ffp, (Path, str)):
+                with (
+                    open(srf_ffp, "rb") as f,
+                    mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm,
+                ):
+                    # Windows doesn't have madvise
+                    if hasattr(mm, "madvise"):
+                        mm.madvise(mmap.MADV_SEQUENTIAL)
+                    py_srf = srf_parser.parse_srf(mm)
+            else:
+                py_srf = srf_parser.parse_srf(srf_ffp)
+        except ValueError as parse_error:
+            raise parse_utils.ParseError(str(parse_error)) from parse_error
 
-            plane_count_line = srf_file_handle.readline().strip()
-            plane_count_match = re.match(PLANE_COUNT_RE, plane_count_line)
-            if not plane_count_match:
-                raise parse_utils.ParseError(
-                    f'Expecting PLANE header line, got: "{plane_count_line}"'
-                )
-            plane_count = int(plane_count_match.group(1))
-            segments = []
+        version = "2.0" if py_srf.metadata.vs is not None else "1.0"
 
-            for _ in range(plane_count):
-                segments.append(
-                    {
-                        "elon": parse_utils.read_float(srf_file_handle),
-                        "elat": parse_utils.read_float(srf_file_handle),
-                        "nstk": parse_utils.read_int(srf_file_handle),
-                        "ndip": parse_utils.read_int(srf_file_handle),
-                        "len": parse_utils.read_float(srf_file_handle),
-                        "wid": parse_utils.read_float(srf_file_handle),
-                        "stk": parse_utils.read_float(srf_file_handle),
-                        "dip": parse_utils.read_float(srf_file_handle),
-                        "dtop": parse_utils.read_float(srf_file_handle),
-                        "shyp": parse_utils.read_float(srf_file_handle),
-                        "dhyp": parse_utils.read_float(srf_file_handle),
-                    }
-                )
-            headers = pd.DataFrame(segments)
-            headers["nstk"] = headers["nstk"].astype(int)
-            headers["ndip"] = headers["ndip"].astype(int)
-
-            points_count_line = srf_file_handle.readline().strip()
-            points_count_match = re.match(POINT_COUNT_RE, points_count_line)
-            if not points_count_match:
-                raise parse_utils.ParseError(
-                    f'Expecting POINTS header line, got: "{points_count_line}"'
-                )
-            point_count = int(points_count_match.group(1))
-            position = srf_file_handle.tell()
-
-        points_metadata, slipt1_array = srf_parser.parse_srf( # type: ignore
-            str(srf_ffp), position, point_count
+        headers = pd.DataFrame(
+            [
+                {
+                    "elon": plane.elon,
+                    "elat": plane.elat,
+                    "nstk": plane.nstk,
+                    "ndip": plane.ndip,
+                    "len": plane.len,
+                    "wid": plane.wid,
+                    "stk": plane.stk,
+                    "dip": plane.dip,
+                    "dtop": plane.dtop,
+                    "shyp": plane.shyp,
+                    "dhyp": plane.dhyp,
+                }
+                for plane in py_srf.planes
+            ]
         )
+        headers["nstk"] = headers["nstk"].astype(int)
+        headers["ndip"] = headers["ndip"].astype(int)
 
-        points_df = pd.DataFrame(
-            points_metadata.reshape((-1, 11)),
-            columns=[
-                "lon",
-                "lat",
-                "dep",
-                "stk",
-                "dip",
-                "area",
-                "tinit",
-                "dt",
-                "rake",
-                "slip",
-                "rise",
-            ],
+        metadata = py_srf.metadata
+        points_data = {
+            "lon": metadata.lon,
+            "lat": metadata.lat,
+            "dep": metadata.dep,
+            "stk": metadata.stk,
+            "dip": metadata.dip,
+            "area": metadata.area,
+            "tinit": metadata.tinit,
+            "dt": metadata.dt,
+        }
+        if version == "2.0":
+            points_data["vs"] = metadata.vs
+            points_data["den"] = metadata.density
+        points_data["rake"] = metadata.rake
+        points_data["slip"] = metadata.slip1
+        points_data["rise"] = metadata.rise
+        points_df = pd.DataFrame(points_data)
+
+        row_ptr = py_srf.slipt1.row_ptr
+        data = py_srf.slipt1.data
+        indices = py_srf.slipt1.indices
+
+        n_timesteps = int(indices.max()) + 1 if len(indices) else 0
+        slipt1_array = sp.sparse.csr_array(
+            (data, indices, row_ptr), shape=(len(row_ptr) - 1, n_timesteps)
         )
 
         return cls(
@@ -262,7 +305,7 @@ class SrfFile:
             slipt1_array,
         )
 
-    def write_srf(self, srf_ffp: Path) -> None:
+    def write_srf(self, srf_ffp: str | Path) -> None:
         """Write an SRFFile object to a file.
 
         Parameters
@@ -272,30 +315,102 @@ class SrfFile:
 
         """
 
-        with open(srf_ffp, mode="w", encoding="utf-8") as srf_file_handle:
-            srf_file_handle.write("1.0\n")
-            srf_file_handle.write(f"PLANE {len(self.header)}\n")
-            # Cannot use self.header.to_string because the newline separating headers is significant!
-            # This is ok because the number of headers is typically very small (< 100)
-            for _, plane in self.header.iterrows():
-                srf_file_handle.write(
-                    "\n".join(
-                        [
-                            f"{plane['elon']:.6f} {plane['elat']:.6f} {int(plane['nstk'])} {int(plane['ndip'])} {plane['len']:.4f} {plane['wid']:.4f}",
-                            f"{plane['stk']:.4f} {plane['dip']:.4f} {plane['dtop']:.4f} {plane['shyp']:.4f} {plane['dhyp']:.4f}",
-                            "",
-                        ]
-                    )
-                )
+        planes = [
+            srf_parser.PySrfPlane(
+                elon=row["elon"],
+                elat=row["elat"],
+                nstk=int(row["nstk"]),
+                ndip=int(row["ndip"]),
+                len=row["len"],
+                wid=row["wid"],
+                stk=row["stk"],
+                dip=row["dip"],
+                dtop=row["dtop"],
+                shyp=row["shyp"],
+                dhyp=row["dhyp"],
+            )
+            for _, row in self.header.iterrows()
+        ]
 
-            srf_file_handle.write(f"POINTS {len(self.points)}\n")
-
-        srf_parser.write_srf_points( # type: ignore
-            str(srf_ffp),
-            self.points.values.astype(np.float32),
-            self.slip.indptr,
-            self.slip.data,
+        metadata = srf_parser.PySrfMetadata(
+            lon=self.points["lon"].to_numpy(dtype=np.float32),
+            lat=self.points["lat"].to_numpy(dtype=np.float32),
+            dep=self.points["dep"].to_numpy(dtype=np.float32),
+            stk=self.points["stk"].to_numpy(dtype=np.float32),
+            dip=self.points["dip"].to_numpy(dtype=np.float32),
+            area=self.points["area"].to_numpy(dtype=np.float32),
+            tinit=self.points["tinit"].to_numpy(dtype=np.float32),
+            dt=self.points["dt"].to_numpy(dtype=np.float32),
+            rake=self.points["rake"].to_numpy(dtype=np.float32),
+            slip1=self.points["slip"].to_numpy(dtype=np.float32),
+            rise=self.points["rise"].to_numpy(dtype=np.float32),
+            vs=self.points["vs"].to_numpy(dtype=np.float32)
+            if "vs" in self.points
+            else None,
+            density=self.points["den"].to_numpy(dtype=np.float32)
+            if "den" in self.points
+            else None,
         )
+
+        slipt1 = srf_parser.PyCsrMatrix(
+            row_ptr=self.slip.indptr.astype(np.uint64),
+            indices=self.slip.indices.astype(np.uint64),
+            data=self.slip.data.astype(np.float32),
+        )
+
+        py_srf_file = srf_parser.PySrfFile(planes, metadata, slipt1)
+        srf_parser.write_srf(py_srf_file, str(srf_ffp))
+
+    def write_sw4_hdf5(
+        self,
+        output_ffp: Path | str,
+    ) -> None:
+        """Write the SRF file in SW4's SRF-HDF5 format.
+
+        Parameters
+        ----------
+        output_ffp : Path
+            The path to the output HDF5 file.
+
+        References
+        ----------
+        .. [1] Petersson, N.A. and B. Sjogreen (2017). SW4 v2.0.
+           Computational Infrastructure of Geodynamics, Davis, CA.
+           DOI: 10.5281/zenodo.1045297.
+        .. [2] Petersson, N.A. and B. Sjogreen (2017). User's guide to
+           SW4, version 2.0. Technical report LLNL-SM-741439, Lawrence
+           Livermore National Laboratory, Livermore, CA.
+           https://github.com/geodynamics/sw4/blob/master/doc/SW4_UsersGuide.pdf
+        """
+        plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
+        assert SW4_PLANE_DTYPE.names is not None
+        for field in SW4_PLANE_DTYPE.names:
+            plane_data[field] = self.header[field.lower()].values.astype(
+                SW4_PLANE_DTYPE[field].type  # ty: ignore[invalid-argument-type]
+            )  # ty: ignore[invalid-assignment]
+
+        # Build POINTS structured array
+        points_data: np.ndarray = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
+        assert SW4_POINTS_DTYPE.names is not None
+        for field in SW4_POINTS_DTYPE.names:
+            if field in _SW4_POINTS_EXTERNAL_FIELDS:
+                continue
+            points_data[field] = self.points[
+                "slip" if field == "SLIP1" else field.lower()
+            ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
+
+        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+        if (
+            self.version == "2.0"
+        ):  # vs/den are mandatory in 2.0; missing columns will fail loudly
+            points_data["VS"] = self.points["vs"].to_numpy().astype(np.float32)
+            points_data["DEN"] = self.points["den"].to_numpy().astype(np.float32)
+
+        with h5py.File(output_ffp, "w") as h5file:
+            h5file.attrs.create("VERSION", np.float32(self.version))
+            h5file.attrs.create("PLANE", plane_data)
+            h5file.create_dataset("POINTS", data=points_data)
+            h5file.create_dataset("SR1", data=self.slipt1_array.data.astype(np.float32))
 
     def write_hdf5(
         self, hdf5_ffp: Path, include_slip_time_function: bool = True
@@ -352,7 +467,9 @@ class SrfFile:
         points_data = {
             col: ds[col].values
             for col in ds.data_vars
-            if isinstance(col, str) and not col.startswith("plane_") and col not in {"data", "indices", "indptr"}
+            if isinstance(col, str)
+            and not col.startswith("plane_")
+            and col not in {"data", "indices", "indptr"}
         }
         points_df = pd.DataFrame(points_data)
 
@@ -485,7 +602,7 @@ class SrfFile:
             ndip = segment_header["ndip"]
             if nstk == 1 and ndip > 1:
                 # If the number of strike points is 1, we have to rely on the segment header for strike.
-                centroid = segment_header[["elat", "elon"]]
+                centroid = segment_header[["elat", "elon"]].to_numpy()
                 strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
                     centroid,
                     segment_header["len"],
@@ -495,7 +612,13 @@ class SrfFile:
                     segment_header["len"]
                     * 1000
                     / 2
-                    * np.array([np.cos(strike_nztm), np.sin(strike_nztm), 0])
+                    * np.array(
+                        [
+                            np.cos(np.radians(strike_nztm)),
+                            np.sin(np.radians(strike_nztm)),
+                            0,
+                        ]
+                    )
                 )
                 top = coordinates.wgs_depth_to_nztm(
                     segment[["lat", "lon", "dep"]].iloc[0].values
@@ -526,7 +649,7 @@ class SrfFile:
                 # If the number of dip points is 1, we have to rely on the
                 # segment header for dip direction. We will assume that dip
                 # direction = strike + 90.
-                centroid = segment_header[["elat", "elon"]]
+                centroid = segment_header[["elat", "elon"]].to_numpy()
                 planes.append(
                     Plane.from_centroid_strike_dip(
                         centroid,
@@ -578,7 +701,7 @@ class SrfFile:
         return planes
 
 
-def read_srf(srf_ffp: Path | str) -> SrfFile:
+def read_srf(srf_ffp: Path | str | Buffer) -> SrfFile:
     """Read an SRF file into an SrfFile object.
 
     Parameters
@@ -594,7 +717,7 @@ def read_srf(srf_ffp: Path | str) -> SrfFile:
     return SrfFile.from_file(srf_ffp)
 
 
-def write_srf(srf_ffp: Path, srf: SrfFile) -> None:
+def write_srf(srf_ffp: str | Path, srf: SrfFile) -> None:
     """Write an SRF object to a filepath.
 
     Parameters

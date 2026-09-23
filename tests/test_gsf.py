@@ -47,16 +47,17 @@ def test_plane_gsf():  # Use tmp_path fixture
     assert gsf_df["dep"].min() >= 10 and gsf_df["dep"].max() <= 20
 
     for _, point in gsf_df.iterrows():
-        assert plane.geometry.contains(
+        assert shapely.contains(
+            plane.geometry,
             shapely.Point(
-                coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
-            )
+                coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].to_numpy())
+            ),
         )
 
 
 def test_bad_gsf_type():
     with pytest.raises(TypeError):
-        gsf.source_to_gsf_dataframe(1, 0.1)
+        gsf.source_to_gsf_dataframe(1, 0.1)  # ty: ignore[invalid-argument-type]
 
 
 def test_write_gsf(tmp_path: Path):
@@ -304,7 +305,9 @@ def test_fault_to_gsf(fault: Fault):
             assert shapely.contains(
                 fault.geometry,
                 shapely.Point(
-                    coordinates.wgs_depth_to_nztm(point[["lat", "lon", "dep"]].values)
+                    coordinates.wgs_depth_to_nztm(
+                        point[["lat", "lon", "dep"]].to_numpy()
+                    )
                 ),
             )
 
@@ -356,3 +359,39 @@ def test_read_gsf(tmp_path: Path):
             ]
         ),
     )
+
+
+def test_write_gsf_does_not_mutate_input(tmp_path: Path):
+    """write_gsf must serialise its input without modifying it.
+
+    Regression test: the ``init_time`` and ``slip`` defaults were assigned
+    directly into the caller's DataFrame, so a frame handed to ``write_gsf``
+    came back carrying two columns of ``-1`` sentinels. The assignments also
+    sat above the ``loc_rake`` validation, so the mutation happened even when
+    ``write_gsf`` went on to raise and write nothing.
+    """
+    gsf_df = pd.DataFrame(
+        {
+            "lon": [172.6],
+            "lat": [-43.5],
+            "dep": [1.0],
+            "sub_dx": [1.0],
+            "sub_dy": [1.0],
+            "loc_stk": [0.0],
+            "loc_dip": [0.0],
+            "loc_rake": [0.0],
+            "seg_no": [0],
+        }
+    )
+    expected_columns = list(gsf_df.columns)
+
+    gsf.write_gsf(gsf_df, tmp_path / "out.gsf")
+
+    assert list(gsf_df.columns) == expected_columns
+
+    # the failure path must not mutate either
+    missing_rake = gsf_df.drop(columns=["loc_rake"])
+    expected_columns = list(missing_rake.columns)
+    with pytest.raises(ValueError, match="loc_rake"):
+        gsf.write_gsf(missing_rake, tmp_path / "out2.gsf")
+    assert list(missing_rake.columns) == expected_columns

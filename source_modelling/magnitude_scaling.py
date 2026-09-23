@@ -1,11 +1,13 @@
 """Magnitude scaling relationships for fault dimensions."""
 
-import functools
 import warnings
 from enum import Enum, StrEnum, auto
 
 import numpy as np
 import scipy as sp
+
+from source_modelling import moment
+from source_modelling.moment import BoldM, Mw
 
 
 class RakeType(Enum):
@@ -61,13 +63,13 @@ def rake_type(rake: float) -> RakeType:
         return RakeType.REVERSE_OBLIQUE
 
 
-def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) -> float:
+def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) -> Mw:
     """Convert area to magnitude using the leonard scaling relationship [0]_.
 
     Parameters
     ----------
     area : float
-        Area of the fault (km^2).
+        Area of the fault rupture (km^2).
     rake : float
         Rake of the fault (degrees).
     random : bool, optional
@@ -76,8 +78,8 @@ def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) ->
 
     Returns
     -------
-    float
-        Moment magnitude of the fault.
+    Mw
+        Moment magnitude of the fault rupture.
 
     Notes
     -----
@@ -100,20 +102,20 @@ def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) ->
         )
 
     # Leonard quotes assymetric uncertainties for the other rake types.
-    return np.log10(area) + (
-        sp.stats.norm(loc=4.03, scale=0.3).rvs() if random else 4.0
+    return Mw(
+        np.log10(area) + (sp.stats.norm(loc=4.03, scale=0.3).rvs() if random else 4.0)
     )
 
 
 def leonard_magnitude_to_area(
-    magnitude: float, rake: float, random: bool = False
+    magnitude: Mw, rake: float, random: bool = False
 ) -> float:
     """Convert magnitude to area using the Leonard scaling relationship [0]_.
 
     Parameters
     ----------
-    magnitude : float
-        Moment magnitude of the fault.
+    magnitude : Mw
+        Moment magnitude of the fault rupture.
     rake : float
         Rake of the fault (degrees).
     random : bool, optional
@@ -123,7 +125,7 @@ def leonard_magnitude_to_area(
     Returns
     -------
     float
-        Area of the fault. (km^2)
+        Area of the fault rupture. (km^2)
 
     Notes
     -----
@@ -150,7 +152,7 @@ def leonard_magnitude_to_area(
 
 
 def leonard_magnitude_to_length(
-    magnitude: float,
+    magnitude: Mw,
     rake: float,
     random: bool = False,
 ) -> float:
@@ -158,8 +160,8 @@ def leonard_magnitude_to_length(
 
     Parameters
     ----------
-    magnitude : float
-            Moment magnitude of the fault.
+    magnitude : Mw
+            Moment magnitude of the fault rupture.
     rake : float
             Rake of the fault (degrees).
     random : bool, optional
@@ -169,7 +171,7 @@ def leonard_magnitude_to_length(
     Returns
     -------
     float
-            Length of the fault. (km)
+            Length of the fault rupture. (km)
 
     References
     ----------
@@ -203,7 +205,7 @@ def leonard_magnitude_to_length(
 
 
 def leonard_magnitude_to_width(
-    magnitude: float,
+    magnitude: Mw,
     rake: float,
     random: bool = False,
 ) -> float:
@@ -211,8 +213,8 @@ def leonard_magnitude_to_width(
 
     Parameters
     ----------
-    magnitude : float
-            Moment magnitude of the fault.
+    magnitude : Mw
+            Moment magnitude of the fault rupture.
     rake : float
             Rake of the fault (degrees).
     random : bool, optional
@@ -222,7 +224,7 @@ def leonard_magnitude_to_width(
     Returns
     -------
     float
-            Width of the fault. (km)
+            Width of the fault rupture. (km)
 
     Warns
     -----
@@ -257,7 +259,7 @@ def leonard_magnitude_to_width(
 
 
 def leonard_magnitude_to_length_width(
-    magnitude: float,
+    magnitude: Mw,
     rake: float,
     random: bool = False,
 ) -> tuple[float, float]:
@@ -265,8 +267,8 @@ def leonard_magnitude_to_length_width(
 
     Parameters
     ----------
-    magnitude : float
-        Moment magnitude of the fault.
+    magnitude : Mw
+        Moment magnitude of the fault rupture.
     rake : float
         Rake of the fault (degrees).
     random : bool, optional
@@ -276,7 +278,7 @@ def leonard_magnitude_to_length_width(
     Returns
     -------
     tuple[float, float]
-        Length and width of the fault.
+        Length and width of the fault rupture.
 
     References
     ----------
@@ -314,21 +316,21 @@ def area_aspect_ratio_to_length_width(
     return length, width
 
 
-def contreras_interface_area_to_magnitude(area: float, random: bool = False) -> float:
+def contreras_interface_area_to_magnitude(area: float, random: bool = False) -> BoldM:
     """Convert area to magnitude using the Contreras scaling relationship [0]_.
 
     Parameters
     ----------
     area : float
-        Area of the fault (km^2).
+        Area of the fault rupture (km^2).
     random : bool, optional
         If True, sample parameters according to uncertainties in the
         paper, otherwise use the mean values. Default is False.
 
     Returns
     -------
-    float
-        Moment magnitude of the fault.
+    BoldM
+        Moment magnitude of the fault rupture.
 
     Warns
     -----
@@ -355,18 +357,18 @@ def contreras_interface_area_to_magnitude(area: float, random: bool = False) -> 
     sigma_a = sp.stats.norm(loc=0, scale=0.73).rvs() if random else 0
     a_1 = -8.890
     a_2 = np.log(10)
-    return 1 / a_2 * (np.log(area) - a_1 - sigma_a)
+    return BoldM(1 / a_2 * (np.log(area) - a_1 - sigma_a))
 
 
 def contreras_interface_magnitude_to_area(
-    magnitude: float, random: bool = False
+    magnitude: BoldM, random: bool = False
 ) -> float:
     """Convert magnitude to area using the Contreras scaling relationship [0]_.
 
     Parameters
     ----------
-    magnitude : float
-        Moment magnitude of the fault.
+    magnitude : BoldM
+        Moment magnitude of the fault rupture.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
         paper, otherwise use the mean values. Default is False.
@@ -374,7 +376,7 @@ def contreras_interface_magnitude_to_area(
     Returns
     -------
     float
-        Area of the fault. (km^2)
+        Area of the fault rupture. (km^2)
 
     Warns
     -----
@@ -405,14 +407,14 @@ def contreras_interface_magnitude_to_area(
 
 
 def contreras_interface_magnitude_to_aspect_ratio(
-    magnitude: float, random: bool = False
+    magnitude: BoldM, random: bool = False
 ) -> float:
     """Convert magnitude to aspect ratio (L/W) using the Contreras scaling relationship [0]_.
 
     Parameters
     ----------
-    magnitude : float
-        Moment magnitude of the fault.
+    magnitude : BoldM
+        Moment magnitude of the fault rupture.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
         paper, otherwise use the mean values. Default is False.
@@ -449,14 +451,14 @@ def contreras_interface_magnitude_to_aspect_ratio(
 
 
 def contreras_interface_magnitude_to_length_width(
-    magnitude: float, random: bool = False
+    magnitude: BoldM, random: bool = False
 ) -> tuple[float, float]:
     """Convert magnitude to length and width using the Contreras scaling relationship [0]_.
 
     Parameters
     ----------
-    magnitude : float
-            Moment magnitude of the fault.
+    magnitude : BoldM
+            Moment magnitude of the fault rupture.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
         paper, otherwise use the mean values. Default is False.
@@ -464,7 +466,7 @@ def contreras_interface_magnitude_to_length_width(
     Returns
     -------
     tuple[float, float]
-            Length and width of the fault.
+            Length and width of the fault rupture.
 
     References
     ----------
@@ -476,7 +478,7 @@ def contreras_interface_magnitude_to_length_width(
     return area_aspect_ratio_to_length_width(area, aspect_ratio)
 
 
-def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
+def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> BoldM:
     """Convert area to magnitude using the Strasser scaling relationship [0]_.
 
     Parameters
@@ -489,13 +491,19 @@ def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
 
     Returns
     -------
-    float
-        Moment magnitude of the fault.
+    BoldM
+        Moment magnitude of the fault rupture.
 
     Warns
     -----
     UserWarning
         If the area is not between the minimum and maximum area of the Strasser model, estimated at 130km^2 and 5212km^2.
+
+    Notes
+    -----
+    The moment magnitude convention is not specified in [0]_, so we assume
+    BoldM for consistency with [1]_, which recommends this relationship for
+    intraslab events.
 
     References
     ----------
@@ -503,6 +511,8 @@ def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
            "Scaling of the source dimensions of interface and intraslab
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
+    .. [1] Contreras, Victor, et al. "NGA-Sub source and path database."
+           Earthquake Spectra 38.2 (2022): 799-840.
     """
 
     # lower bound and upper bound for the area are estimated from the minimum and maximum magnitude of the Strasser model.
@@ -518,16 +528,16 @@ def strasser_slab_area_to_magnitude(area: float, random: bool = False) -> float:
     sigma_a = sp.stats.norm(loc=0, scale=0.288).rvs() if random else 0
     sigma_b = sp.stats.norm(loc=0, scale=0.093).rvs() if random else 0
 
-    return a + sigma_a + (b + sigma_b) * np.log10(area)
+    return BoldM(a + sigma_a + (b + sigma_b) * np.log10(area))
 
 
-def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> float:
+def strasser_slab_magnitude_to_area(magnitude: BoldM, random: bool = False) -> float:
     """Convert magnitude to area using the Strasser scaling relationship [0]_.
 
     Parameters
     ----------
-    magnitude : float
-        Moment magnitude of the fault.
+    magnitude : BoldM
+        Moment magnitude of the fault rupture.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
         paper, otherwise use the mean values. Default is False.
@@ -543,12 +553,20 @@ def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> f
         If the magnitude is less than the minimum magnitude of 5.9 or
         larger than the maximum magnitude of 7.8.
 
+    Notes
+    -----
+    The moment magnitude convention is not specified in [0]_, so we assume
+    BoldM for consistency with [1]_, which recommends this relationship for
+    intraslab events.
+
     References
     ----------
     .. [0] Strasser, Fleur O., M. C. Arango, and Julian J. Bommer.
            "Scaling of the source dimensions of interface and intraslab
            subduction-zone earthquakes with moment magnitude." Seismological
            Research Letters 81.6 (2010): 941-950.
+    .. [1] Contreras, Victor, et al. "NGA-Sub source and path database."
+           Earthquake Spectra 38.2 (2022): 799-840.
     """
     if not (5.9 <= magnitude <= 7.8):
         warnings.warn(
@@ -562,13 +580,13 @@ def strasser_slab_magnitude_to_area(magnitude: float, random: bool = False) -> f
 
 
 def contreras_slab_magnitude_to_aspect_ratio(
-    magnitude: float, random: bool = False
+    magnitude: BoldM, random: bool = False
 ) -> float:
     """Convert magnitude to aspect ratio (L/W) using the Contreras scaling relationship [0]_.
 
     Parameters
     ----------
-    magnitude : float
+    magnitude : BoldM
         Moment magnitude of the fault.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
@@ -609,13 +627,13 @@ def contreras_slab_magnitude_to_aspect_ratio(
 
 
 def contreras_slab_magnitude_to_length_width(
-    magnitude: float, random: bool = False
+    magnitude: BoldM, random: bool = False
 ) -> tuple[float, float]:
     """Convert magnitude to length and width using the Contreras scaling relationship [0]_.
 
     Parameters
     ----------
-    magnitude : float
+    magnitude : BoldM
         Moment magnitude of the fault.
     random : bool, optional
         If True, sample parameters according to uncertainties in the
@@ -640,7 +658,7 @@ def contreras_slab_magnitude_to_length_width(
 
 def magnitude_to_length_width(
     scaling_relation: ScalingRelation,
-    magnitude: float,
+    magnitude: BoldM,
     rake: float | None = None,
     random: bool = False,
 ) -> tuple[float, float]:
@@ -650,8 +668,8 @@ def magnitude_to_length_width(
     ----------
     scaling_relation : ScalingRelation
         Scaling relation to use.
-    magnitude : float
-        Moment magnitude of the fault.
+    magnitude : BoldM
+        Moment magnitude of the fault rupture.
     rake : float, optional
         Rake of the fault (degrees). Required for Leonard scaling.
     random : bool, optional
@@ -663,25 +681,24 @@ def magnitude_to_length_width(
     tuple[float, float]
             Length and width of the fault estimated by the scaling relation.
     """
-    if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
-        warnings.warn("Rake must be specified for Leonard scaling.")
-    scaling_relations_map = {
-        ScalingRelation.LEONARD2014: functools.partial(
-            leonard_magnitude_to_length_width, rake=rake, random=random
-        ),
-        ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
-            contreras_interface_magnitude_to_length_width, random=random
-        ),
-        ScalingRelation.CONTRERAS_SLAB2020: functools.partial(
-            contreras_slab_magnitude_to_length_width, random=random
-        ),
-    }
-    return scaling_relations_map[scaling_relation](magnitude)
+    match scaling_relation:
+        case ScalingRelation.LEONARD2014 if rake is not None:
+            return leonard_magnitude_to_length_width(
+                moment.boldm_to_mw(magnitude), rake=rake, random=random
+            )
+        case ScalingRelation.LEONARD2014:
+            raise ValueError("Rake must be specified for Leonard scaling.")
+        case ScalingRelation.CONTRERAS_INTERFACE2017:
+            return contreras_interface_magnitude_to_length_width(
+                magnitude, random=random
+            )
+        case ScalingRelation.CONTRERAS_SLAB2020:
+            return contreras_slab_magnitude_to_length_width(magnitude, random=random)
 
 
 def magnitude_to_area(
     scaling_relation: ScalingRelation,
-    magnitude: float,
+    magnitude: BoldM,
     rake: float | None = None,
     random: bool = False,
 ) -> float:
@@ -691,8 +708,8 @@ def magnitude_to_area(
     ----------
     scaling_relation : ScalingRelation
         Scaling relation to use.
-    magnitude : float
-        Moment magnitude of the fault.
+    magnitude : BoldM
+        Moment magnitude of the fault rupture.
     rake : float, optional
         Rake of the fault (degrees). Required for Leonard scaling.
     random : bool, optional
@@ -706,23 +723,20 @@ def magnitude_to_area(
 
     Returns
     -------
-    tuple[float, float]
+    float
         Area of the fault estimated by the scaling relation.
     """
-    if scaling_relation == ScalingRelation.LEONARD2014 and rake is None:
-        raise ValueError("Rake must be specified for Leonard scaling.")
-    scaling_relations_map = {
-        ScalingRelation.LEONARD2014: functools.partial(
-            leonard_magnitude_to_area, rake=rake, random=random
-        ),
-        ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
-            contreras_interface_magnitude_to_area, random=random
-        ),
-        ScalingRelation.CONTRERAS_SLAB2020: functools.partial(
-            strasser_slab_magnitude_to_area, random=random
-        ),
-    }
-    return scaling_relations_map[scaling_relation](magnitude)
+    match scaling_relation:
+        case ScalingRelation.LEONARD2014 if rake is not None:
+            return leonard_magnitude_to_area(
+                moment.boldm_to_mw(magnitude), rake=rake, random=random
+            )
+        case ScalingRelation.LEONARD2014:
+            raise ValueError("Rake must be specified for Leonard scaling.")
+        case ScalingRelation.CONTRERAS_INTERFACE2017:
+            return contreras_interface_magnitude_to_area(magnitude, random=random)
+        case ScalingRelation.CONTRERAS_SLAB2020:
+            return strasser_slab_magnitude_to_area(magnitude, random=random)
 
 
 def area_to_magnitude(
@@ -730,7 +744,7 @@ def area_to_magnitude(
     area: float,
     rake: float | None = None,
     random: bool = False,
-) -> float:
+) -> BoldM:
     """Convert area to magnitude using a scaling relationship.
 
     Parameters
@@ -747,18 +761,17 @@ def area_to_magnitude(
 
     Returns
     -------
-    float
-        Moment magnitude of the fault estimated by the scaling relation.
+    BoldM
+        Moment magnitude of the fault rupture estimated by the scaling relation.
     """
-    scaling_relations_map = {
-        ScalingRelation.LEONARD2014: functools.partial(
-            leonard_area_to_magnitude, rake=rake, random=random
-        ),
-        ScalingRelation.CONTRERAS_INTERFACE2017: functools.partial(
-            contreras_interface_area_to_magnitude, random=random
-        ),
-        ScalingRelation.CONTRERAS_SLAB2020: functools.partial(
-            strasser_slab_area_to_magnitude, random=random
-        ),
-    }
-    return scaling_relations_map[scaling_relation](area)
+
+    match scaling_relation:
+        case ScalingRelation.LEONARD2014 if rake is not None:
+            mag = leonard_area_to_magnitude(area, rake=rake, random=random)
+            return moment.mw_to_boldm(mag)
+        case ScalingRelation.LEONARD2014:
+            raise ValueError("Rake must be specified for Leonard scaling.")
+        case ScalingRelation.CONTRERAS_INTERFACE2017:
+            return contreras_interface_area_to_magnitude(area, random=random)
+        case ScalingRelation.CONTRERAS_SLAB2020:
+            return strasser_slab_area_to_magnitude(area, random=random)

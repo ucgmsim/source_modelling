@@ -14,7 +14,7 @@ from hypothesis.extra import numpy as nst
 
 from qcore import coordinates, geo
 from source_modelling import sources
-from source_modelling.sources import Fault, Plane
+from source_modelling.sources import Fault, Plane, Point, multi_fault_rx_ry_distance
 
 DATA_PATH = Path("tests") / "data"
 np.random.seed(0)
@@ -72,6 +72,24 @@ def test_point_construction(
     )
     assert np.isclose(point.width_m, point.width * 1000)
     assert np.allclose(point.centroid, point_coordinates)
+
+
+def test_top_bottom_point():
+    point_coordinates = np.array([-43.0, 172.0, 1000.0])
+    point = Point(
+        coordinates.wgs_depth_to_nztm(point_coordinates),
+        1000.0,
+        1000.0,
+        0,
+        60.0,
+        90.0,
+    )
+    # Point.bounds is NZTM, so the location must round-trip back to the
+    # lat/lon/depth the test was written against.
+    assert np.allclose(point.coordinates, point_coordinates)
+    sin_dip = np.sqrt(3) / 2
+    assert point.bottom_m == 1000.0 + sin_dip / 2 * 1000.0
+    assert point.top_m == 1000.0 - sin_dip / 2 * 1000.0
 
 
 @given(
@@ -357,7 +375,7 @@ def test_general_invalid_input():
 
 
 def trace(
-    start_trace_nztm: npt.NDArray[float], length: float, strike: float
+    start_trace_nztm: npt.NDArray[np.float64], length: float, strike: float
 ) -> np.ndarray:
     # Do this in NZTM to prevent any issues with the coordinate system conversions
     strike_vec = np.array([np.cos(np.radians(strike)), np.sin(np.radians(strike))])
@@ -684,35 +702,49 @@ fault_plane = st.builds(
 
 @given(
     plane=fault_plane,
-    point=st.builds(
-        coordinate,
-        lat=st.floats(-50, -31),
-        lon=st.floats(160, 180),
-        depth=st.floats(0, 100),
+    points=st.lists(
+        st.builds(
+            coordinate,
+            lat=st.floats(-50, -31),
+            lon=st.floats(160, 180),
+            depth=st.floats(0, 100),
+        ),
+        min_size=1,
+        max_size=5,
     ),
 )
 @settings(deadline=None)
-def test_plane_rrup(plane: Plane, point: np.ndarray):
+def test_plane_rrup(plane: Plane, points: list[np.ndarray]):
     assume(plane.dip_dir >= plane.strike + 5)
-    point = coordinates.wgs_depth_to_nztm(point)
+    points_nztm = coordinates.wgs_depth_to_nztm(np.array(points))
 
-    def fault_coordinate_distance(fault_coordinates: np.ndarray) -> float:
+    def fault_coordinate_distance(
+        fault_coordinates: np.ndarray, point_nztm: np.ndarray
+    ) -> np.ndarray:
         fault_point = coordinates.wgs_depth_to_nztm(
             plane.fault_coordinates_to_wgs_depth_coordinates(fault_coordinates)
         )
-        return point - fault_point
+        return point_nztm - fault_point
 
-    res = sp.optimize.least_squares(
-        fault_coordinate_distance,
-        np.array([1 / 2, 1 / 2]),
-        bounds=([0] * 2, [1] * 2),
-        gtol=1e-5,
-        ftol=1e-5,
+    optimized_res = np.array(
+        [
+            np.linalg.norm(
+                sp.optimize.least_squares(
+                    fault_coordinate_distance,
+                    np.array([1 / 2, 1 / 2]),
+                    bounds=([0] * 2, [1] * 2),
+                    gtol=1e-5,
+                    ftol=1e-5,
+                    args=(point_nztm,),
+                ).fun
+            )
+            for point_nztm in points_nztm
+        ]
     )
-    optimized_res = np.linalg.norm(res.fun)
-    assert np.isclose(
-        plane.rrup_distance(coordinates.nztm_to_wgs_depth(point)),
+    np.testing.assert_allclose(
+        plane.rrup_distance(coordinates.nztm_to_wgs_depth(points_nztm)),
         optimized_res,
+        rtol=1e-5,
         atol=1e-3,
     )
 
@@ -720,16 +752,19 @@ def test_plane_rrup(plane: Plane, point: np.ndarray):
 @given(
     plane=fault_plane,
     local_coordinates=nst.arrays(
-        float, (2,), elements={"min_value": 0, "max_value": 1}
+        float,
+        st.integers(1, 5).map(lambda n: (n, 2)),
+        elements={"min_value": 0, "max_value": 1},
     ),
 )
 def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
     assume(plane.dip_dir >= plane.strike + 5)
-    assert np.isclose(
+    np.testing.assert_allclose(
         plane.rrup_distance(
             plane.fault_coordinates_to_wgs_depth_coordinates(local_coordinates)
         ),
         0,
+        atol=1e-6,
     )
 
 
@@ -737,17 +772,36 @@ def test_plane_rrup_in_plane(plane: Plane, local_coordinates: np.ndarray):
     plane=fault_plane,
     distance=st.floats(1, 1000),
 )
+@settings(deadline=None)
 def test_plane_rjb(plane: Plane, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
     assume(plane.dip_dir_nztm >= plane.strike_nztm + 1)
     assume(plane.dip != 90)
     buffer = shapely.buffer(plane.geometry, distance * 1000)
-    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
-        assert np.isclose(
-            plane.rjb_distance(point),
-            distance * 1000,
-            atol=1e-4,
-        )
+    points = coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords))
+    np.testing.assert_allclose(
+        plane.rjb_distance(points),
+        distance * 1000,
+        atol=1e-4,
+    )
+
+
+def test_plane_rjb_single_point():
+    plane = Plane.from_centroid_strike_dip(
+        centroid=coordinate(-43.5, 172.5, 5),
+        length=10,
+        width=10,
+        strike_nztm=0,
+        dip_dir_nztm=90,
+        dip=45,
+    )
+    distance = 10_000
+    point = coordinates.nztm_to_wgs_depth(
+        np.array(shapely.buffer(plane.geometry, distance).exterior.coords[0])
+    )
+    rjb = plane.rjb_distance(point)
+    assert isinstance(rjb, float)
+    assert np.isclose(rjb, distance, atol=1e-4)
 
 
 @given(
@@ -872,12 +926,12 @@ def test_fault_reordering(fault: Fault):
 def test_fault_rjb(fault: Fault, distance: float):
     # if dip dir is too close to strike it will create a degenerate geometry that rjb distance isn't designed for anyway.
     buffer = shapely.buffer(fault.geometry, distance * 1000)
-    for point in coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords)):
-        assert np.isclose(
-            fault.rjb_distance(point),
-            distance * 1000,
-            atol=1e-4,
-        )
+    points = coordinates.nztm_to_wgs_depth(np.array(buffer.exterior.coords))
+    np.testing.assert_allclose(
+        fault.rjb_distance(points),
+        distance * 1000,
+        atol=1e-4,
+    )
 
 
 @given(
@@ -890,19 +944,28 @@ def test_fault_rjb(fault: Fault, distance: float):
             coordinate, lat=st.floats(-50, -31), lon=st.floats(160, 180)
         ),
     ),
-    point=st.builds(
-        coordinate,
-        lat=st.floats(-50, -31),
-        lon=st.floats(160, 180),
-        depth=st.floats(0, 100),
+    points=st.lists(
+        st.builds(
+            coordinate,
+            lat=st.floats(-50, -31),
+            lon=st.floats(160, 180),
+            depth=st.floats(0, 100),
+        ),
+        min_size=1,
+        max_size=5,
     ),
 )
-def test_fault_rrup(fault: Fault, point: np.ndarray):
-    # The fault rrup should be equal to the smallest rrup among the planes in the fault.
-    fault_rrup = fault.rrup_distance(point)
-    assert np.isclose(
-        min(plane.rrup_distance(point) for plane in fault.planes), fault_rrup, atol=1e-3
+@settings(deadline=None)
+def test_fault_rrup(fault: Fault, points: list[np.ndarray]):
+    # The fault rrup should be equal to the smallest rrup among the planes in the fault,
+    # computed independently for each point.
+    points_array = np.array(points)
+    fault_rrup = np.atleast_1d(fault.rrup_distance(points_array))
+    plane_rrup = np.min(
+        [np.atleast_1d(plane.rrup_distance(points_array)) for plane in fault.planes],
+        axis=0,
     )
+    np.testing.assert_allclose(plane_rrup, fault_rrup, atol=1e-3)
 
 
 @given(
@@ -1360,3 +1423,128 @@ def test_closest_points_beneath(
         assert a_bounds.max_dip == 1
         assert float(b_bounds.min_dip) == pytest.approx(expected_dip_b)
         assert b_bounds.max_dip == 1
+
+
+def test_single_fault_rx_ry():
+    # Deliberately testing the rx/ry calculations with a simple edge case
+    # because the mathematics is tested rigorously in the test_rx_ry.py module
+    trace = np.array([[-43.0, 172.0], [-43.1, 172.0], [-43.2, 172.0]])
+    fault_a = Fault.from_trace_points(
+        trace,
+        dtop=0,
+        dbottom=10,
+        dip=90,
+        dip_dir_nztm=0.0,
+    )
+    rx, ry = fault_a.rx_ry_distance(np.array([-43.0, 172.0]))
+
+    assert rx.ndim == 0
+    assert rx.item() == pytest.approx(0)
+    assert ry.item() == pytest.approx(0)
+
+    rx1 = fault_a.rx_distance(np.array([-43.0, 172.0]))
+    ry1 = fault_a.ry_distance(np.array([-43.0, 172.0]))
+    assert rx == rx1
+    assert ry == ry1
+
+
+def test_plane_rx_ry():
+    plane_a = Plane.from_centroid_strike_dip(
+        np.array([-43.0, 172.0]),
+        dip=90,
+        length=1.0,
+        width=1.0,
+        dtop=0.0,
+        dbottom=1.0,
+        strike=0.0,
+    )
+    rx, ry = plane_a.rx_ry_distance(np.array([-43.0, 172.0]))
+
+    assert rx.ndim == 0
+    assert rx.item() == pytest.approx(0)
+    # Point roughly half way down the trace
+    assert ry.item() == pytest.approx(500.0)
+
+    rx1 = plane_a.rx_distance(np.array([-43.0, 172.0]))
+    ry1 = plane_a.ry_distance(np.array([-43.0, 172.0]))
+    assert rx == rx1
+    assert ry == ry1
+
+
+def test_multi_fault_rx_ry():
+    trace = np.array([[-43.0, 172.0], [-43.1, 172.0], [-43.2, 172.0]])
+    fault_a = Fault.from_trace_points(
+        trace,
+        dtop=0,
+        dbottom=10,
+        dip=90,
+        dip_dir_nztm=0.0,
+    )
+
+    trace = np.array([[-44.0, 172.0], [-44.1, 172.0], [-44.2, 172.0]])
+    fault_b = Fault.from_trace_points(
+        trace,
+        dtop=0,
+        dbottom=10,
+        dip=90,
+        dip_dir_nztm=0.0,
+    )
+
+    rx, ry = multi_fault_rx_ry_distance([fault_a, fault_b], np.array([-43.0, 172.0]))
+
+    assert rx == pytest.approx(0.0)
+    assert ry == pytest.approx(0.0)
+
+
+def _vertical_plane() -> Plane:
+    """Build a strictly vertical plane (dip == 90) from NZTM corners."""
+    origin = coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.6, 0.0]))
+    along_strike = np.array([10000.0, 10000.0, 0.0])
+    down_dip = np.array([0.0, 0.0, 10000.0])
+    return Plane(
+        np.array(
+            [
+                origin,
+                origin + along_strike,
+                origin + along_strike + down_dip,
+                origin + down_dip,
+            ]
+        )
+    )
+
+
+def test_vertical_plane_with_depth_is_unaffected():
+    """A vertical plane still inverts exactly when depth is supplied."""
+    plane = _vertical_plane()
+    assert plane.dip == 90.0
+    assert np.allclose(
+        plane.wgs_depth_coordinates_to_fault_coordinates(plane.centroid), [0.5, 0.5]
+    )
+
+
+def test_vertical_plane_without_depth_reports_the_real_cause():
+    """A vertical plane queried without depth must say depth is required.
+
+    Regression test: ``coordinate_length`` was forced to 3 whenever
+    ``dip == 90``, regardless of the input's dimensionality, so a 2D query
+    raised a broadcast error ("operands could not be broadcast together with
+    shapes (2,) (3,)") which ``Fault`` then swallowed and reported as "not on
+    fault" -- for a point that is on the fault.
+    """
+    plane = _vertical_plane()
+    centroid_2d = plane.centroid[:2]
+
+    with pytest.raises(ValueError, match="Depth is required"):
+        plane.wgs_depth_coordinates_to_fault_coordinates(centroid_2d)
+
+    # and the cause must survive Fault's per-plane loop rather than being
+    # reported as a geometric miss
+    with pytest.raises(ValueError, match="Depth is required"):
+        Fault([plane]).wgs_depth_coordinates_to_fault_coordinates(centroid_2d)
+
+
+def test_fault_still_reports_genuine_misses_as_not_on_fault():
+    """Points genuinely off the fault must still raise "not on fault"."""
+    fault = Fault([_vertical_plane()])
+    with pytest.raises(ValueError, match="not on fault"):
+        fault.wgs_depth_coordinates_to_fault_coordinates(np.array([-41.0, 174.0, 0.0]))

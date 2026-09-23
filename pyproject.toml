@@ -7,25 +7,27 @@ name = "source-modelling"
 authors = [{ name = "ucgmsim" }]
 description = "Source modelling library"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
   "geopandas",
+  "h5py",
   "networkx",
-  "numpy",
+  "numba>=0.65.1",
+  "numpy>=2.0",
   "pandas",
   "parse",
-  "qcore-utils",
+  "qcore-utils>=2026.8.2",
   "scipy",
-  "shapely",
+  "shapely>=2.0",
   "xarray[io]",
 ]
 
 [project.optional-dependencies]
 test = [
-  "diffimg",
   "pytest",
   "pytest-cov",
+  "coverage[toml]",
   "hypothesis[pandas, numpy]",
   "hypothesis-networkx",
 ]
@@ -35,18 +37,23 @@ types = [
   "scipy-stubs",
   "pandas-stubs",
   "types-networkx",
-  "ty",
 ]
 fiona = [
   "fiona"
 ]
 
+[dependency-groups]
+dev = ["ruff", "deptry", "ty", "numpydoc"]
+
 
 [tool.setuptools.package-data]
-source_modelling = ['NZ_CFM/*']
+source_modelling = ['NZ_CFM/*', 'py.typed', 'srf_parser.pyi']
 
 [tool.setuptools.package-dir]
 source_modelling = "source_modelling"
+
+[tool.ty.src]
+exclude = ["source_modelling/ccldpy.py", "setup.py"]
 
 [tool.ruff]
 extend-exclude = ["source_modelling/ccldpy.py"]
@@ -131,6 +138,13 @@ exclude = [ # don't report on objects that match any of these regex
 ]
 
 
-[tool.maturin]
-bindings = "pyo3"
-path = "source_modelling/srf_parser"
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "Cargo.toml" },
+  { file = "**/*.rs" },
+]
+
+
+[tool.deptry]
+optional_dependencies_dev_groups = ["test", "types"]

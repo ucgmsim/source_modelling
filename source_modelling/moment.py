@@ -1,6 +1,7 @@
 """Utility functions for working with moment rate and moment."""
 
 import itertools
+import typing
 
 import numpy as np
 import numpy.typing as npt
@@ -11,6 +12,17 @@ from scipy.sparse import csr_array
 
 from source_modelling import rupture_propagation, sources
 from source_modelling.sources import Fault, Plane
+
+BoldM = typing.NewType("BoldM", float)
+Mw = typing.NewType("Mw", float)
+
+
+# Moment magnitude scale coefficients for seismic moment in Nm, from
+# equations 4 and 7 of Hanks and Kanamori (1979). See the [Hanks1979] reference
+# in the `moment_to_magnitude` docstring for the full citation.
+EQUATION_4_COEFFICIENT = 6.0667  # `Mw` convention
+EQUATION_7_COEFFICIENT = 6.0333  # `BoldM` convention
+BOLDM_TO_MW = EQUATION_7_COEFFICIENT - EQUATION_4_COEFFICIENT
 
 
 def find_connected_faults(
@@ -52,7 +64,7 @@ def find_connected_faults(
 
     """
     fault_names = list(faults)
-    fault_components: DisjointSet[str] = DisjointSet(fault_names)  # type: ignore
+    fault_components: DisjointSet[str] = DisjointSet(fault_names)
     for fault_a_name, fault_b_name in itertools.product(fault_names, repeat=2):
         if not fault_b_name or fault_components.connected(fault_a_name, fault_b_name):
             continue
@@ -120,7 +132,15 @@ def moment_rate_over_time_from_slip(
     return moment_rate_df
 
 
-def moment_to_magnitude(moment: float) -> float:
+@typing.overload
+def moment_to_magnitude(
+    moment: float, bold_m: typing.Literal[True] = True
+) -> BoldM: ...  # numpydoc ignore=GL08
+@typing.overload
+def moment_to_magnitude(
+    moment: float, bold_m: typing.Literal[False]
+) -> Mw: ...  # numpydoc ignore=GL08
+def moment_to_magnitude(moment: float, bold_m: bool = True) -> BoldM | Mw:
     """Convert moment to magnitude.
 
     NOTE: the qcore mag_scaling module does not have this expression.
@@ -129,29 +149,114 @@ def moment_to_magnitude(moment: float) -> float:
     ----------
     moment : float
         The moment of the rupture in Nm.
+    bold_m : bool, optional
+        Set whether Equation 4 or 7 from [Hanks1979]_ is used for the conversion.
+        If True, use Equation 7 (`BoldM` convention).
+        If False, use Equation 4 (`Mw` convention).
 
     Returns
     -------
-    float
-        Rupture magnitude
+    BoldM | Mw
+        Rupture moment magnitude in the convention specified by `bold_m`.
+
+    Raises
+    ------
+    ValueError
+        If the provided moment corresponds to a physically implausible
+        magnitude. Likely this is because the user supplied moment is in dyne-cm
+        instead of Nm.
+
+    References
+    ----------
+    .. [Hanks1979] Hanks, T. C., and H. Kanamori (1979),
+           "A moment magnitude scale",
+           J. Geophys. Res., 84(B5), 2348-2350,
+           doi:10.1029/JB084iB05p02348.
     """
-    return 2 / 3 * np.log10(moment) - 6.03333
+
+    if bold_m:
+        mag = BoldM(2 / 3 * np.log10(moment) - EQUATION_7_COEFFICIENT)
+    else:
+        mag = Mw(2 / 3 * np.log10(moment) - EQUATION_4_COEFFICIENT)
+
+    if mag > 10.0:
+        raise ValueError(
+            "Magnitude for moment is unreasonably large, did you provide moment in dyne-cm instead of Nm?"
+        )
+
+    return mag
 
 
-def magnitude_to_moment(magnitude: float) -> float:
+@typing.overload
+def magnitude_to_moment(
+    magnitude: BoldM, bold_m: typing.Literal[True] = True
+) -> float: ...  # numpydoc ignore=GL08
+@typing.overload
+def magnitude_to_moment(
+    magnitude: Mw, bold_m: typing.Literal[False]
+) -> float: ...  # numpydoc ignore=GL08
+def magnitude_to_moment(magnitude: BoldM | Mw, bold_m: bool = True) -> float:
     """Convert magnitude to moment.
 
     Parameters
     ----------
-    magnitude : float
-        The magnitude of the rupture.
+    magnitude : BoldM | Mw
+        The magnitude of the rupture, in the convention indicated by `bold_m`.
+    bold_m : bool, optional
+        Set whether Equation 4 or 7 from [Hanks1979]_ is used for the conversion.
+        If True, use Equation 7 (`BoldM` convention).
+        If False, use Equation 4 (`Mw` convention).
 
     Returns
     -------
     float
         Rupture moment in Nm.
     """
-    return 10 ** ((magnitude + 6.03333) * 3 / 2)
+
+    if bold_m:
+        return 10 ** ((magnitude + EQUATION_7_COEFFICIENT) * 3 / 2)
+    else:
+        return 10 ** ((magnitude + EQUATION_4_COEFFICIENT) * 3 / 2)
+
+
+def boldm_to_mw(magnitude: BoldM) -> Mw:
+    """Convert a BoldM convention magnitude to an Mw convention magnitude.
+
+    Parameters
+    ----------
+    magnitude : BoldM
+        A magnitude in the BoldM convention.
+
+    Returns
+    -------
+    Mw
+        A magnitude in the Mw convention.
+
+    See Also
+    --------
+    moment_to_magnitude : Introduces the different magnitude conventions.
+    """
+    return Mw(magnitude + BOLDM_TO_MW)
+
+
+def mw_to_boldm(magnitude: Mw) -> BoldM:
+    """Convert a Mw convention magnitude to a BoldM convention magnitude.
+
+    Parameters
+    ----------
+    magnitude : Mw
+        A magnitude in the Mw convention.
+
+    Returns
+    -------
+    BoldM
+        A magnitude in the BoldM convention.
+
+    See Also
+    --------
+    moment_to_magnitude : Introduces the different magnitude conventions.
+    """
+    return BoldM(magnitude - BOLDM_TO_MW)
 
 
 def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFrame:
@@ -199,6 +304,60 @@ def dyne_cm_to_newton_metre(dyne_cm: float) -> float:
     return dyne_cm * _dyne_to_newton * _cm_to_m
 
 
+@typing.overload
+def velocity_model_layer_index(
+    velocity_model_df: pd.DataFrame, depths_km: float
+) -> int: ...  # numpydoc ignore=GL08
+@typing.overload
+def velocity_model_layer_index(
+    velocity_model_df: pd.DataFrame, depths_km: npt.NDArray[np.floating]
+) -> npt.NDArray[np.intp]: ...  # numpydoc ignore=GL08
+def velocity_model_layer_index(
+    velocity_model_df: pd.DataFrame, depths_km: float | npt.NDArray[np.floating]
+) -> int | npt.NDArray[np.intp]:
+    """Return the velocity-model layer index containing each depth.
+
+    Selects the deepest layer whose top depth does not exceed the query depth. A depth
+    exactly on a layer boundary takes the deeper layer.
+
+    Parameters
+    ----------
+    velocity_model_df : pd.DataFrame
+        Velocity model with a ``depth_km`` column of layer *top* depths in kilometres, the
+        first of which must be 0.
+    depths_km : float or npt.NDArray[np.floating]
+        Query depth(s) in kilometres.
+
+    Returns
+    -------
+    np.intp or npt.NDArray[np.intp]
+        The layer index for each query depth.
+
+    Raises
+    ------
+    ValueError
+        If the velocity model does not begin at 0 km depth (a sign that bottom depths were
+        passed instead of top depths).
+
+    """
+    if not np.isclose(velocity_model_df["depth_km"].iloc[0], 0.0):
+        raise ValueError(
+            "Velocity model does not begin at 0km depth (are you using bottom depth instead of top depth)?"
+        )
+
+    idx = (
+        np.searchsorted(
+            velocity_model_df["depth_km"].to_numpy(), depths_km, side="right"
+        )
+        - 1
+    )
+
+    if isinstance(depths_km, (int, float, np.floating)):
+        return max(0, int(idx))
+
+    return np.maximum(0, idx)
+
+
 def point_source_slip(
     moment_newton_metre: float,
     fault_area_km2: float,
@@ -218,9 +377,9 @@ def point_source_slip(
         The area of the fault in square kilometers.
     velocity_model_df : pd.DataFrame
       columns:
-        - "depth_km": The depth in kilometers.
-        - "rho_g_per_cm3": The density of the fault in grams per cubic centimeter.
-        - "vs_km_per_s": The shear wave velocity in kilometers per second.
+        - "depth_km": The *top* depth in kilometers.
+        - "rho": The density of the fault in grams per cubic centimeter.
+        - "Vs": The shear wave velocity in kilometers per second.
     source_depth_km : float
         The depth of the source in kilometers.
 
@@ -230,8 +389,7 @@ def point_source_slip(
         The calculated slip in cm.
     """
 
-    # Find the index of the closest depth in the velocity model
-    idx = np.argmin(np.abs(velocity_model_df["depth_km"] - source_depth_km))
+    idx = velocity_model_layer_index(velocity_model_df, source_depth_km)
     vs_km_per_s = velocity_model_df.iloc[idx]["Vs"]
     rho_g_per_cm3 = velocity_model_df.iloc[idx]["rho"]
 

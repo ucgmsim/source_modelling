@@ -108,7 +108,9 @@ total_probability_of_spanning_trees = sum(probability(tree) for tree in spanning
 # We use a smarter method that avoids computing all trees.
 for tree in spanning_trees_ordered_by_probability(G):
     sample.append(tree)
-    sample_probability += probability(tree) / total_probability_of_spanning_trees  # P(T | T is a spanning tree of G)
+    sample_probability += (
+        probability(tree) / total_probability_of_spanning_trees
+    )  # P(T | T is a spanning tree of G)
     if sample_probability >= threshold:
         break
 return sample

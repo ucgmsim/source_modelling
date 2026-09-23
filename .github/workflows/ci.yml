@@ -1,0 +1,14 @@
+name: CI
+
+on: [pull_request]
+
+jobs:
+  ci:
+    uses: ucgmsim/meta-ci-action/.github/workflows/ci.yml@main
+    with:
+      package-dir: source_modelling
+      system-packages: "gmt libgmt-dev ghostscript gdal-bin libgdal-dev"
+      uv-extra-args: "--all-groups --all-extras"
+      numpydoc-extra-excludes: "-E ccldpy.py"
+      enable-coverage: true
+      cov-package: source_modelling

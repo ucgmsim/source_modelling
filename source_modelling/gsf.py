@@ -1,13 +1,8 @@
 """This module provides functions for working with and generating GSF files.
 
-Functions
----------
-source_to_gsf_dataframe(gsf_filepath, source, resolution)
-    Generates a pandas DataFrame suitable for writing to a GSF file from a source object.
-write_gsf(gsf_df, gsf_filepath)
-    Writes a pandas DataFrame to a GSF file.
-read_gsf(gsf_filepath)
-    Parses a GSF file into a pandas DataFrame.
+Functions: ``source_to_gsf_dataframe`` (generate a DataFrame from a source object),
+``write_gsf`` (write a DataFrame to a GSF file), ``read_gsf`` (parse a GSF file into
+a DataFrame).
 
 References
 ----------
@@ -117,12 +112,15 @@ def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
         The path to the GSF file to write.
     """
 
+    if "loc_rake" not in gsf_df:
+        raise ValueError("The DataFrame must have a 'loc_rake' column.")
+    # Defaults are filled on a copy: write_gsf serialises the frame it is
+    # given and must not modify the caller's DataFrame.
+    gsf_df = gsf_df.copy(deep=False)
     if "init_time" not in gsf_df:
         gsf_df["init_time"] = -1
     if "slip" not in gsf_df:
         gsf_df["slip"] = -1
-    if "loc_rake" not in gsf_df:
-        raise ValueError("The DataFrame must have a 'loc_rake' column.")
     with open(gsf_filepath, "w") as gsf_file:
         gsf_file.write(f"{len(gsf_df)}\n")
         gsf_df.to_csv(

@@ -1,13 +1,15 @@
+import gzip
 import tempfile
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pandas as pd
 import pytest
 import scipy as sp
 import shapely
 
-from qcore import coordinates
+from qcore import coordinates, geo
 from source_modelling import parse_utils, srf
 
 SRF_DIR = Path(__file__).parent / "srfs"
@@ -19,19 +21,21 @@ def test_christchurch_srf():
     assert christchurch_srf.version == "1.0"
     assert len(christchurch_srf.header) == 1
     assert len(christchurch_srf.points) == 14400
-    assert christchurch_srf.header.iloc[0].to_dict() == {
-        "elon": 172.6966,
-        "elat": -43.5446,
-        "nstk": 160,
-        "ndip": 90,
-        "len": 16.00,
-        "wid": 9.00,
-        "stk": 59,
-        "dip": 69,
-        "dtop": 0.63,
-        "shyp": -2.00,
-        "dhyp": 6.00,
-    }
+    assert christchurch_srf.header.iloc[0].to_dict() == pytest.approx(
+        {
+            "elon": 172.6966,
+            "elat": -43.5446,
+            "nstk": 160,
+            "ndip": 90,
+            "len": 16.00,
+            "wid": 9.00,
+            "stk": 59,
+            "dip": 69,
+            "dtop": 0.63,
+            "shyp": -2.00,
+            "dhyp": 6.00,
+        }
+    )
     # local strike and dip should match the header
     assert (christchurch_srf.points["dip"] == 69).all()
     assert (christchurch_srf.points["stk"] == 59).all()
@@ -118,7 +122,7 @@ def test_christchurch_srf():
 def test_darfield_srf():
     """Test that the SRF reader can parse the Darfield SRF and validate basic properties."""
     darfield_srf = srf.read_srf(SRF_DIR / "3366146.srf")
-    assert darfield_srf.header.to_dict(orient="records") == [
+    expected_headers = [
         {
             "elon": 172.133408,
             "elat": -43.550999,
@@ -211,6 +215,10 @@ def test_darfield_srf():
             "dhyp": 6.0000,
         },
     ]
+    actual_headers = darfield_srf.header.to_dict(orient="records")
+    assert len(actual_headers) == len(expected_headers)
+    for actual, expected in zip(actual_headers, expected_headers):
+        assert actual == pytest.approx(expected)
     # Will not test the basic properties again because that is tested
     # in the Christchurch case pretty thoroughly. Will, however, test
     # the segment iteration thoroughly
@@ -366,6 +374,9 @@ def test_junk_srfs():
     with pytest.raises(parse_utils.ParseError):
         srf.read_srf(SRF_DIR / "no_points.srf")
 
+    with pytest.raises(parse_utils.ParseError):
+        srf.read_srf(SRF_DIR / "bad_plane.srf")
+
 
 def test_writing_christchurch():
     """Check that writing a copy an SRF produces an SRF with the same values."""
@@ -407,7 +418,7 @@ def test_planes_nstk_1_ndip_gt_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # type: ignore
+        slipt1_array=None,  # ty: ignore[invalid-argument-type]
     )
 
     planes = mock_srf.planes
@@ -418,6 +429,59 @@ def test_planes_nstk_1_ndip_gt_1():
     assert plane.strike == pytest.approx(45, abs=1)
     assert plane.length == pytest.approx(10.0, abs=1e-3)
     assert plane.width == pytest.approx(21.235, abs=1e-3)
+
+
+def _nstk_1_srf(
+    stk: float, dip: float = 60.0, length: float = 10.0, width: float = 21.235
+) -> srf.SrfFile:
+    """Build an nstk == 1 SRF whose point column runs down-dip from stk + 90."""
+    elat, elon = -43.5, 172.5
+    ndip = 5
+    dw = width / ndip
+    lats, lons, deps = [], [], []
+    for i in range(ndip):
+        distance = (i + 0.5) * dw
+        lon_i, lat_i = geo.ll_shift(
+            elat, elon, distance * np.cos(np.radians(dip)), (stk + 90.0) % 360.0
+        )[::-1]
+        lats.append(lat_i)
+        lons.append(lon_i)
+        deps.append(distance * np.sin(np.radians(dip)))
+    return srf.SrfFile(
+        version="1.0",
+        header=pd.DataFrame(
+            [
+                {
+                    "elon": elon,
+                    "elat": elat,
+                    "nstk": 1,
+                    "ndip": ndip,
+                    "len": length,
+                    "wid": width,
+                    "stk": stk,
+                    "dip": dip,
+                }
+            ]
+        ),
+        points=pd.DataFrame({"lon": lons, "lat": lats, "dep": deps}),
+        slipt1_array=None,  # ty: ignore[invalid-argument-type]
+    )
+
+
+@pytest.mark.parametrize("stk", [0.0, 20.0, 45.0, 90.0, 135.0, 200.0, 270.0, 330.0])
+def test_planes_nstk_1_strike_recovered(stk: float):
+    """The nstk == 1 branch must recover the header strike for any bearing.
+
+    Regression test: the along-strike offset was built from
+    ``np.cos(strike_nztm)`` without converting the NZTM bearing from degrees
+    to radians, which left the plane pointing in an unrelated direction for
+    every strike except values near 45 degrees, where the error happens to
+    almost cancel.
+    """
+    plane = _nstk_1_srf(stk).planes[0]
+
+    assert (plane.strike - stk + 180) % 360 - 180 == pytest.approx(0, abs=0.1)
+    assert plane.length == pytest.approx(10.0, abs=1e-3)
 
 
 def test_planes_nstk_1_ndip_1():
@@ -450,7 +514,7 @@ def test_planes_nstk_1_ndip_1():
         version="1.0",
         header=header,
         points=points,
-        slipt1_array=None,  # type: ignore
+        slipt1_array=None,  # ty: ignore[invalid-argument-type]
     )
 
     planes = mock_srf.planes
@@ -500,6 +564,252 @@ def test_hdf5_read_write():
             original_srf.slipt1_array.indptr, reconstructed_srf.slipt1_array.indptr
         ), "slipt1_array indptr mismatch"
 
-        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # type: ignore
+        assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # ty: ignore[unresolved-attribute]
             "slipt1_array content mismatch"
         )
+
+
+def test_sw4_hdf5_read_write(tmp_path: Path):
+    """Test that write_sw4_hdf5 preserves header, points, and slip data."""
+
+    original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+
+    output_path = tmp_path / "test.h5"
+    original_srf.write_sw4_hdf5(output_path)
+
+    with h5py.File(output_path, "r") as h5file:
+        # VERSION
+        assert h5file.attrs["VERSION"] == np.float32(1.0)
+
+        plane = h5file.attrs["PLANE"]
+        assert plane.shape == (len(original_srf.header),)
+        assert srf.SW4_PLANE_DTYPE.names is not None
+        for idx, row in original_srf.header.iterrows():
+            for field in srf.SW4_PLANE_DTYPE.names:
+                assert plane[idx][field] == pytest.approx(row[field.lower()], abs=1e-3)
+
+        points = h5file["POINTS"]
+        assert points.shape == (len(original_srf.points),)
+        for field in (
+            "LON",
+            "LAT",
+            "DEP",
+            "STK",
+            "DIP",
+            "AREA",
+            "TINIT",
+            "DT",
+            "RAKE",
+        ):
+            assert points[field] == pytest.approx(
+                original_srf.points[field.lower()].to_numpy(), abs=1e-3
+            )
+        assert points["SLIP1"] == pytest.approx(
+            original_srf.points["slip"].to_numpy(), abs=1e-3
+        )
+
+        # VS/DEN default to 0.0 for Version 1.0 SRF
+        assert points["VS"] == pytest.approx(0.0)
+        assert points["DEN"] == pytest.approx(0.0)
+
+        # NT1 from slipt1_array.indptr
+        assert points["NT1"] == pytest.approx(
+            np.diff(original_srf.slipt1_array.indptr).astype(np.int32)
+        )
+
+        # SR1 slip-time function data
+        assert h5file["SR1"][...] == pytest.approx(
+            original_srf.slipt1_array.data.astype(np.float32)
+        )
+
+        # Unused slip components stay zero
+        for zero_field in ("SLIP2", "NT2", "SLIP3", "NT3"):
+            assert points[zero_field] == pytest.approx(0)
+
+
+def test_read_srf_v2():
+    """Read a minimal hand-written version 2.0 SRF and verify every parsed value.
+
+    The 2-point source file is small enough that all the expected values here,
+    including the complete slip-rate sparse-matrix structure, can be checked by
+    eye against the file. See test_read_real_srf_v2 for the complementary test
+    on a real (genslip-generated) version 2.0 SRF.
+    """
+    srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
+    assert srf_v2.version == "2.0"
+    assert len(srf_v2.points) == 2
+    assert "vs" in srf_v2.points
+    assert "den" in srf_v2.points
+    assert srf_v2.points["vs"].tolist() == pytest.approx([3.5e5, 3.6e5])
+    assert srf_v2.points["den"].tolist() == pytest.approx([2.7, 2.8])
+    assert srf_v2.points.iloc[0].to_dict() == pytest.approx(
+        {
+            "lon": 172.0,
+            "lat": -43.0,
+            "dep": 0.5,
+            "stk": 45,
+            "dip": 80,
+            "area": 1.0e10,
+            "tinit": 0.0,
+            "dt": 0.1,
+            "vs": 3.5e5,
+            "den": 2.7,
+            "rake": 90,
+            "slip": 10.0,
+            "rise": 0.2,
+        }
+    )
+    # 2 points (rows) x 3 time-step columns. Columns are 0-indexed, so the column
+    # count is (highest filled column index) + 1 = 2 + 1 = 3 (columns 0, 1, 2).
+    assert srf_v2.slipt1_array.shape == (2, 3)
+    # the stored values, row by row; each point starts with a slip-rate of 0.0.
+    assert srf_v2.slipt1_array.data.tolist() == pytest.approx([0.0, 5.0, 0.0, 6.0])
+    # each sample's column = floor(tinit / dt) + offset, where offset is the
+    # sample's index within its point's slip-rate function (0 to nt1 - 1):
+    # point 0 (floor(0.0/0.1)=0) fills cols 0,1; point 1 (floor(0.1/0.1)=1) fills cols 1,2.
+    assert srf_v2.slipt1_array.indices.tolist() == [0, 1, 1, 2]
+    # row boundaries into data/indices: nt1 = 2 per point, so cuts at 0, 2, 4.
+    assert srf_v2.slipt1_array.indptr.tolist() == [0, 2, 4]
+
+
+def test_read_real_srf_v2(tmp_path: Path):
+    """Read a real genslip-generated version 2.0 SRF end to end.
+
+    Complements the hand-verifiable test_read_srf_v2 by covering what only a
+    real file exercises: the comment lines genslip writes after the version
+    line, and a full-size (2601-point) rupture. The expected values below are
+    spot checks transcribed from the first, middle and last point blocks of
+    the file. Because the parser consumes the file as one sequential token
+    stream, a correct last point implies it stayed aligned through every
+    preceding block.
+    """
+    srf_ffp = tmp_path / "test_v2.srf"
+    srf_ffp.write_bytes(
+        gzip.decompress(
+            (Path(__file__).parent / "srfs" / "test_v2.srf.gz").read_bytes()
+        )
+    )
+    real_srf = srf.read_srf(srf_ffp)
+    assert real_srf.version == "2.0"
+    assert real_srf.header.iloc[0].to_dict() == pytest.approx(
+        {
+            "elon": 176.514603,
+            "elat": -38.006092,
+            "nstk": 51,
+            "ndip": 51,
+            "len": 5.0699,
+            "wid": 5.0699,
+            "stk": 240,
+            "dip": 88,
+            "dtop": 0.0,
+            "shyp": 0.0,
+            "dhyp": 2.5350,
+        }
+    )
+    assert len(real_srf.points) == 2601
+    assert real_srf.points.iloc[0].to_dict() == pytest.approx(
+        {
+            "lon": 176.539108,
+            "lat": -37.994919,
+            "dep": 4.96747e-02,
+            "stk": 240,
+            "dip": 88,
+            "area": 9.88234e07,
+            "tinit": 5.815377,
+            "dt": 5.0e-03,
+            "vs": 3.8e04,
+            "den": 1.81,
+            "rake": -16,
+            "slip": 94.2758,
+            "rise": 64 * 5.0e-03,
+        }
+    )
+    assert real_srf.points.iloc[1300].to_dict() == pytest.approx(
+        {
+            "lon": 176.514099,
+            "lat": -38.005402,
+            "dep": 2.53341,
+            "stk": 240,
+            "dip": 88,
+            "area": 9.88234e07,
+            "tinit": 9.254894e-02,
+            "dt": 5.0e-03,
+            "vs": 2.28e05,
+            "den": 2.40,
+            "rake": -15,
+            "slip": 49.4048,
+            "rise": 59 * 5.0e-03,
+        }
+    )
+    assert real_srf.points.iloc[2600].to_dict() == pytest.approx(
+        {
+            "lon": 176.489090,
+            "lat": -38.015869,
+            "dep": 5.01714,
+            "stk": 240,
+            "dip": 88,
+            "area": 9.88234e07,
+            "tinit": 2.567641,
+            "dt": 5.0e-03,
+            "vs": 3.6e05,
+            "den": 2.72,
+            "rake": -7,
+            "slip": 15.8105,
+            "rise": 3 * 5.0e-03,
+        }
+    )
+    # the first point's slip-rate function holds nt1 = 64 samples
+    assert np.diff(real_srf.slipt1_array.indptr)[0] == 64
+    assert real_srf.slipt1_array.data[:3] == pytest.approx([0.0, 9.69786, 21.3934])
+    # the last point's slip-rate function holds nt1 = 3 samples
+    assert np.diff(real_srf.slipt1_array.indptr)[-1] == 3
+    assert real_srf.slipt1_array.data[-3:] == pytest.approx([0.0, 3.16209e03, 0.0])
+
+
+def test_read_srf_v1_has_no_vs_den():
+    """Regression: version 1.0 SRFs must not gain vs/den columns."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    assert "vs" not in christchurch_srf.points
+    assert "den" not in christchurch_srf.points
+    assert christchurch_srf.points.shape[1] == 11
+
+
+def test_unsupported_version_srf(tmp_path: Path):
+    """An otherwise-valid SRF whose version is neither 1.0 nor 2.0 is rejected."""
+    bad_srf = tmp_path / "v9.srf"
+    bad_srf.write_text(
+        "9.0\n"
+        "PLANE 1\n"
+        "  172.0  -43.0   1   1   1.0   1.0\n"
+        "  45   80   0.0   0.0   0.5\n"
+        "POINTS 1\n"
+        "  172.0  -43.0   0.5   45   80   1.0e10   0.0   0.1\n"
+        "  90   10.0   1   0.0   0   0.0   0\n"
+        "  0.0\n"
+    )
+    with pytest.raises(parse_utils.ParseError):
+        srf.read_srf(bad_srf)
+
+
+def test_write_read_srf_v2(tmp_path: Path):
+    """Check that writing a version 2.0 SRF round-trips, including vs/den."""
+    srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
+    out = tmp_path / "roundtrip_v2.srf"
+    srf.write_srf(out, srf_v2)
+    reread = srf.read_srf(out)
+    assert reread.version == "2.0"
+    assert srf_v2.header.equals(reread.header)
+    assert srf_v2.points.equals(reread.points)
+    assert (srf_v2.slip != reread.slip).nnz == 0
+
+
+def test_sw4_hdf5_v2(tmp_path: Path):
+    """Test that write_sw4_hdf5 writes vs/den for a version 2.0 SRF."""
+    srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
+    out = tmp_path / "v2.h5"
+    srf_v2.write_sw4_hdf5(out)
+    with h5py.File(out, "r") as h5file:
+        assert h5file.attrs["VERSION"] == np.float32(2.0)
+        points = h5file["POINTS"]
+        assert points["VS"] == pytest.approx(srf_v2.points["vs"].to_numpy())
+        assert points["DEN"] == pytest.approx(srf_v2.points["den"].to_numpy())
