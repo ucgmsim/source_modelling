@@ -38,9 +38,7 @@ types = [
   "pandas-stubs",
   "types-networkx",
 ]
-fiona = [
-  "fiona"
-]
+fiona = ["fiona"]
 
 [dependency-groups]
 dev = ["ruff", "deptry", "ty", "numpydoc"]
@@ -113,8 +111,10 @@ omit = [
 ]
 
 
-[tool.numpydoc_validation]
-checks = [
+[tool.npdlint]
+include = ["source_modelling"]
+extend-exclude = ['source_modelling/ccldpy.py']
+select = [
   "GL05",
   "GL08",
   "GL10",
@@ -130,13 +130,26 @@ checks = [
   "RT03",
   "RT04",
   "YD01",
+  "NQ",
 ]
 # remember to use single quotes for regex in TOML
-exclude = [ # don't report on objects that match any of these regex
+exclude-object-patterns = [ # don't report on objects that match any of these regex
   '\.undocumented_method$',
   '\.__repr__$',
 ]
+property-form = "type-line"
 
+[[tool.npdlint.scope]]
+match = { nested = true }
+extend-ignore = ["GL08"]
+
+[[tool.npdlint.scope]]
+match = { overload = true }
+extend-ignore = ["GL08"]
+
+[[tool.npdlint.scope]]
+match = { private = true }
+skip = true
 
 [tool.uv]
 cache-keys = [

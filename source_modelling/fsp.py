@@ -156,6 +156,8 @@ class FSPFile:
         The x-coordinate of the hypocentre (along strike, in km).
     hypz : float or None
         The z-coordinate of the hypocentre (along dip, in km).
+    velocity_model : Dataframe or float or None
+        The velocity model used for the inversion.
     length : float
         The length of the rupture (in km).
     width : float

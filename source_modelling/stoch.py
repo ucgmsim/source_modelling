@@ -173,6 +173,7 @@ class StochFile:
     """
 
     data: list[StochPlane]
+    """list[StochPlane]: The planes contained in this stoch file."""
 
     @classmethod
     def from_file(cls, filename: Path) -> Self:
