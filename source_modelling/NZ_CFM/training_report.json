@@ -1,0 +1,10 @@
+{
+ "n_labelled": 98,
+ "n_synthetic": 300,
+ "cv_accuracy_labelled_only": 0.8693877551020408,
+ "cv_accuracy_with_synthetic": 0.8755102040816326,
+ "in_sample_accuracy": 0.8979591836734694,
+ "synthetic_holdout_accuracy": 0.9566666666666667,
+ "tectonic_literature_rule_accuracy": 1.0,
+ "tectonic_literature_model_accuracy": 1.0
+}
