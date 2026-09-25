@@ -42,6 +42,7 @@ fiona = ["fiona"]
 
 [dependency-groups]
 dev = ["ruff", "deptry", "ty", "numpydoc"]
+ml = ["scikit-learn"]
 
 
 [tool.setuptools.package-data]

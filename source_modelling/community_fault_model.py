@@ -10,7 +10,7 @@ Examples
 --------
 >>> from pathlib import Path
 >>> model = get_community_fault_model()
->>> centroid = np.array([-45.1929,166.83])
+>>> centroid = np.array([-45.1929, 166.83, 22.0])  # lat, lon, depth (km)
 >>> nodal_plane_1 = NodalPlane(strike=20, dip=35, rake=79)
 >>> nodal_plane_2 = NodalPlane(strike=213, dip=56, rake=98)
 >>> most_likely_plane = most_likely_nodal_plane(model, centroid, nodal_plane_1, nodal_plane_2)
@@ -453,65 +453,41 @@ def most_likely_nodal_plane(
     centroid: npt.NDArray,
     nodal_plane_1: NodalPlane,
     nodal_plane_2: NodalPlane,
-    k_neighbours: int = 5,
+    magnitude: float = float("nan"),
 ) -> NodalPlane:
-    """Find the most likely nodal plane by a nearest neighbour vote on
-    the strike values of the faults near the centroid.
+    """Find the nodal plane most likely to be the fault plane.
+
+    This delegates to `source_modelling.focal_mechanism.CMTClassifier`,
+    which scores each plane against nearby faults in the community fault
+    model (strike, dip direction, dip, rake and the up-dip projection of
+    the plane onto the mapped trace), the Slab2 subduction interface
+    geometry and Andersonian faulting mechanics.
 
     Parameters
     ----------
     faults : list[CommunityFault]
         A list of CommunityFault objects.
     centroid : npt.NDArray
-        The centroid of the fault.
+        The centroid as (latitude, longitude, depth_km). If the depth is
+        omitted a default depth is assumed with a warning.
     nodal_plane_1 : NodalPlane
         The first nodal plane.
     nodal_plane_2 : NodalPlane
         The second nodal plane.
-    k_neighbours : int, optional
-        The number of nearest neighbours to consider (default is 5).
+    magnitude : float, optional
+        The moment magnitude, if known.
 
     Returns
     -------
     NodalPlane
         The most likely nodal plane.
     """
-    point = shapely.Point(coordinates.wgs_depth_to_nztm(centroid))
-    line_segments = {
-        shapely.LineString(fault.trace.coords[i : i + 2]): line_segment_strike(
-            *fault.trace.coords[i : i + 2]
-        )
-        for fault in faults
-        for i in range(len(fault.trace.coords) - 1)
-    }
-    closest_segments = sorted(
-        line_segments, key=lambda segment: segment.distance(point)
-    )[:k_neighbours]
-    nodal_plane_1_votes = sum(
-        1
-        / (
-            segment.distance(point)
-            * abs(line_segments[segment] - nodal_plane_1.strike + 1e-5)
-        )
-        for segment in closest_segments
-        if abs(line_segments[segment] - nodal_plane_1.strike)
-        < abs(line_segments[segment] - nodal_plane_2.strike)
-    )
-    nodal_plane_2_votes = sum(
-        1
-        / (
-            segment.distance(point)
-            * abs(line_segments[segment] - nodal_plane_1.strike + 1e-5)
-        )
-        for segment in closest_segments
-        if abs(line_segments[segment] - nodal_plane_1.strike)
-        >= abs(line_segments[segment] - nodal_plane_2.strike)
-    )
+    from source_modelling.focal_mechanism import CMTClassifier
 
-    if nodal_plane_1_votes >= nodal_plane_2_votes:
-        return nodal_plane_1
-
-    return nodal_plane_2
+    classifier = CMTClassifier.from_faults(faults)
+    return classifier.most_likely_nodal_plane(
+        centroid, nodal_plane_1, nodal_plane_2, magnitude
+    )
 
 
 def line_segment_strike(point_a: npt.ArrayLike, point_b: npt.ArrayLike) -> float:
