@@ -28,6 +28,16 @@ from source_modelling import gc2_distances
 _KM_TO_M = 1000
 
 
+class CoordinatesNotOnPlaneError(ValueError):
+    """Raised when global coordinates do not lie within a plane.
+
+    Subclasses :class:`ValueError` for backwards compatibility. It exists so
+    that "this point is not on this plane" can be told apart from "this point
+    cannot be located on this plane", which callers iterating over planes must
+    not treat as a miss.
+    """
+
+
 @dataclasses.dataclass
 class Point:
     """A representation of a point source.
@@ -60,7 +70,7 @@ class Point:
     dip_dir: float
 
     @property
-    def top_m(self) -> float:  # numpydoc ignore=RT01
+    def top_m(self) -> float:
         """float: The top of the point source pseudo-geometry"""
         centroid_depth = self.bounds[-1]
         #   -------------------------+--------
@@ -78,7 +88,7 @@ class Point:
         return centroid_depth - self.width_m * np.sin(np.radians(self.dip)) / 2
 
     @property
-    def bottom_m(self) -> float:  # numpydoc ignore=RT01
+    def bottom_m(self) -> float:
         """float: The bottom of the point source pseudo-geometry"""
         centroid_depth = self.bounds[-1]
 
@@ -104,32 +114,32 @@ class Point:
         return cls(bounds=coordinates.wgs_depth_to_nztm(point_coordinates), **kwargs)
 
     @property
-    def coordinates(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def coordinates(self) -> np.ndarray:
         """np.ndarray: The coordinates of the point in (lat, lon, depth) format. Depth is in metres."""
         return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
-    def length(self) -> float:  # numpydoc ignore=RT01
+    def length(self) -> float:
         """float: The length of the approximating planar patch (in kilometres)."""
         return self.length_m / _KM_TO_M
 
     @property
-    def width(self) -> float:  # numpydoc ignore=RT01
+    def width(self) -> float:
         """float: The width of the approximating planar patch (in kilometres)."""
         return self.width_m / _KM_TO_M
 
     @property
-    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def centroid(self) -> np.ndarray:
         """np.ndarray: The centroid of the point source (which is just the point's coordinates)."""
         return self.coordinates
 
     @property
-    def geometry(self) -> shapely.Point:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Point:
         """shapely.Point: A shapely geometry for the point (projected onto the surface)."""
         return shapely.Point(self.bounds)
 
     @property
-    def geojson(self) -> str:  # numpydoc ignore=RT01
+    def geojson(self) -> str:
         """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
@@ -335,42 +345,42 @@ class Plane:
         return cls(coordinates.wgs_depth_to_nztm(corners))
 
     @property
-    def corners(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def corners(self) -> np.ndarray:
         """np.ndarray: The corners of the fault plane in (lat, lon, depth) format. The corners are the same as in corners_nztm."""
         return coordinates.nztm_to_wgs_depth(self.bounds)
 
     @property
-    def length_m(self) -> float:  # numpydoc ignore=RT01
+    def length_m(self) -> float:
         """float: The length of the fault plane (in metres)."""
         return float(np.linalg.norm(self.bounds[1] - self.bounds[0]))
 
     @property
-    def width_m(self) -> float:  # numpydoc ignore=RT01
+    def width_m(self) -> float:
         """float: The width of the fault plane (in metres)."""
         return float(np.linalg.norm(self.bounds[-1] - self.bounds[0]))
 
     @property
-    def bottom_m(self) -> float:  # numpydoc ignore=RT01
+    def bottom_m(self) -> float:
         """float: The bottom depth (in metres)."""
         return self.bounds[-1, -1]
 
     @property
-    def top_m(self) -> float:  # numpydoc ignore=RT01
+    def top_m(self) -> float:
         """float: The top depth of the fault."""
         return self.bounds[0, -1]
 
     @property
-    def width(self) -> float:  # numpydoc ignore=RT01
+    def width(self) -> float:
         """float: The width of the fault plane (in kilometres)."""
         return self.width_m / _KM_TO_M
 
     @property
-    def length(self) -> float:  # numpydoc ignore=RT01
+    def length(self) -> float:
         """float: The length of the fault plane (in kilometres)."""
         return self.length_m / _KM_TO_M
 
     @property
-    def area(self) -> float:  # numpydoc ignore=RT01
+    def area(self) -> float:
         """float: The area of the plane (in km^2)."""
         return float(
             0.5
@@ -383,24 +393,24 @@ class Plane:
         )
 
     @property
-    def projected_width_m(self) -> float:  # numpydoc ignore=RT01
+    def projected_width_m(self) -> float:
         """float: The projected width of the fault plane (in metres)."""
         return self.width_m * np.cos(np.radians(self.dip))
 
     @property
-    def projected_width(self) -> float:  # numpydoc ignore=RT01
+    def projected_width(self) -> float:
         """float: The projected width of the fault plane (in kilometres)."""
         return self.projected_width_m / _KM_TO_M
 
     @property
-    def strike(self) -> float:  # numpydoc ignore=RT01
+    def strike(self) -> float:
         """float: The WGS84 bearing of the strike direction of the fault (from north; in degrees)."""
         return coordinates.nztm_bearing_to_great_circle_bearing(
             self.corners[0, :2], self.length, self.strike_nztm
         )
 
     @property
-    def strike_nztm(self) -> float:  # numpydoc ignore=RT01
+    def strike_nztm(self) -> float:
         """float: The bearing of the strike direction of the fault (from north; in degrees)."""
         north_direction = np.array([1, 0, 0])
         up_direction = np.array([0, 0, 1])
@@ -410,7 +420,7 @@ class Plane:
         )
 
     @property
-    def dip_dir(self) -> float:  # numpydoc ignore=RT01
+    def dip_dir(self) -> float:
         """float: The WGS84 bearing of the dip direction of the fault (from north; in degrees)."""
         if np.isclose(self.dip, 90):
             return 0.0
@@ -420,7 +430,7 @@ class Plane:
         )
 
     @property
-    def dip_dir_nztm(self) -> float:  # numpydoc ignore=RT01
+    def dip_dir_nztm(self) -> float:
         """float: The bearing of the dip direction (from north; in degrees)."""
         if np.isclose(self.dip, 90):
             return 0  # TODO: Is this right for this case?
@@ -433,12 +443,12 @@ class Plane:
         )
 
     @property
-    def dip(self) -> float:  # numpydoc ignore=RT01
+    def dip(self) -> float:
         """float: The dip angle of the fault."""
         return np.degrees(np.arcsin(np.abs(self.bottom_m - self.top_m) / self.width_m))
 
     @property
-    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Geometry:
         """shapely.Polygon or LineString: A shapely geometry for the plane (projected onto the surface).
 
         Geometry will be a LineString if `dip = 90`.
@@ -448,17 +458,17 @@ class Plane:
         return shapely.Polygon(self.bounds)
 
     @property
-    def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def trace(self) -> np.ndarray:
         """np.ndarray: The trace of the fault plane on the surface."""
         return self.bounds[:2]
 
     @property
-    def trace_geometry(self) -> shapely.LineString:  # numpydoc ignore=RT01
+    def trace_geometry(self) -> shapely.LineString:
         """shapely.LineString: The trace of the fault plane on the surface."""
         return shapely.LineString(self.trace)
 
     @property
-    def geojson(self) -> str:  # numpydoc ignore=RT01
+    def geojson(self) -> str:
         """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(
@@ -715,7 +725,7 @@ class Plane:
         return cls(coordinates.wgs_depth_to_nztm(np.array(corners)))
 
     @property
-    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def centroid(self) -> np.ndarray:
         """np.ndarray: The center of the fault plane."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
@@ -778,19 +788,31 @@ class Plane:
 
         Raises
         ------
-        ValueError
+        CoordinatesNotOnPlaneError
             If the given coordinates do not lie in the fault plane.
+        ValueError
+            If the plane is vertical (``dip == 90``) and no depth is given,
+            because the dip coordinate is then undetermined.
 
         Notes
         -----
         While not passing depth information is supported, depth information
         *greatly* improves the accuracy of the estimation. No guarantees
         are made about the accuracy of the inversion if you do not pass
-        depth information.
+        depth information. Vertical planes are the exception: they project
+        onto a line in plan view, so depth is required rather than merely
+        recommended.
         """
-        coordinate_length = (
-            3 if global_coordinates.shape[-1] == 3 or self.dip == 90 else 2
-        )
+        coordinate_length = 3 if global_coordinates.shape[-1] == 3 else 2
+        if coordinate_length == 2 and self.dip == 90:
+            # A vertical plane projects onto a line in plan view, so a
+            # (lat, lon) pair maps to every depth on the plane and the dip
+            # coordinate is genuinely undetermined. Fail loudly rather than
+            # invent one.
+            raise ValueError(
+                "Depth is required to locate coordinates on a vertical plane "
+                "(dip == 90); the dip coordinate is undetermined without it."
+            )
         strike_direction = (
             self.bounds[1, :coordinate_length] - self.bounds[0, :coordinate_length]
         )
@@ -815,7 +837,9 @@ class Plane:
                 | np.isclose(fault_local_coordinates, 1, atol=tolerance)
             )
         ):
-            raise ValueError("Specified coordinates do not lie in plane")
+            raise CoordinatesNotOnPlaneError(
+                "Specified coordinates do not lie in plane"
+            )
         return np.clip(fault_local_coordinates, 0, 1)
 
     def rrup_distance(self, points: np.ndarray) -> np.ndarray | float:
@@ -1132,27 +1156,27 @@ class Fault:
                 )
 
     @property
-    def top_m(self) -> float:  # numpydoc ignore=RT01
+    def top_m(self) -> float:
         """float: The top-depth of the fault"""
         return self.planes[0].top_m
 
     @property
-    def bottom_m(self) -> float:  # numpydoc ignore=RT01
+    def bottom_m(self) -> float:
         """float: The bottom-depth of the fault"""
         return self.planes[0].bottom_m
 
     @property
-    def dip(self) -> float:  # numpydoc ignore=RT01
+    def dip(self) -> float:
         """float: The dip angle of the fault."""
         return self.planes[0].dip
 
     @property
-    def dip_dir(self) -> float:  # numpydoc ignore=RT01
+    def dip_dir(self) -> float:
         """float: The dip direction of the fault."""
         return self.planes[0].dip_dir
 
     @property
-    def dip_dir_nztm(self) -> float:  # numpydoc ignore=RT01
+    def dip_dir_nztm(self) -> float:
         """float: The dip direction of the fault."""
         return self.planes[0].dip_dir_nztm
 
@@ -1237,17 +1261,17 @@ class Fault:
         return sum(plane.area for plane in self.planes)
 
     @property
-    def lengths(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def lengths(self) -> np.ndarray:
         """np.ndarray: A numpy array of each plane length (in km)."""
         return np.array([fault.length for fault in self.planes])
 
     @property
-    def length(self) -> float:  # numpydoc ignore=RT01
+    def length(self) -> float:
         """float: The total length of each fault plane."""
         return self.lengths.sum()
 
     @property
-    def width(self) -> float:  # numpydoc ignore=RT01
+    def width(self) -> float:
         """The width of the fault.
 
         Returns
@@ -1259,24 +1283,24 @@ class Fault:
         return self.planes[0].width
 
     @property
-    def corners(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def corners(self) -> np.ndarray:
         """np.ndarray of shape (4n x 3): The corners in (lat, lon, depth) format of each fault plane in the fault, stacked vertically."""
         return np.vstack([plane.corners for plane in self.planes])
 
     @property
-    def bounds(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def bounds(self) -> np.ndarray:
         """np.ndarray of shape (4n x 3): The corners in NZTM format of each fault plane in the fault, stacked vertically."""
         return np.vstack([plane.bounds for plane in self.planes])
 
     @property
-    def centroid(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def centroid(self) -> np.ndarray:
         """np.ndarray: The center of the fault."""
         return self.fault_coordinates_to_wgs_depth_coordinates(np.array([1 / 2, 1 / 2]))
 
     @property
     def geometry(
         self,
-    ) -> shapely.Geometry:  # numpydoc ignore=RT01
+    ) -> shapely.Geometry:
         """shapely.Polygon or LineString: A shapely geometry for the fault (projected onto the surface).
 
         Geometry will be LineString if `dip = 90`.
@@ -1288,12 +1312,12 @@ class Fault:
         return geometry
 
     @property
-    def trace(self) -> np.ndarray:  # numpydoc ignore=RT01
+    def trace(self) -> np.ndarray:
         """np.ndarray: The trace of the fault plane on the surface."""
         return np.vstack([plane.trace for plane in self.planes])
 
     @property
-    def trace_geometry(self) -> shapely.LineString:  # numpydoc ignore=RT01
+    def trace_geometry(self) -> shapely.LineString:
         """shapely.LineString: The trace of the fault plane on the surface."""
         return shapely.LineString(self.trace)
 
@@ -1349,12 +1373,12 @@ class Fault:
                 return np.array([left_edges[i], 0]) + plane_coordinates * np.array(
                     [left_edges[i + 1] - left_edges[i], 1]
                 )
-            except ValueError:
+            except CoordinatesNotOnPlaneError:
                 continue
         raise ValueError("Given coordinates are not on fault.")
 
     @property
-    def geojson(self) -> str:  # numpydoc ignore=RT01
+    def geojson(self) -> str:
         """str: A GeoJSON representation of the fault."""
         return shapely.to_geojson(
             shapely.transform(

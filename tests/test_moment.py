@@ -199,7 +199,7 @@ def test_point_source_slip_bad_dataframe():
         }
     )
 
-    moment_newton_metre = moment.magnitude_to_moment(Mw(5.0))
+    moment_newton_metre = moment.magnitude_to_moment(Mw(5.0), bold_m=False)
 
     # Should raise KeyError when trying to access missing columns
     with pytest.raises(KeyError):

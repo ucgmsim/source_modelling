@@ -117,7 +117,7 @@ class Segment:
                 "Cannot convert segment to Plane: missing required attributes."
             )
         strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
-            self.top_centre, self.width, self.strike
+            self.top_centre, self.length, self.strike
         )
         top_centre_nztm = coordinates.wgs_depth_to_nztm(self.top_centre)
         dip_dir = strike_nztm + 90
@@ -156,6 +156,8 @@ class FSPFile:
         The x-coordinate of the hypocentre (along strike, in km).
     hypz : float or None
         The z-coordinate of the hypocentre (along dip, in km).
+    velocity_model : Dataframe or float or None
+        The velocity model used for the inversion.
     length : float
         The length of the rupture (in km).
     width : float

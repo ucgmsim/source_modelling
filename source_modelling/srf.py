@@ -546,12 +546,12 @@ class SrfFile:
         return ds
 
     @property
-    def slip(self):  # numpydoc ignore=RT01
+    def slip(self):
         "csr_array: A sparse array containing slip-time functions for each point."
         return self.slipt1_array
 
     @property
-    def geometry(self) -> shapely.Geometry:  # numpydoc ignore=RT01
+    def geometry(self) -> shapely.Geometry:
         """shapely.Geometry: The shapely geometry of all segments in the SRF."""
         polygons = []
         for i, segment in enumerate(self.segments):
@@ -576,22 +576,22 @@ class SrfFile:
         return shapely.union_all(polygons).normalize()
 
     @property
-    def nt(self):  # numpydoc ignore=RT01
+    def nt(self):
         """int: The number of timeslices in the SRF."""
         return self.slipt1_array.shape[1]
 
     @property
-    def dt(self):  # numpydoc ignore=RT01
+    def dt(self):
         """float: time resolution of SRF."""
         return self.points["dt"].iloc[0]
 
     @property
-    def segments(self) -> Segments:  # numpydoc ignore=RT01
+    def segments(self) -> Segments:
         """Segments: A sequence of segments in the SRF."""
         return Segments(self.header, self.points)
 
     @property
-    def planes(self) -> list[Plane]:  # numpydoc ignore=RT01
+    def planes(self) -> list[Plane]:
         """list[Plane]: The list of planes in the SRF."""
         # The following method relies as little as possible on the SRF header
         # values. This is because they frequently lie! See the darfield SRF
@@ -612,7 +612,13 @@ class SrfFile:
                     segment_header["len"]
                     * 1000
                     / 2
-                    * np.array([np.cos(strike_nztm), np.sin(strike_nztm), 0])
+                    * np.array(
+                        [
+                            np.cos(np.radians(strike_nztm)),
+                            np.sin(np.radians(strike_nztm)),
+                            0,
+                        ]
+                    )
                 )
                 top = coordinates.wgs_depth_to_nztm(
                     segment[["lat", "lon", "dep"]].iloc[0].values

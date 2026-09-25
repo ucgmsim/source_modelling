@@ -9,7 +9,7 @@ import pytest
 import scipy as sp
 import shapely
 
-from qcore import coordinates
+from qcore import coordinates, geo
 from source_modelling import parse_utils, srf
 
 SRF_DIR = Path(__file__).parent / "srfs"
@@ -429,6 +429,59 @@ def test_planes_nstk_1_ndip_gt_1():
     assert plane.strike == pytest.approx(45, abs=1)
     assert plane.length == pytest.approx(10.0, abs=1e-3)
     assert plane.width == pytest.approx(21.235, abs=1e-3)
+
+
+def _nstk_1_srf(
+    stk: float, dip: float = 60.0, length: float = 10.0, width: float = 21.235
+) -> srf.SrfFile:
+    """Build an nstk == 1 SRF whose point column runs down-dip from stk + 90."""
+    elat, elon = -43.5, 172.5
+    ndip = 5
+    dw = width / ndip
+    lats, lons, deps = [], [], []
+    for i in range(ndip):
+        distance = (i + 0.5) * dw
+        lon_i, lat_i = geo.ll_shift(
+            elat, elon, distance * np.cos(np.radians(dip)), (stk + 90.0) % 360.0
+        )[::-1]
+        lats.append(lat_i)
+        lons.append(lon_i)
+        deps.append(distance * np.sin(np.radians(dip)))
+    return srf.SrfFile(
+        version="1.0",
+        header=pd.DataFrame(
+            [
+                {
+                    "elon": elon,
+                    "elat": elat,
+                    "nstk": 1,
+                    "ndip": ndip,
+                    "len": length,
+                    "wid": width,
+                    "stk": stk,
+                    "dip": dip,
+                }
+            ]
+        ),
+        points=pd.DataFrame({"lon": lons, "lat": lats, "dep": deps}),
+        slipt1_array=None,  # ty: ignore[invalid-argument-type]
+    )
+
+
+@pytest.mark.parametrize("stk", [0.0, 20.0, 45.0, 90.0, 135.0, 200.0, 270.0, 330.0])
+def test_planes_nstk_1_strike_recovered(stk: float):
+    """The nstk == 1 branch must recover the header strike for any bearing.
+
+    Regression test: the along-strike offset was built from
+    ``np.cos(strike_nztm)`` without converting the NZTM bearing from degrees
+    to radians, which left the plane pointing in an unrelated direction for
+    every strike except values near 45 degrees, where the error happens to
+    almost cancel.
+    """
+    plane = _nstk_1_srf(stk).planes[0]
+
+    assert (plane.strike - stk + 180) % 360 - 180 == pytest.approx(0, abs=0.1)
+    assert plane.length == pytest.approx(10.0, abs=1e-3)
 
 
 def test_planes_nstk_1_ndip_1():

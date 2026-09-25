@@ -26,7 +26,6 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import NamedTuple
 
-import fiona
 import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
@@ -281,6 +280,27 @@ def load_community_fault_model(
         A list of CommunityFault objects.
     """
     faults = []
+    # fiona is imported here so that the other functions of the cfm module may
+    # be used without requiring it be imported.
+    try:
+        import fiona
+    except ImportError as e:
+        e.add_note(
+            "Fiona can be installed using the optional dependency group fiona, pip install source-modelling[fiona]."
+        )
+        raise
+
+    def feature_trace(feature: fiona.Feature) -> shapely.LineString:
+        points = np.array(feature.geometry.coordinates)[:, ::-1]
+        strike = line_segment_strike(points[0], points[1])
+        try:
+            compass_direction = CompassDirection[feature.properties["Dip_dir"]]
+            if strike > compass_direction.value:
+                points = points[::-1]
+        except KeyError:
+            pass
+        return shapely.LineString(points)
+
     with fiona.open(community_fault_model_shp_ffp) as fault_model_reader:
         fault_status_map = {
             "A-LS": FaultStatus.ACTIVE_SEISOGENIC,
@@ -340,6 +360,7 @@ def load_community_fault_model(
                     comments=feature["properties"]["Comments"],
                 )
             )
+
     return faults
 
 
@@ -501,33 +522,3 @@ def line_segment_strike(point_a: npt.ArrayLike, point_b: npt.ArrayLike) -> float
             ),
         )
     )
-
-
-def feature_trace(feature: fiona.Feature) -> shapely.LineString:
-    """Extract the trace of a fault feature as a LineString.
-
-    The trace is oriented so that, where the CFM records a dip direction,
-    the fault dips to the right of the trace direction (strike + 90).
-
-    Parameters
-    ----------
-    feature : fiona.Feature
-        The feature from which to extract the trace.
-
-    Returns
-    -------
-    shapely.LineString
-        The extracted trace as a LineString.
-    """
-    points = np.array(feature.geometry.coordinates)[:, ::-1]
-    strike = line_segment_strike(points[0], points[-1])
-    try:
-        compass_direction = CompassDirection[feature.properties["Dip_dir"]]
-    except KeyError:
-        return shapely.LineString(points)
-    # Orient the trace so that the dip direction is strike + 90 (Aki-Richards
-    # convention): reverse it if the recorded dip direction lies to the left.
-    dip_direction_misfit = (strike + 90 - compass_direction.value + 180) % 360 - 180
-    if abs(dip_direction_misfit) > 90:
-        points = points[::-1]
-    return shapely.LineString(points)

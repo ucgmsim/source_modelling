@@ -3,7 +3,7 @@ use crate::types::{
 };
 use std::io::{Result, Write};
 
-use lexical_core::{ToLexical, BUFFER_SIZE};
+use lexical_core::{BUFFER_SIZE, ToLexical};
 
 fn lexical_write<W: Write, T: ToLexical>(
     writer: &mut W,
