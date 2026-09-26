@@ -318,7 +318,11 @@ def antipodal_points(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     if len(points) == 1:
         raise ValueError("Cannot find antipodal pair with only one point.")
     hull = shapely.convex_hull(shapely.multipoints(points))
-    hull_points = shapely.get_coordinates(hull)
+    # Explicit 2-D shape so type checkers can resolve the row type when
+    # iterating below, rather than falling back to `Any`.
+    hull_points: np.ndarray[tuple[int, int], np.dtype[np.float64]] = (
+        shapely.get_coordinates(hull)
+    )
 
     # Shapely polygons repeat the first point at the end to close the
     # exterior ring. Removing this doesn't change the result because
@@ -326,9 +330,12 @@ def antipodal_points(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     if isinstance(hull, shapely.Polygon):
         hull_points = hull_points[:-1]
 
+    def squared_distance(pair: tuple[np.ndarray, np.ndarray]) -> float:
+        return float(np.square(pair[1] - pair[0]).sum())
+
     return max(
-        (pair for pair in itertools.combinations(hull_points, 2)),
-        key=lambda pair: np.square(pair[1] - pair[0]).sum(),
+        itertools.combinations(hull_points, 2),
+        key=squared_distance,
     )
 
 
