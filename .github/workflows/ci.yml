@@ -1,14 +1,16 @@
 name: CI
 
-on: [pull_request]
+on:
+  pull_request:
+  push:
+    branches: [main]
 
 jobs:
   ci:
-    uses: ucgmsim/meta-ci-action/.github/workflows/ci.yml@main
+    uses: ucgmsim/meta-ci-action/.github/workflows/ci.yml@v2
     with:
-      package-dir: source_modelling
       system-packages: "gmt libgmt-dev ghostscript gdal-bin libgdal-dev"
       uv-extra-args: "--all-groups --all-extras"
-      numpydoc-extra-excludes: "-E ccldpy.py"
+      exclude-init: false
       enable-coverage: true
       cov-package: source_modelling
