@@ -386,8 +386,8 @@ class SrfFile:
         assert SW4_PLANE_DTYPE.names is not None
         for field in SW4_PLANE_DTYPE.names:
             plane_data[field] = self.header[field.lower()].values.astype(
-                SW4_PLANE_DTYPE[field].type  # ty: ignore[invalid-argument-type]
-            )  # ty: ignore[invalid-assignment]
+                SW4_PLANE_DTYPE[field].type
+            )
 
         # Build POINTS structured array
         points_data: np.ndarray = np.zeros(len(self.points), dtype=SW4_POINTS_DTYPE)
@@ -397,7 +397,7 @@ class SrfFile:
                 continue
             points_data[field] = self.points[
                 "slip" if field == "SLIP1" else field.lower()
-            ].values.astype(SW4_POINTS_DTYPE[field].type)  # ty: ignore
+            ].values.astype(SW4_POINTS_DTYPE[field].type)
 
         points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
         if (
