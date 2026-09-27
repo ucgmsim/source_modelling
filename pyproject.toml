@@ -113,7 +113,7 @@ omit = [
 
 [tool.npdlint]
 include = ["source_modelling"]
-extend-exclude = ['source_modelling/ccldpy.py']
+extend-exclude = ["**/__init__.py", 'source_modelling/ccldpy.py']
 select = [
   "GL05",
   "GL08",
