@@ -38,6 +38,17 @@ fn point_samples<'a>(
         return Err(WriteError::Slip { point, start });
     }
     let end = indices.last().map_or(start, |&last| last as usize + 1);
+    // Iterator explanation:
+    // 1. Iterate for each timestep between the timestep `start` and `end`,
+    // 2. If the next stored column is this timestep, pop it and report its value,
+    // 3. Otherwise return 0.0.
+    //
+    // e.g. start = 5, indices = [6, 8], data = [1.0, 2.0]:
+    //
+    //   timestep:   5     6     7     8
+    //   stored:           6           8
+    //                     |           |
+    //   output:    0.0   1.0   0.0   2.0
     let mut stored = indices.iter().zip(data).peekable();
     Ok((start..end).map(move |column| {
         stored
