@@ -1,3 +1,4 @@
+import dataclasses
 import gzip
 import tempfile
 from pathlib import Path
@@ -387,6 +388,39 @@ def test_writing_christchurch():
         assert christchurch_srf.header.equals(christchurch_srf_tmp.header)
         assert christchurch_srf.points.equals(christchurch_srf_tmp.points)
         assert (christchurch_srf.slip != christchurch_srf_tmp.slip).nnz == 0
+
+
+def test_writing_slip_without_explicit_zeros(tmp_path: Path):
+    """Check that a slip matrix storing no zeros keeps its timing on write.
+
+    The parser stores every sample, zeros included, but a csr_array built from
+    a dense array does not. The writer must fill those gaps back in rather than
+    packing the stored values together."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    dense = christchurch_srf.slip.toarray()
+    sparse_srf = dataclasses.replace(
+        christchurch_srf, slipt1_array=sp.sparse.csr_array(dense)
+    )
+    # Sanity check: the rebuilt matrix really does drop stored zeros.
+    assert sparse_srf.slip.nnz < christchurch_srf.slip.nnz
+    out = tmp_path / "sparse.srf"
+    srf.write_srf(out, sparse_srf)
+    reread = srf.read_srf(out)
+    assert christchurch_srf.points.equals(reread.points)
+    np.testing.assert_array_equal(reread.slip.toarray(), dense)
+
+
+def test_writing_slip_before_tinit_raises(tmp_path: Path):
+    """Check that slip before a point's tinit is rejected, not silently shifted."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    slip = christchurch_srf.slip.tolil()
+    # Row 0 starts with a zero at floor(tinit / dt); put slip one step before it.
+    first = christchurch_srf.slip.indices[christchurch_srf.slip.indptr[0]]
+    assert first > 0
+    slip[0, first - 1] = 1.0
+    bad_srf = dataclasses.replace(christchurch_srf, slipt1_array=slip.tocsr())
+    with pytest.raises(ValueError, match="before its first timestep"):
+        srf.write_srf(tmp_path / "bad.srf", bad_srf)
 
 
 def test_planes_nstk_1_ndip_gt_1():
@@ -801,6 +835,75 @@ def test_write_read_srf_v2(tmp_path: Path):
     assert srf_v2.header.equals(reread.header)
     assert srf_v2.points.equals(reread.points)
     assert (srf_v2.slip != reread.slip).nnz == 0
+
+
+def test_sw4_hdf5_slip_without_explicit_zeros(tmp_path: Path):
+    """Check that write_sw4_hdf5 writes implicit zeros so timing is kept."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    sparse_srf = dataclasses.replace(
+        christchurch_srf,
+        slipt1_array=sp.sparse.csr_array(christchurch_srf.slip.toarray()),
+    )
+    assert sparse_srf.slip.nnz < christchurch_srf.slip.nnz
+    expected = tmp_path / "expected.h5"
+    actual = tmp_path / "actual.h5"
+    christchurch_srf.write_sw4_hdf5(expected)
+    sparse_srf.write_sw4_hdf5(actual)
+    with h5py.File(expected, "r") as want, h5py.File(actual, "r") as got:
+        np.testing.assert_array_equal(got["POINTS"]["NT1"], want["POINTS"]["NT1"])
+        np.testing.assert_array_equal(got["SR1"][:], want["SR1"][:])
+
+
+def test_sw4_hdf5_slip_before_tinit_raises(tmp_path: Path):
+    """Check that write_sw4_hdf5 rejects slip before a point's tinit."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    slip = christchurch_srf.slip.tolil()
+    first = christchurch_srf.slip.indices[christchurch_srf.slip.indptr[0]]
+    slip[0, first - 1] = 1.0
+    bad_srf = dataclasses.replace(christchurch_srf, slipt1_array=slip.tocsr())
+    with pytest.raises(ValueError, match="before its first timestep"):
+        bad_srf.write_sw4_hdf5(tmp_path / "bad.h5")
+
+
+def test_slip_crosses_rust_boundary_without_copies():
+    """Check that int32/float32 slip arrays are shared with Rust, not copied."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    slip = christchurch_srf.slip
+    assert slip.indptr.dtype == np.int32
+    assert slip.indices.dtype == np.int32
+    assert slip.data.dtype == np.float32
+    rust_slip = christchurch_srf._slipt1_for_rust()
+    assert np.shares_memory(rust_slip.row_ptr, slip.indptr)
+    assert np.shares_memory(rust_slip.indices, slip.indices)
+    assert np.shares_memory(rust_slip.data, slip.data)
+
+
+def test_writing_non_canonical_slip(tmp_path: Path):
+    """Check that unsorted and duplicate column indices are summed on write."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    slip = christchurch_srf.slip
+    # Reverse each row's entries and split each value across two duplicates.
+    order = np.concatenate(
+        [
+            np.arange(start, end)[::-1]
+            for start, end in zip(slip.indptr[:-1], slip.indptr[1:])
+        ]
+    )
+    shuffled = sp.sparse.csr_array(
+        (
+            np.repeat(slip.data[order] / 2, 2),
+            np.repeat(slip.indices[order], 2),
+            slip.indptr * 2,
+        ),
+        shape=slip.shape,
+    )
+    assert not shuffled.has_canonical_format
+    out = tmp_path / "shuffled.srf"
+    srf.write_srf(out, dataclasses.replace(christchurch_srf, slipt1_array=shuffled))
+    reread = srf.read_srf(out)
+    np.testing.assert_array_equal(reread.slip.toarray(), slip.toarray())
+    # The caller's matrix is left untouched.
+    assert not shuffled.has_canonical_format
 
 
 def test_sw4_hdf5_v2(tmp_path: Path):

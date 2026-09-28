@@ -2,7 +2,8 @@ use thiserror::Error;
 
 use crate::scanner;
 use crate::types::{
-    CsrMatrix, Point, PointV2, SrfFile, SrfMetadata, SrfMetadataV2, SrfMetadataVersioned, SrfPlane,
+    CsrIndexOverflow, CsrMatrix, Point, PointV2, SrfFile, SrfMetadata, SrfMetadataV2,
+    SrfMetadataVersioned, SrfPlane, starting_column,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -39,6 +40,8 @@ pub enum SrfParseError {
     },
     #[error("SRF parser does not support slip{0} array ")]
     UnsupportedSlipArray(usize),
+    #[error(transparent)]
+    CsrIndexOverflow(#[from] CsrIndexOverflow),
 }
 
 fn read_srf_header(
@@ -116,8 +119,7 @@ fn read_slip_row(
     nt: usize,
 ) -> Result<(), SrfParseError> {
     let _slip2 = scanner.next::<f32>()?;
-    // The choice between round and floor is relatively arbitrary. We choose floor here.
-    let starting = (tinit / dt).floor() as usize;
+    let starting = starting_column(tinit, dt);
 
     let nt2 = scanner.next::<usize>()?;
     if nt2 != 0 {
@@ -131,7 +133,7 @@ fn read_slip_row(
     }
     itertools::process_results((0..nt).map(|_| scanner.next()), |clean_iter| {
         slipt1.add_row(starting, clean_iter)
-    })?;
+    })??;
     Ok(())
 }
 

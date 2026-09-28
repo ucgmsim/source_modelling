@@ -1,5 +1,6 @@
 use numpy::PyArray1;
 use pyo3::prelude::*;
+use thiserror::Error;
 
 use crate::pytypes::{PyCsrMatrix, PySrfFile, PySrfMetadata, PySrfPlane};
 
@@ -71,18 +72,30 @@ impl<'py> IntoPyObject<'py> for SrfPlane {
 /// CSR matrix over any storage: `Vec`s when parsing (the parser appends), or
 /// borrowed slices when writing data that another allocator (e.g. numpy) owns.
 ///
+/// The layout is exactly scipy's `csr_array` with int32 index arrays, so the
+/// matrix crosses the Python boundary in both directions without copies.
 /// `row_ptr` follows the scipy `indptr` convention: an n-row matrix has n+1
 /// entries, `row_ptr[0] == 0`, `row_ptr[n] == data.len()`, and row i occupies
-/// `data[row_ptr[i]..row_ptr[i + 1]]`. This holds after every `add_row`, so the
-/// matrix can be handed to scipy or iterated at any point without a fixup pass.
+/// `indices[row_ptr[i]..row_ptr[i + 1]]` and `data[row_ptr[i]..row_ptr[i + 1]]`.
+/// This holds after every `add_row`, so the matrix can be handed to scipy or
+/// iterated at any point without a fixup pass.
+///
+/// Row i, column j is the slip rate of point i at timestep j on the global
+/// timeline. Columns the matrix leaves out are zero, as in scipy.
 #[derive(Debug)]
-pub struct CsrMatrix<R = Vec<usize>, D = Vec<f32>> {
+pub struct CsrMatrix<R = Vec<i32>, D = Vec<f32>> {
     pub indices: R,
     pub row_ptr: R,
     pub data: D,
 }
 
-pub type CsrMatrixView<'a> = CsrMatrix<&'a [usize], &'a [f32]>;
+pub type CsrMatrixView<'a> = CsrMatrix<&'a [i32], &'a [f32]>;
+
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error(
+    "slipt1 needs more than i32::MAX values or timesteps, which int32 CSR indices cannot address"
+)]
+pub struct CsrIndexOverflow;
 
 impl<'py> IntoPyObject<'py> for CsrMatrix {
     type Target = PyCsrMatrix;
@@ -116,15 +129,23 @@ impl CsrMatrix {
         }
     }
 
-    pub fn add_row<I>(&mut self, starting: usize, values: I)
+    /// Appends a row whose values sit at consecutive columns from `starting`.
+    pub fn add_row<I>(&mut self, starting: usize, values: I) -> Result<(), CsrIndexOverflow>
     where
         I: Iterator<Item = f32>,
     {
+        let starting = i32::try_from(starting).map_err(|_| CsrIndexOverflow)?;
         for (i, v) in values.enumerate() {
-            self.indices.push(starting + i);
+            let column = i32::try_from(i)
+                .ok()
+                .and_then(|i| starting.checked_add(i))
+                .ok_or(CsrIndexOverflow)?;
+            self.indices.push(column);
             self.data.push(v);
         }
-        self.row_ptr.push(self.data.len());
+        self.row_ptr
+            .push(i32::try_from(self.data.len()).map_err(|_| CsrIndexOverflow)?);
+        Ok(())
     }
 
     pub fn finalise(&mut self) {
@@ -134,24 +155,121 @@ impl CsrMatrix {
     }
 }
 
-impl<R: AsRef<[usize]>, D: AsRef<[f32]>> CsrMatrix<R, D> {
+/// Column of a point's first slipt1 sample on the global timeline. The parser
+/// and writer must agree on this, or written rows shift in time on re-read.
+pub fn starting_column(tinit: f32, dt: f32) -> usize {
+    // The choice between round and floor is relatively arbitrary. We choose floor here.
+    (tinit / dt).floor() as usize
+}
+
+impl<R: AsRef<[i32]>, D: AsRef<[f32]>> CsrMatrix<R, D> {
     pub fn rows(&self) -> CsrRowIter<'_> {
         CsrRowIter {
             row_ptr: self.row_ptr.as_ref(),
+            indices: self.indices.as_ref(),
             data: self.data.as_ref(),
             index: 0,
         }
     }
 }
 
+/// One row of a `CsrMatrix`: the stored columns and their values.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CsrRow<'a> {
+    pub indices: &'a [i32],
+    pub data: &'a [f32],
+}
+
+/// Why a CSR row cannot be written as an SRF slip-rate function.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum SlipRowError {
+    #[error(
+        "column indices are not sorted and unique (call sum_duplicates() on the csr_array first)"
+    )]
+    NonCanonical,
+    #[error(
+        "it has a value at timestep {column}, before its first timestep floor(tinit / dt) = {start}"
+    )]
+    BeforeStart { column: i64, start: usize },
+}
+
+impl<'a> CsrRow<'a> {
+    /// The row as an SRF stores it: one sample per timestep from `start` (see
+    /// `starting_column`) to the last stored column. An SRF only records where
+    /// a row starts, so columns the CSR leaves out must come back as explicit
+    /// zeros or the samples after them shift earlier in time on re-read.
+    pub fn samples(&self, start: usize) -> Result<Samples<'a>, SlipRowError> {
+        if self.indices.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(SlipRowError::NonCanonical);
+        }
+        let (Some(&first), Some(&last)) = (self.indices.first(), self.indices.last()) else {
+            return Ok(Samples {
+                indices: &[],
+                data: &[],
+                column: start,
+                end: start,
+            });
+        };
+        if i64::from(first) < start as i64 {
+            return Err(SlipRowError::BeforeStart {
+                column: first.into(),
+                start,
+            });
+        }
+        Ok(Samples {
+            indices: self.indices,
+            data: self.data,
+            column: start,
+            end: last as usize + 1,
+        })
+    }
+}
+
+/// Dense samples of a `CsrRow`, yielding 0.0 for columns it does not store.
+pub struct Samples<'a> {
+    indices: &'a [i32],
+    data: &'a [f32],
+    column: usize,
+    end: usize,
+}
+
+impl Iterator for Samples<'_> {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<f32> {
+        if self.column == self.end {
+            return None;
+        }
+        let value = match self.indices.first() {
+            Some(&stored) if stored as usize == self.column => {
+                let value = self.data[0];
+                self.indices = &self.indices[1..];
+                self.data = &self.data[1..];
+                value
+            }
+            _ => 0.0,
+        };
+        self.column += 1;
+        Some(value)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.end - self.column;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for Samples<'_> {}
+
 pub struct CsrRowIter<'a> {
-    row_ptr: &'a [usize],
+    row_ptr: &'a [i32],
+    indices: &'a [i32],
     data: &'a [f32],
     index: usize,
 }
 
 impl<'a> Iterator for CsrRowIter<'a> {
-    type Item = &'a [f32];
+    type Item = CsrRow<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let i = self.index;
@@ -161,7 +279,11 @@ impl<'a> Iterator for CsrRowIter<'a> {
             return None;
         }
         self.index += 1;
-        Some(&self.data[self.row_ptr[i]..self.row_ptr[i + 1]])
+        let span = self.row_ptr[i] as usize..self.row_ptr[i + 1] as usize;
+        Some(CsrRow {
+            indices: &self.indices[span.clone()],
+            data: &self.data[span],
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -172,8 +294,8 @@ impl<'a> Iterator for CsrRowIter<'a> {
 
 impl ExactSizeIterator for CsrRowIter<'_> {}
 
-impl<'a, R: AsRef<[usize]>, D: AsRef<[f32]>> IntoIterator for &'a CsrMatrix<R, D> {
-    type Item = &'a [f32];
+impl<'a, R: AsRef<[i32]>, D: AsRef<[f32]>> IntoIterator for &'a CsrMatrix<R, D> {
+    type Item = CsrRow<'a>;
     type IntoIter = CsrRowIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -188,9 +310,13 @@ mod csr_tests {
     fn build(rows: &[&[f32]]) -> CsrMatrix {
         let mut matrix = CsrMatrix::new(rows.len(), rows.iter().map(|row| row.len()).sum());
         for row in rows {
-            matrix.add_row(0, row.iter().copied());
+            matrix.add_row(0, row.iter().copied()).unwrap();
         }
         matrix
+    }
+
+    fn row_values(matrix: &CsrMatrix) -> Vec<Vec<f32>> {
+        matrix.rows().map(|row| row.data.to_vec()).collect()
     }
 
     // row_ptr must be a valid scipy indptr after every add_row, not just once
@@ -198,7 +324,7 @@ mod csr_tests {
     fn assert_indptr_invariant(matrix: &CsrMatrix, rows: usize) {
         assert_eq!(matrix.row_ptr.len(), rows + 1);
         assert_eq!(matrix.row_ptr[0], 0);
-        assert_eq!(*matrix.row_ptr.last().unwrap(), matrix.data.len());
+        assert_eq!(*matrix.row_ptr.last().unwrap() as usize, matrix.data.len());
         assert!(matrix.row_ptr.windows(2).all(|w| w[0] <= w[1]));
     }
 
@@ -213,7 +339,7 @@ mod csr_tests {
     fn invariant_holds_after_every_add_row() {
         let mut matrix = CsrMatrix::new(3, 6);
         for (i, row) in [&[1.0f32, 2.0][..], &[][..], &[3.0][..]].iter().enumerate() {
-            matrix.add_row(0, row.iter().copied());
+            matrix.add_row(0, row.iter().copied()).unwrap();
             assert_indptr_invariant(&matrix, i + 1);
         }
     }
@@ -223,8 +349,8 @@ mod csr_tests {
     #[test]
     fn starting_offset_shifts_column_indices() {
         let mut matrix = CsrMatrix::new(2, 4);
-        matrix.add_row(0, [1.0f32, 2.0].into_iter());
-        matrix.add_row(1, [3.0f32, 4.0].into_iter());
+        matrix.add_row(0, [1.0f32, 2.0].into_iter()).unwrap();
+        matrix.add_row(1, [3.0f32, 4.0].into_iter()).unwrap();
         assert_eq!(matrix.indices, vec![0, 1, 1, 2]);
         assert_eq!(matrix.row_ptr, vec![0, 2, 4]);
         // Widest column touched is 2, so the matrix spans 3 columns.
@@ -232,10 +358,21 @@ mod csr_tests {
     }
 
     #[test]
+    fn column_beyond_i32_is_rejected() {
+        let mut matrix = CsrMatrix::new(1, 1);
+        let starting = i32::MAX as usize + 1;
+        assert_eq!(
+            matrix.add_row(starting, [1.0f32].into_iter()),
+            Err(CsrIndexOverflow)
+        );
+    }
+
+    #[test]
     fn rows_yields_exactly_the_added_rows() {
         let matrix = build(&[&[1.0, 2.0], &[], &[3.0]]);
-        let rows: Vec<&[f32]> = matrix.rows().collect();
-        assert_eq!(rows, vec![&[1.0f32, 2.0][..], &[][..], &[3.0][..]]);
+        assert_eq!(row_values(&matrix), vec![vec![1.0, 2.0], vec![], vec![3.0]]);
+        let indices: Vec<&[i32]> = matrix.rows().map(|row| row.indices).collect();
+        assert_eq!(indices, vec![&[0, 1][..], &[][..], &[0][..]]);
     }
 
     // The bug this guards: a trailing empty phantom row, previously produced by
@@ -243,11 +380,10 @@ mod csr_tests {
     #[test]
     fn finalise_does_not_change_the_rows() {
         let mut matrix = build(&[&[1.0, 2.0], &[3.0]]);
-        let before: Vec<Vec<f32>> = matrix.rows().map(|row| row.to_vec()).collect();
+        let before = row_values(&matrix);
         let row_ptr_before = matrix.row_ptr.clone();
         matrix.finalise();
-        let after: Vec<Vec<f32>> = matrix.rows().map(|row| row.to_vec()).collect();
-        assert_eq!(before, after);
+        assert_eq!(before, row_values(&matrix));
         assert_eq!(matrix.row_ptr, row_ptr_before);
     }
 
@@ -262,6 +398,79 @@ mod csr_tests {
                 break;
             }
         }
+    }
+
+    fn samples(indices: &[i32], data: &[f32], start: usize) -> Result<Vec<f32>, SlipRowError> {
+        CsrRow { indices, data }
+            .samples(start)
+            .map(|samples| samples.collect())
+    }
+
+    // The bug this guards: rows without explicit zeros (e.g. scipy's
+    // csr_array(dense)) were written packed together, shifting them earlier
+    // in time on re-read.
+    #[test]
+    fn samples_fill_leading_and_interior_zeros() {
+        assert_eq!(
+            samples(&[6, 8], &[1.0, 2.0], 5),
+            Ok(vec![0.0, 1.0, 0.0, 2.0])
+        );
+    }
+
+    #[test]
+    fn samples_of_dense_row_are_its_values() {
+        assert_eq!(
+            samples(&[5, 6, 7], &[1.0, 2.0, 3.0], 5),
+            Ok(vec![1.0, 2.0, 3.0])
+        );
+    }
+
+    #[test]
+    fn samples_of_empty_row_are_empty() {
+        let row = CsrRow {
+            indices: &[],
+            data: &[],
+        };
+        assert_eq!(row.samples(5).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn samples_length_is_exact() {
+        let row = CsrRow {
+            indices: &[6, 8],
+            data: &[1.0, 2.0],
+        };
+        assert_eq!(row.samples(5).unwrap().len(), 4);
+    }
+
+    #[test]
+    fn samples_before_start_are_rejected() {
+        assert_eq!(
+            samples(&[4, 5], &[1.0, 2.0], 5),
+            Err(SlipRowError::BeforeStart {
+                column: 4,
+                start: 5
+            })
+        );
+        assert_eq!(
+            samples(&[-1], &[1.0], 0),
+            Err(SlipRowError::BeforeStart {
+                column: -1,
+                start: 0
+            })
+        );
+    }
+
+    #[test]
+    fn samples_of_non_canonical_row_are_rejected() {
+        assert_eq!(
+            samples(&[7, 5], &[1.0, 2.0], 5),
+            Err(SlipRowError::NonCanonical)
+        );
+        assert_eq!(
+            samples(&[5, 5], &[1.0, 2.0], 5),
+            Err(SlipRowError::NonCanonical)
+        );
     }
 }
 
@@ -548,13 +757,13 @@ impl<'py> IntoPyObject<'py> for SrfMetadataVersioned {
 }
 
 #[derive(Debug)]
-pub struct SrfFile<S = Vec<f32>, R = Vec<usize>> {
+pub struct SrfFile<S = Vec<f32>, R = Vec<i32>> {
     pub planes: Vec<SrfPlane>,
     pub metadata: SrfMetadataVersioned<S>,
     pub slipt1: CsrMatrix<R, S>,
 }
 
-pub type SrfFileView<'a> = SrfFile<&'a [f32], &'a [usize]>;
+pub type SrfFileView<'a> = SrfFile<&'a [f32], &'a [i32]>;
 
 impl<'py> IntoPyObject<'py> for SrfFile {
     type Target = PySrfFile;

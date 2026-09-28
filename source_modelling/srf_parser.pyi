@@ -31,13 +31,13 @@ class PySrfPlane:
     ) -> None: ...
 
 class PyCsrMatrix:
-    row_ptr: npt.NDArray[np.uintp]
-    indices: npt.NDArray[np.uintp]
+    row_ptr: npt.NDArray[np.int32]
+    indices: npt.NDArray[np.int32]
     data: npt.NDArray[np.float32]
     def __init__(
         self,
-        row_ptr: npt.NDArray[np.uintp],
-        indices: npt.NDArray[np.uintp],
+        row_ptr: npt.NDArray[np.int32],
+        indices: npt.NDArray[np.int32],
         data: npt.NDArray[np.float32],
     ) -> None: ...
 
@@ -85,3 +85,8 @@ class PySrfFile:
 
 def parse_srf(buffer: Any) -> PySrfFile: ...
 def write_srf(py_srf_file: PySrfFile, file_path: str) -> None: ...
+def dense_slip_rows(
+    slipt1: PyCsrMatrix,
+    tinit: npt.NDArray[np.float32],
+    dt: npt.NDArray[np.float32],
+) -> tuple[npt.NDArray[np.int32], npt.NDArray[np.float32]]: ...
