@@ -356,21 +356,7 @@ class SrfFile:
         srf_parser.write_srf(py_srf_file, str(srf_ffp))
 
     def _slipt1_for_rust(self) -> srf_parser.PyCsrMatrix:
-        """Wrap slipt1_array as the int32 CSR matrix the Rust extension expects.
-
-        Arrays already in canonical form with int32 indices and float32 data
-        are passed through without copying.
-
-        Returns
-        -------
-        srf_parser.PyCsrMatrix
-            The slip matrix for the Rust extension.
-
-        Raises
-        ------
-        ValueError
-            If slipt1_array is too large for int32 indices.
-        """
+        """Wrap slipt1_array as an int32 CSR matrix for Rust, copying only if needed."""
         slip = self.slipt1_array
         if not slip.has_canonical_format:
             # The writers need sorted, unique column indices per row.

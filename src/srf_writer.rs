@@ -1,8 +1,9 @@
 use crate::types::{
-    CsrIndexOverflow, CsrMatrix, CsrRow, Point, Samples, SlipRowError, SrfFile, SrfMetadata,
-    SrfMetadataV2, SrfMetadataVersioned, SrfPlane, starting_column,
+    CsrMatrix, Point, SrfFile, SrfMetadata, SrfMetadataV2, SrfMetadataVersioned, SrfPlane,
+    starting_column,
 };
 use std::io::{self, Write};
+use std::iter;
 use thiserror::Error;
 
 use lexical_core::{BUFFER_SIZE, ToLexical};
@@ -11,26 +12,42 @@ use lexical_core::{BUFFER_SIZE, ToLexical};
 pub enum WriteError {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("cannot write slipt1 row {point}: {source}")]
-    Slip { point: usize, source: SlipRowError },
-    #[error(transparent)]
-    CsrIndexOverflow(#[from] CsrIndexOverflow),
+    #[error(
+        "slipt1 row {point} must have sorted, unique column indices no earlier than its first timestep floor(tinit / dt) = {start}"
+    )]
+    Slip { point: usize, start: usize },
 }
 
 type Result<T> = std::result::Result<T, WriteError>;
 
-// The samples an SRF stores for point number `index`, starting at its tinit.
-fn point_samples<'a>(index: usize, row: CsrRow<'a>, tinit: f32, dt: f32) -> Result<Samples<'a>> {
-    row.samples(starting_column(tinit, dt))
-        .map_err(|source| WriteError::Slip {
-            point: index,
-            source,
-        })
+// The samples an SRF stores for a point: one per timestep from floor(tinit /
+// dt) to the row's last stored column. An SRF records only where a row starts,
+// so columns slipt1 leaves out must be written as explicit zeros or the
+// samples after them shift earlier in time on re-read.
+fn point_samples<'a>(
+    point: usize,
+    (indices, data): (&'a [i32], &'a [f32]),
+    tinit: f32,
+    dt: f32,
+) -> Result<impl ExactSizeIterator<Item = f32> + 'a> {
+    let start = starting_column(tinit, dt);
+    let columns_increase_from_start = iter::once(start as i64 - 1)
+        .chain(indices.iter().map(|&column| i64::from(column)))
+        .is_sorted_by(|a, b| a < b);
+    if !columns_increase_from_start {
+        return Err(WriteError::Slip { point, start });
+    }
+    let end = indices.last().map_or(start, |&last| last as usize + 1);
+    let mut stored = indices.iter().zip(data).peekable();
+    Ok((start..end).map(move |column| {
+        stored
+            .next_if(|&(&stored_column, _)| stored_column as usize == column)
+            .map_or(0.0, |(_, &value)| value)
+    }))
 }
 
 /// Expands slipt1 into the per-point sample runs SRF-style formats store: the
-/// sample count of each point and all of their samples concatenated. See
-/// `CsrRow::samples`.
+/// sample count of each point and all of their samples concatenated.
 pub fn dense_slip_rows<R: AsRef<[i32]>, D: AsRef<[f32]>>(
     slipt1: &CsrMatrix<R, D>,
     tinit: &[f32],
@@ -38,9 +55,11 @@ pub fn dense_slip_rows<R: AsRef<[i32]>, D: AsRef<[f32]>>(
 ) -> Result<(Vec<i32>, Vec<f32>)> {
     let mut counts = Vec::with_capacity(slipt1.rows().len());
     let mut data = Vec::with_capacity(slipt1.data.as_ref().len());
-    for (index, ((row, &tinit), &dt)) in slipt1.rows().zip(tinit).zip(dt).enumerate() {
-        let samples = point_samples(index, row, tinit, dt)?;
-        counts.push(i32::try_from(samples.len()).map_err(|_| CsrIndexOverflow)?);
+    for (point, ((row, &tinit), &dt)) in slipt1.rows().zip(tinit).zip(dt).enumerate() {
+        let samples = point_samples(point, row, tinit, dt)?;
+        // Columns are int32 and the Python side keeps them below i32::MAX, so
+        // a row's sample count fits too.
+        counts.push(samples.len() as i32);
         data.extend(samples);
     }
     Ok((counts, data))
@@ -84,7 +103,7 @@ fn write_point<W: Write>(writer: &mut W, point: &Point, buffer: &mut [u8]) -> Re
 fn write_slip_row<W: Write>(
     writer: &mut W,
     point: &Point,
-    samples: Samples,
+    samples: impl ExactSizeIterator<Item = f32>,
     buffer: &mut [u8],
 ) -> Result<()> {
     lexical_write(writer, point.rake, buffer)?;
@@ -111,8 +130,8 @@ fn write_srf_points_v1<W: Write, S: AsRef<[f32]>, R: AsRef<[i32]>, D: AsRef<[f32
     lexical_write(writer, metadata.iter().len(), &mut buffer)?;
     writer.write_all(b"\n")?;
 
-    for (index, (point, row)) in metadata.iter().zip(slipt1.rows()).enumerate() {
-        let samples = point_samples(index, row, point.tinit, point.dt)?;
+    for (point_index, (point, row)) in metadata.iter().zip(slipt1.rows()).enumerate() {
+        let samples = point_samples(point_index, row, point.tinit, point.dt)?;
         write_point(writer, &point, &mut buffer)?;
         writer.write_all(b"\n")?;
         write_slip_row(writer, &point, samples, &mut buffer)?;
@@ -135,8 +154,8 @@ fn write_srf_points_v2<W: Write, S: AsRef<[f32]>, R: AsRef<[i32]>, D: AsRef<[f32
         let plane_point_count = plane.points();
         lexical_write(writer, plane_point_count, &mut buffer)?;
         writer.write_all(b"\n")?;
-        for (index, (point, row)) in point_iter.by_ref().take(plane_point_count) {
-            let samples = point_samples(index, row, point.base.tinit, point.base.dt)?;
+        for (point_index, (point, row)) in point_iter.by_ref().take(plane_point_count) {
+            let samples = point_samples(point_index, row, point.base.tinit, point.base.dt)?;
             write_point(writer, &point.base, &mut buffer)?;
             writer.write_all(b" ")?;
             lexical_write(writer, point.vs, &mut buffer)?;
@@ -365,29 +384,14 @@ POINTS 1\n\
     fn value_before_tinit_is_rejected() {
         let srf = single_point_srf(vec![4, 5], vec![1.0, 2.0]);
         let err = write_srf(&mut Vec::new(), &srf).unwrap_err();
-        assert!(matches!(
-            err,
-            WriteError::Slip {
-                point: 0,
-                source: SlipRowError::BeforeStart {
-                    column: 4,
-                    start: 5
-                }
-            }
-        ));
+        assert!(matches!(err, WriteError::Slip { point: 0, start: 5 }));
     }
 
     #[test]
     fn non_canonical_row_is_rejected() {
         let srf = single_point_srf(vec![7, 5], vec![1.0, 2.0]);
         let err = write_srf(&mut Vec::new(), &srf).unwrap_err();
-        assert!(matches!(
-            err,
-            WriteError::Slip {
-                point: 0,
-                source: SlipRowError::NonCanonical
-            }
-        ));
+        assert!(matches!(err, WriteError::Slip { point: 0, start: 5 }));
     }
 
     #[test]

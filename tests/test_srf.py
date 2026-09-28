@@ -419,7 +419,7 @@ def test_writing_slip_before_tinit_raises(tmp_path: Path):
     assert first > 0
     slip[0, first - 1] = 1.0
     bad_srf = dataclasses.replace(christchurch_srf, slipt1_array=slip.tocsr())
-    with pytest.raises(ValueError, match="before its first timestep"):
+    with pytest.raises(ValueError, match="first timestep"):
         srf.write_srf(tmp_path / "bad.srf", bad_srf)
 
 
@@ -861,7 +861,7 @@ def test_sw4_hdf5_slip_before_tinit_raises(tmp_path: Path):
     first = christchurch_srf.slip.indices[christchurch_srf.slip.indptr[0]]
     slip[0, first - 1] = 1.0
     bad_srf = dataclasses.replace(christchurch_srf, slipt1_array=slip.tocsr())
-    with pytest.raises(ValueError, match="before its first timestep"):
+    with pytest.raises(ValueError, match="first timestep"):
         bad_srf.write_sw4_hdf5(tmp_path / "bad.h5")
 
 
