@@ -453,35 +453,44 @@ class SrfFile:
         -------
         SrfFile
             An instance of the SrfFile class reconstructed from the HDF5 data.
+            If the file was written with ``include_slip_time_function=False``,
+            the resulting ``slipt1_array`` has no columns (shape ``(n, 0)``).
         """
-        ds = xr.open_dataset(hdf5_ffp, engine="h5netcdf")
+        with xr.open_dataset(hdf5_ffp, engine="h5netcdf") as ds:
+            header_data = {
+                var_name[len("plane_") :]: ds[var_name].values
+                for var_name in ds.data_vars
+                if isinstance(var_name, str) and var_name.startswith("plane_")
+            }
+            header_df = pd.DataFrame(header_data)
+            header_df[["nstk", "ndip"]] = header_df[["nstk", "ndip"]].astype(int)
 
-        header_data = {
-            var_name[len("plane_") :]: ds[var_name].values
-            for var_name in ds.data_vars
-            if isinstance(var_name, str) and var_name.startswith("plane_")
-        }
-        header_df = pd.DataFrame(header_data)
-        header_df[["nstk", "ndip"]] = header_df[["nstk", "ndip"]].astype(int)
+            points_data = {
+                col: ds[col].values
+                for col in ds.data_vars
+                if isinstance(col, str)
+                and not col.startswith("plane_")
+                and col not in {"data", "indices", "indptr"}
+            }
+            points_df = pd.DataFrame(points_data)
 
-        points_data = {
-            col: ds[col].values
-            for col in ds.data_vars
-            if isinstance(col, str)
-            and not col.startswith("plane_")
-            and col not in {"data", "indices", "indptr"}
-        }
-        points_df = pd.DataFrame(points_data)
+            if "data" in ds.data_vars:
+                data = ds["data"].values
+                indices = ds["indices"].values
+                indptr_saved = ds["indptr"].values
+                reconstructed_indptr = np.append(indptr_saved, len(data))
 
-        data = ds["data"].values
-        indices = ds["indices"].values
-        indptr_saved = ds["indptr"].values
-        reconstructed_indptr = np.append(indptr_saved, len(data))
+                slipt1_array = sp.sparse.csr_array(
+                    (data, indices, reconstructed_indptr),
+                    shape=(len(indptr_saved), ds.sizes["col"]),
+                )
+            else:
+                slipt1_array = sp.sparse.csr_array((len(points_df), 0))
 
-        slipt1_array = sp.sparse.csr_array((data, indices, reconstructed_indptr))
+            version = ds.attrs["version"]
 
         return cls(
-            version=ds.attrs["version"],
+            version=version,
             header=header_df,
             points=points_df,
             slipt1_array=slipt1_array,
