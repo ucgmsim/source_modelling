@@ -24,15 +24,17 @@ from enum import Enum, Flag, auto
 from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
-import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
 import shapely
 
 import source_modelling
 from qcore import coordinates, geo
+
+if TYPE_CHECKING:
+    import geopandas as gpd
 
 
 class NodalPlane(NamedTuple):
@@ -377,7 +379,7 @@ def get_community_fault_model() -> list[CommunityFault]:
     )
 
 
-def community_fault_model_as_geodataframe() -> gpd.GeoDataFrame:
+def community_fault_model_as_geodataframe() -> "gpd.GeoDataFrame":
     """
     Convert the community fault model to a GeoDataFrame.
 
@@ -388,6 +390,16 @@ def community_fault_model_as_geodataframe() -> gpd.GeoDataFrame:
         coordinate reference system set to EPSG:2193 and the geometry column
         set to 'trace'. The index is set to the fault names.
     """
+    # geopandas is imported here so that the other functions of the cfm module
+    # may be used without requiring it be installed.
+    try:
+        import geopandas as gpd
+    except ImportError as e:
+        e.add_note(
+            "GeoPandas can be installed using the optional dependency group fiona, pip install source-modelling[fiona]."
+        )
+        raise
+
     model = get_community_fault_model()
 
     # Transform the trace to WGS84
