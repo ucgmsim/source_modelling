@@ -4,7 +4,7 @@ mod srf_parser;
 mod srf_writer;
 mod types;
 
-use numpy::PyArrayMethods;
+use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1};
 use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io::{BufWriter, Error, Write};
 
 use crate::pytypes::{PyCsrMatrix, PySrfFile, PySrfMetadata, PySrfPlane};
+use crate::srf_writer::WriteError;
 use crate::types::{
     CsrMatrixView, SrfFileView, SrfMetadataV2View, SrfMetadataVersioned, SrfMetadataView, SrfPlane,
 };
@@ -26,6 +27,13 @@ fn marshall_os_error<T>(e: Error) -> PyResult<T> {
 
 fn marshall_value_error<T, U: error::Error>(e: U) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
+}
+
+fn marshall_write_error<T>(e: WriteError) -> PyResult<T> {
+    match e {
+        WriteError::Io(e) => marshall_os_error(e),
+        e => marshall_value_error(e),
+    }
 }
 
 fn buffer_bytes(buf: &PyBuffer<u8>) -> &[u8] {
@@ -124,9 +132,48 @@ pub fn write_srf(py: Python<'_>, py_srf_file: Py<PySrfFile>, file_path: &str) ->
     py.detach(|| {
         let file = File::create(file_path).or_else(marshall_os_error)?;
         let mut writer = BufWriter::with_capacity(WRITE_BUFFER_CAPACITY, file);
-        srf_writer::write_srf(&mut writer, &srf_view).or_else(marshall_os_error)?;
+        srf_writer::write_srf(&mut writer, &srf_view).or_else(marshall_write_error)?;
         writer.flush().or_else(marshall_os_error)
     })
+}
+
+/// (NT1, SR1) arrays returned by dense_slip_rows.
+type DenseSlipRows = (Py<PyArray1<i32>>, Py<PyArray1<f32>>);
+
+/// Expands slipt1 into SW4's SRF-HDF5 NT1 (samples per point) and SR1 (all
+/// samples concatenated) arrays, with the same zero filling as write_srf.
+#[pyfunction]
+pub fn dense_slip_rows(
+    py: Python<'_>,
+    slipt1: Py<PyCsrMatrix>,
+    tinit: PyReadonlyArray1<'_, f32>,
+    dt: PyReadonlyArray1<'_, f32>,
+) -> PyResult<DenseSlipRows> {
+    let slipt1 = slipt1.borrow(py);
+    let row_ptr = slipt1.row_ptr.bind(py).readonly();
+    let indices = slipt1.indices.bind(py).readonly();
+    let data = slipt1.data.bind(py).readonly();
+    let view = CsrMatrixView {
+        row_ptr: row_ptr.as_slice()?,
+        indices: indices.as_slice()?,
+        data: data.as_slice()?,
+    };
+    let (tinit, dt) = (tinit.as_slice()?, dt.as_slice()?);
+    let rows = view.rows().len();
+    if tinit.len() != rows || dt.len() != rows {
+        return Err(PyValueError::new_err(format!(
+            "slipt1 has {rows} rows but tinit has {} values and dt has {}",
+            tinit.len(),
+            dt.len()
+        )));
+    }
+    let (counts, samples) = py
+        .detach(|| srf_writer::dense_slip_rows(&view, tinit, dt))
+        .or_else(marshall_write_error)?;
+    Ok((
+        PyArray1::from_vec(py, counts).unbind(),
+        PyArray1::from_vec(py, samples).unbind(),
+    ))
 }
 
 #[pymodule]
@@ -137,6 +184,7 @@ fn srf_utils(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySrfMetadata>()?;
     m.add_class::<PySrfFile>()?;
     m.add_function(wrap_pyfunction!(write_srf, m)?)?;
+    m.add_function(wrap_pyfunction!(dense_slip_rows, m)?)?;
     m.add_function(wrap_pyfunction!(parse_srf, m)?)?;
 
     Ok(())

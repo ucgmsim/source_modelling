@@ -357,14 +357,26 @@ class SrfFile:
             else None,
         )
 
-        slipt1 = srf_parser.PyCsrMatrix(
-            row_ptr=self.slip.indptr.astype(np.uint64),
-            indices=self.slip.indices.astype(np.uint64),
-            data=self.slip.data.astype(np.float32),
-        )
-
-        py_srf_file = srf_parser.PySrfFile(planes, metadata, slipt1)
+        py_srf_file = srf_parser.PySrfFile(planes, metadata, self._slipt1_for_rust())
         srf_parser.write_srf(py_srf_file, str(srf_ffp))
+
+    def _slipt1_for_rust(self) -> srf_parser.PyCsrMatrix:
+        """Wrap slipt1_array as an int32 CSR matrix for Rust, copying only if needed."""
+        slip = self.slipt1_array
+        if not slip.has_canonical_format:
+            # The writers need sorted, unique column indices per row.
+            slip = slip.copy()
+            slip.sum_duplicates()
+        int32_max = np.iinfo(np.int32).max
+        if slip.nnz > int32_max or slip.shape[1] > int32_max:
+            raise ValueError(
+                "slipt1_array is too large to write: it needs more than int32 indices"
+            )
+        return srf_parser.PyCsrMatrix(
+            row_ptr=np.ascontiguousarray(slip.indptr, dtype=np.int32),
+            indices=np.ascontiguousarray(slip.indices, dtype=np.int32),
+            data=np.ascontiguousarray(slip.data, dtype=np.float32),
+        )
 
     def write_sw4_hdf5(
         self,
@@ -404,7 +416,14 @@ class SrfFile:
                 "slip" if field == "SLIP1" else field.lower()
             ].values.astype(SW4_POINTS_DTYPE[field].type)
 
-        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+        # SR1 stores each point's samples densely from its tinit, so implicit
+        # zeros in slipt1_array must be filled in.
+        nt1, sr1 = srf_parser.dense_slip_rows(
+            self._slipt1_for_rust(),
+            self.points["tinit"].to_numpy(dtype=np.float32),
+            self.points["dt"].to_numpy(dtype=np.float32),
+        )
+        points_data["NT1"] = nt1
         if (
             self.version == "2.0"
         ):  # vs/den are mandatory in 2.0; missing columns will fail loudly
@@ -415,7 +434,7 @@ class SrfFile:
             h5file.attrs.create("VERSION", np.float32(self.version))
             h5file.attrs.create("PLANE", plane_data)
             h5file.create_dataset("POINTS", data=points_data)
-            h5file.create_dataset("SR1", data=self.slipt1_array.data.astype(np.float32))
+            h5file.create_dataset("SR1", data=sr1)
 
     def write_hdf5(
         self, hdf5_ffp: Path, include_slip_time_function: bool = True

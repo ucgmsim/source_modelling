@@ -1,5 +1,6 @@
 use numpy::PyArray1;
 use pyo3::prelude::*;
+use thiserror::Error;
 
 use crate::pytypes::{PyCsrMatrix, PySrfFile, PySrfMetadata, PySrfPlane};
 
@@ -71,18 +72,28 @@ impl<'py> IntoPyObject<'py> for SrfPlane {
 /// CSR matrix over any storage: `Vec`s when parsing (the parser appends), or
 /// borrowed slices when writing data that another allocator (e.g. numpy) owns.
 ///
+/// The layout is exactly scipy's `csr_array` with int32 index arrays, so the
+/// matrix crosses the Python boundary in both directions without copies.
 /// `row_ptr` follows the scipy `indptr` convention: an n-row matrix has n+1
 /// entries, `row_ptr[0] == 0`, `row_ptr[n] == data.len()`, and row i occupies
-/// `data[row_ptr[i]..row_ptr[i + 1]]`. This holds after every `add_row`, so the
-/// matrix can be handed to scipy or iterated at any point without a fixup pass.
+/// `indices[row_ptr[i]..row_ptr[i + 1]]` and `data[row_ptr[i]..row_ptr[i + 1]]`.
+/// This holds after every `add_row`, so the matrix can be handed to scipy or
+/// iterated at any point without a fixup pass.
+///
+/// Row i, column j is the slip rate of point i at timestep j on the global
+/// timeline. Columns the matrix leaves out are zero, as in scipy.
 #[derive(Debug)]
-pub struct CsrMatrix<R = Vec<usize>, D = Vec<f32>> {
+pub struct CsrMatrix<R = Vec<i32>, D = Vec<f32>> {
     pub indices: R,
     pub row_ptr: R,
     pub data: D,
 }
 
-pub type CsrMatrixView<'a> = CsrMatrix<&'a [usize], &'a [f32]>;
+pub type CsrMatrixView<'a> = CsrMatrix<&'a [i32], &'a [f32]>;
+
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error("slipt1 needs more than i32::MAX values or timesteps")]
+pub struct CsrIndexOverflow;
 
 impl<'py> IntoPyObject<'py> for CsrMatrix {
     type Target = PyCsrMatrix;
@@ -116,15 +127,21 @@ impl CsrMatrix {
         }
     }
 
-    pub fn add_row<I>(&mut self, starting: usize, values: I)
+    /// Appends a row whose values sit at consecutive columns from `starting`.
+    pub fn add_row<I>(&mut self, starting: usize, values: I) -> Result<(), CsrIndexOverflow>
     where
         I: Iterator<Item = f32>,
     {
-        for (i, v) in values.enumerate() {
-            self.indices.push(starting + i);
-            self.data.push(v);
-        }
-        self.row_ptr.push(self.data.len());
+        let row_start = self.data.len();
+        self.data.extend(values);
+        let columns = starting..starting + (self.data.len() - row_start);
+        let (Ok(row_end), Ok(_)) = (i32::try_from(self.data.len()), i32::try_from(columns.end))
+        else {
+            return Err(CsrIndexOverflow);
+        };
+        self.indices.extend(columns.map(|column| column as i32));
+        self.row_ptr.push(row_end);
+        Ok(())
     }
 
     pub fn finalise(&mut self) {
@@ -134,50 +151,21 @@ impl CsrMatrix {
     }
 }
 
-impl<R: AsRef<[usize]>, D: AsRef<[f32]>> CsrMatrix<R, D> {
-    pub fn rows(&self) -> CsrRowIter<'_> {
-        CsrRowIter {
-            row_ptr: self.row_ptr.as_ref(),
-            data: self.data.as_ref(),
-            index: 0,
-        }
-    }
+/// Column of a point's first slipt1 sample on the global timeline. The parser
+/// and writer must agree on this, or written rows shift in time on re-read.
+pub fn starting_column(tinit: f32, dt: f32) -> usize {
+    // The choice between round and floor is relatively arbitrary. We choose floor here.
+    (tinit / dt).floor() as usize
 }
 
-pub struct CsrRowIter<'a> {
-    row_ptr: &'a [usize],
-    data: &'a [f32],
-    index: usize,
-}
-
-impl<'a> Iterator for CsrRowIter<'a> {
-    type Item = &'a [f32];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let i = self.index;
-        // n rows are described by n+1 row_ptr entries, so the last valid row
-        // index is row_ptr.len() - 2.
-        if i + 1 >= self.row_ptr.len() {
-            return None;
-        }
-        self.index += 1;
-        Some(&self.data[self.row_ptr[i]..self.row_ptr[i + 1]])
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.row_ptr.len().saturating_sub(self.index + 1);
-        (remaining, Some(remaining))
-    }
-}
-
-impl ExactSizeIterator for CsrRowIter<'_> {}
-
-impl<'a, R: AsRef<[usize]>, D: AsRef<[f32]>> IntoIterator for &'a CsrMatrix<R, D> {
-    type Item = &'a [f32];
-    type IntoIter = CsrRowIter<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.rows()
+impl<R: AsRef<[i32]>, D: AsRef<[f32]>> CsrMatrix<R, D> {
+    /// Each row's stored (column indices, values).
+    pub fn rows(&self) -> impl ExactSizeIterator<Item = (&[i32], &[f32])> {
+        let (indices, data) = (self.indices.as_ref(), self.data.as_ref());
+        self.row_ptr.as_ref().windows(2).map(move |w| {
+            let span = w[0] as usize..w[1] as usize;
+            (&indices[span.clone()], &data[span])
+        })
     }
 }
 
@@ -188,9 +176,13 @@ mod csr_tests {
     fn build(rows: &[&[f32]]) -> CsrMatrix {
         let mut matrix = CsrMatrix::new(rows.len(), rows.iter().map(|row| row.len()).sum());
         for row in rows {
-            matrix.add_row(0, row.iter().copied());
+            matrix.add_row(0, row.iter().copied()).unwrap();
         }
         matrix
+    }
+
+    fn row_values(matrix: &CsrMatrix) -> Vec<Vec<f32>> {
+        matrix.rows().map(|(_, data)| data.to_vec()).collect()
     }
 
     // row_ptr must be a valid scipy indptr after every add_row, not just once
@@ -198,7 +190,7 @@ mod csr_tests {
     fn assert_indptr_invariant(matrix: &CsrMatrix, rows: usize) {
         assert_eq!(matrix.row_ptr.len(), rows + 1);
         assert_eq!(matrix.row_ptr[0], 0);
-        assert_eq!(*matrix.row_ptr.last().unwrap(), matrix.data.len());
+        assert_eq!(*matrix.row_ptr.last().unwrap() as usize, matrix.data.len());
         assert!(matrix.row_ptr.windows(2).all(|w| w[0] <= w[1]));
     }
 
@@ -213,7 +205,7 @@ mod csr_tests {
     fn invariant_holds_after_every_add_row() {
         let mut matrix = CsrMatrix::new(3, 6);
         for (i, row) in [&[1.0f32, 2.0][..], &[][..], &[3.0][..]].iter().enumerate() {
-            matrix.add_row(0, row.iter().copied());
+            matrix.add_row(0, row.iter().copied()).unwrap();
             assert_indptr_invariant(&matrix, i + 1);
         }
     }
@@ -223,8 +215,8 @@ mod csr_tests {
     #[test]
     fn starting_offset_shifts_column_indices() {
         let mut matrix = CsrMatrix::new(2, 4);
-        matrix.add_row(0, [1.0f32, 2.0].into_iter());
-        matrix.add_row(1, [3.0f32, 4.0].into_iter());
+        matrix.add_row(0, [1.0f32, 2.0].into_iter()).unwrap();
+        matrix.add_row(1, [3.0f32, 4.0].into_iter()).unwrap();
         assert_eq!(matrix.indices, vec![0, 1, 1, 2]);
         assert_eq!(matrix.row_ptr, vec![0, 2, 4]);
         // Widest column touched is 2, so the matrix spans 3 columns.
@@ -232,10 +224,21 @@ mod csr_tests {
     }
 
     #[test]
+    fn column_beyond_i32_is_rejected() {
+        let mut matrix = CsrMatrix::new(1, 1);
+        let starting = i32::MAX as usize + 1;
+        assert_eq!(
+            matrix.add_row(starting, [1.0f32].into_iter()),
+            Err(CsrIndexOverflow)
+        );
+    }
+
+    #[test]
     fn rows_yields_exactly_the_added_rows() {
         let matrix = build(&[&[1.0, 2.0], &[], &[3.0]]);
-        let rows: Vec<&[f32]> = matrix.rows().collect();
-        assert_eq!(rows, vec![&[1.0f32, 2.0][..], &[][..], &[3.0][..]]);
+        assert_eq!(row_values(&matrix), vec![vec![1.0, 2.0], vec![], vec![3.0]]);
+        let indices: Vec<&[i32]> = matrix.rows().map(|(indices, _)| indices).collect();
+        assert_eq!(indices, vec![&[0, 1][..], &[][..], &[0][..]]);
     }
 
     // The bug this guards: a trailing empty phantom row, previously produced by
@@ -243,11 +246,10 @@ mod csr_tests {
     #[test]
     fn finalise_does_not_change_the_rows() {
         let mut matrix = build(&[&[1.0, 2.0], &[3.0]]);
-        let before: Vec<Vec<f32>> = matrix.rows().map(|row| row.to_vec()).collect();
+        let before = row_values(&matrix);
         let row_ptr_before = matrix.row_ptr.clone();
         matrix.finalise();
-        let after: Vec<Vec<f32>> = matrix.rows().map(|row| row.to_vec()).collect();
-        assert_eq!(before, after);
+        assert_eq!(before, row_values(&matrix));
         assert_eq!(matrix.row_ptr, row_ptr_before);
     }
 
@@ -548,13 +550,13 @@ impl<'py> IntoPyObject<'py> for SrfMetadataVersioned {
 }
 
 #[derive(Debug)]
-pub struct SrfFile<S = Vec<f32>, R = Vec<usize>> {
+pub struct SrfFile<S = Vec<f32>, R = Vec<i32>> {
     pub planes: Vec<SrfPlane>,
     pub metadata: SrfMetadataVersioned<S>,
     pub slipt1: CsrMatrix<R, S>,
 }
 
-pub type SrfFileView<'a> = SrfFile<&'a [f32], &'a [usize]>;
+pub type SrfFileView<'a> = SrfFile<&'a [f32], &'a [i32]>;
 
 impl<'py> IntoPyObject<'py> for SrfFile {
     type Target = PySrfFile;

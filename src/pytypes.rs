@@ -65,9 +65,9 @@ impl PySrfPlane {
 #[derive(Debug)]
 pub struct PyCsrMatrix {
     #[pyo3(get, set)]
-    pub row_ptr: Py<PyArray1<usize>>,
+    pub row_ptr: Py<PyArray1<i32>>,
     #[pyo3(get, set)]
-    pub indices: Py<PyArray1<usize>>,
+    pub indices: Py<PyArray1<i32>>,
     #[pyo3(get, set)]
     pub data: Py<PyArray1<f32>>,
 }
@@ -76,8 +76,8 @@ pub struct PyCsrMatrix {
 impl PyCsrMatrix {
     #[new]
     pub fn new(
-        row_ptr: Py<PyArray1<usize>>,
-        indices: Py<PyArray1<usize>>,
+        row_ptr: Py<PyArray1<i32>>,
+        indices: Py<PyArray1<i32>>,
         data: Py<PyArray1<f32>>,
     ) -> Self {
         PyCsrMatrix {
