@@ -140,6 +140,11 @@ class Segments(Sequence):
             raise TypeError(
                 "Segment index must an integer, not slice or tuple"
             )  # pragma: no cover
+        n = len(self)
+        if index < 0:
+            index += n
+        if not 0 <= index < n:
+            raise IndexError("segment index out of range")
         points_offset = (self._header["nstk"] * self._header["ndip"]).cumsum()
         if index == 0:
             return self._points.iloc[: points_offset.iloc[index]]
