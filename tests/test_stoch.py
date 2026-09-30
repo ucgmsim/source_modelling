@@ -173,7 +173,11 @@ def test_stoch_file_properties(sample_stoch_file: Path):
     planes = stoch_file.planes
     assert len(planes) == 1
 
-    assert planes[0].centroid[:2] == pytest.approx([-41.3, 174.5])
+    # The header point is the midpoint of the top edge, not the centroid.
+    top_centre = planes[0].fault_coordinates_to_wgs_depth_coordinates(
+        np.array([0.5, 0.0])
+    )
+    assert top_centre == pytest.approx([-41.3, 174.5, 500])
 
     assert planes[0].bounds[0, 2] == pytest.approx(500)
     assert planes[0].width == pytest.approx(2)
@@ -270,6 +274,53 @@ def test_real_world_stoch():
         strike_diff = np.linalg.norm(np.diff(nztm_patches, axis=1), axis=2)
         assert dip_diff == pytest.approx(np.full_like(dip_diff, 2000))
         assert strike_diff == pytest.approx(np.full_like(strike_diff, 2000))
+
+
+@pytest.mark.parametrize("dip", [20, 45, 60, 85, 90])
+@pytest.mark.parametrize("strike", [0, 45, 150, 255, 303])
+def test_planes_anchor_top_centre(tmp_path: Path, strike: int, dip: int):
+    """The header point is the top-centre: the grid hangs down dip from it."""
+    stoch_filepath = tmp_path / "stoch_file"
+    stoch_filepath.write_text(
+        f"1\n172.5 -43.5 4 3 2.0 1.5 {strike} {dip} 90 0.8 0.0 2.0\n" + "1.0 " * 36
+    )
+    (plane,) = StochFile.from_file(stoch_filepath).planes
+
+    assert plane.length == pytest.approx(8.0)
+    assert plane.width == pytest.approx(4.5)
+    assert plane.dip == pytest.approx(dip)
+    if dip != 90:  # a vertical plane's strike is only defined up to 180 degrees
+        assert plane.strike == pytest.approx(strike, abs=0.1)
+    assert plane.top_m == pytest.approx(800)
+    assert plane.bottom_m == pytest.approx(800 + 4500 * np.sin(np.radians(dip)))
+
+    top_centre = coordinates.wgs_depth_to_nztm(
+        plane.fault_coordinates_to_wgs_depth_coordinates(np.array([0.5, 0.0]))
+    )
+    header_point = coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.5]))
+    assert np.linalg.norm(top_centre[:2] - header_point) < 1.0  # metres
+
+    # The centroid sits down dip of the header point by the projected half width.
+    centroid = coordinates.wgs_depth_to_nztm(plane.centroid)
+    offset = np.linalg.norm(centroid[:2] - header_point)
+    assert offset == pytest.approx(2250 * np.cos(np.radians(dip)), abs=1.0)
+
+
+def test_patch_centres_hang_from_dtop(tmp_path: Path):
+    """The first row of patches is half a cell below dtop, centred on the header point."""
+    stoch_filepath = tmp_path / "stoch_file"
+    stoch_filepath.write_text(
+        "1\n172.5 -43.5 3 2 2.0 2.0 150 30 90 1.0 0.0 1.0\n" + "1.0 " * 18
+    )
+    (patches,) = StochFile.from_file(stoch_filepath).patch_centres
+
+    # (ny, nx, 3): the middle of the first row is one cell down dip of the header point.
+    assert patches[:, :, 2] == pytest.approx(np.array([[1500.0] * 3, [2500.0] * 3]))
+    top_row_middle = coordinates.wgs_depth_to_nztm(patches[0, 1])
+    header_point = coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.5]))
+    assert np.linalg.norm(top_row_middle[:2] - header_point) == pytest.approx(
+        1000 * np.cos(np.radians(30)), abs=1.0
+    )
 
 
 def test_stoch_file_invalid_planes(bad_header_file: Path):

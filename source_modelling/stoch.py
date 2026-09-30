@@ -19,7 +19,7 @@ from typing import IO, NamedTuple, Self, TextIO, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from qcore import grid
+from qcore import coordinates, grid
 from source_modelling import parse_utils
 from source_modelling.sources import Plane
 
@@ -35,9 +35,9 @@ class StochHeader(NamedTuple):
     """
 
     longitude: float
-    """Longitude coordinate of the plane's centre point."""
+    """Longitude of the midpoint of the plane's top edge."""
     latitude: float
-    """Latitude coordinate of the plane's centre point."""
+    """Latitude of the midpoint of the plane's top edge."""
     nx: int
     """Number of grid points in the x-direction."""
     ny: int
@@ -150,6 +150,40 @@ def _read_stoch_plane(handle: TextIO) -> StochPlane:
     return StochPlane(header, slip, rise, trup)
 
 
+def _plane_from_header(header: StochHeader) -> Plane:
+    """Build the plane a stoch header describes, anchored at its top-centre.
+
+    Parameters
+    ----------
+    header : StochHeader
+        The stoch plane header.
+
+    Returns
+    -------
+    Plane
+        The plane spanning ``nx * dx`` along strike, centred on the header's
+        (latitude, longitude), and ``ny * dy`` down dip from ``dtop``.
+    """
+    length = header.dx * header.nx
+    width = header.dy * header.ny
+    top_centre = np.array([header.latitude, header.longitude])
+    strike_nztm = coordinates.great_circle_bearing_to_nztm_bearing(
+        top_centre, length / 2, header.strike
+    )
+    strike_rad = np.radians(strike_nztm)
+    # NZTM coordinates are (northing, easting), in metres.
+    half_trace = 1000 * length / 2 * np.array([np.cos(strike_rad), np.sin(strike_rad)])
+    top_centre_nztm = coordinates.wgs_depth_to_nztm(top_centre)
+    vertical = np.isclose(header.dip, 90)
+    return Plane.from_nztm_trace(
+        np.vstack([top_centre_nztm - half_trace, top_centre_nztm + half_trace]),
+        dtop=header.dtop,
+        dbottom=header.dtop + width * np.sin(np.radians(header.dip)),
+        dip=header.dip,
+        dip_dir_nztm=0.0 if vertical else (strike_nztm + 90) % 360,
+    )
+
+
 @dataclasses.dataclass
 class StochFile:
     """
@@ -236,6 +270,11 @@ class StochFile:
         """
         Get a list of Plane objects for the stoch file.
 
+        The header's (longitude, latitude) is the midpoint of the plane's top
+        edge, not its centroid: the grid runs ``nx * dx`` along strike centred
+        on that point, and ``ny * dy`` down dip from ``dtop``. This is how
+        hb_high places the subfaults.
+
         Returns
         -------
         list[Plane]
@@ -247,20 +286,7 @@ class StochFile:
         >>> planes = stoch_file.planes
         >>> print(f"Number of planes: {len(planes)}")
         """
-        return [
-            Plane.from_centroid_strike_dip(
-                cast(
-                    LatLonArray,
-                    np.array([plane.header.latitude, plane.header.longitude]),
-                ),
-                plane.header.dip,
-                plane.header.dx * plane.header.nx,
-                plane.header.dy * plane.header.ny,
-                strike=plane.header.strike,
-                dtop=plane.header.dtop,
-            )
-            for plane in self.data
-        ]
+        return [_plane_from_header(plane.header) for plane in self.data]
 
     @property
     def slip(self) -> list[FloatArray2D]:
