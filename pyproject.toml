@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
-  "geopandas",
+  "h5netcdf",
   "h5py",
   "networkx",
   "numba>=0.65.1",
@@ -20,7 +20,7 @@ dependencies = [
   "qcore-utils>=2026.8.2",
   "scipy",
   "shapely>=2.0",
-  "xarray[io]",
+  "xarray",
 ]
 
 [project.optional-dependencies]
@@ -38,7 +38,7 @@ types = [
   "pandas-stubs",
   "types-networkx",
 ]
-fiona = ["fiona"]
+fiona = ["fiona", "geopandas"]
 
 [dependency-groups]
 dev = ["ruff", "deptry", "ty", "numpydoc"]
@@ -113,7 +113,7 @@ omit = [
 
 [tool.npdlint]
 include = ["source_modelling"]
-extend-exclude = ['source_modelling/ccldpy.py']
+extend-exclude = ["**/__init__.py", 'source_modelling/ccldpy.py']
 select = [
   "GL05",
   "GL08",
@@ -161,3 +161,7 @@ cache-keys = [
 
 [tool.deptry]
 optional_dependencies_dev_groups = ["test", "types"]
+
+[tool.deptry.per_rule_ignores]
+# h5netcdf is never imported directly; xarray loads it via engine="h5netcdf".
+DEP002 = ["h5netcdf"]
