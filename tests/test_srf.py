@@ -229,6 +229,13 @@ def test_darfield_srf():
         assert len(segment) == segment_header["nstk"] * segment_header["ndip"]
         assert (segment["dip"] == segment_header["dip"]).all()
         assert (segment["stk"] == segment_header["stk"]).all()
+    n_segments = len(darfield_srf.segments)
+    assert darfield_srf.segments[-1].equals(darfield_srf.segments[n_segments - 1])
+    assert darfield_srf.segments[-n_segments].equals(darfield_srf.segments[0])
+    with pytest.raises(IndexError):
+        darfield_srf.segments[n_segments]
+    with pytest.raises(IndexError):
+        darfield_srf.segments[-n_segments - 1]
     for (_, header), plane in zip(darfield_srf.header.iterrows(), darfield_srf.planes):
         assert header[["elat", "elon"]].values == pytest.approx(
             plane.centroid[:2], abs=0.1
