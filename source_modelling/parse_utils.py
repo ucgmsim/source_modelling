@@ -22,6 +22,40 @@ def _is_seperator(char: str) -> bool:
     return char.isspace() or not char
 
 
+def _read_token(handle: TextIO, label: str | None) -> str:
+    """Read a whitespace-separated token from a file.
+
+    Parameters
+    ----------
+    handle : TextIO
+        The file to read from.
+    label : str | None
+        A human friendly label for the token (for debugging purposes), or
+        None for no label.
+
+    Raises
+    ------
+    ParseError
+        If the end of the file is reached before a token is found.
+
+    Returns
+    -------
+    str
+        The token read from the file.
+    """
+    while (cur := handle.read(1)) and cur.isspace():
+        pass
+    if not cur:
+        if label:
+            raise ParseError(f"Unexpected end of file while reading {label}")
+        else:
+            raise ParseError("Unexpected end of file")
+    token = cur
+    while not _is_seperator(cur := handle.read(1)):
+        token += cur
+    return token
+
+
 def read_float(handle: TextIO, label: str | None = None) -> float:
     """Read a float from an file.
 
@@ -43,11 +77,7 @@ def read_float(handle: TextIO, label: str | None = None) -> float:
     float
         The float read from the file.
     """
-    while _is_seperator(cur := handle.read(1)):
-        pass
-    float_str = cur
-    while not _is_seperator(cur := handle.read(1)):
-        float_str += cur
+    float_str = _read_token(handle, label)
     try:
         return float(float_str)
     except ValueError:
@@ -78,11 +108,7 @@ def read_int(handle: TextIO, label: str | None = None) -> int:
     int
         The int read from the file.
     """
-    while _is_seperator(cur := handle.read(1)):
-        pass
-    int_str = cur
-    while not _is_seperator(cur := handle.read(1)):
-        int_str += cur
+    int_str = _read_token(handle, label)
     try:
         return int(int_str)
     except ValueError:

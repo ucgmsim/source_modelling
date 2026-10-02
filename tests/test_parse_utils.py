@@ -1,8 +1,32 @@
 import io
+import multiprocessing
 
 import pytest
 
 from source_modelling import parse_utils
+
+
+def _run_read_float_on_blank_stream(queue: multiprocessing.Queue) -> None:
+    try:
+        parse_utils.read_float(io.StringIO("  "), "x")
+        queue.put("returned")
+    except parse_utils.ParseError as exc:
+        queue.put(str(exc))
+
+
+def test_read_float_on_exhausted_stream_raises_instead_of_hanging():
+    queue: multiprocessing.Queue = multiprocessing.Queue()
+    process = multiprocessing.Process(
+        target=_run_read_float_on_blank_stream, args=(queue,)
+    )
+    process.start()
+    process.join(timeout=5)
+    still_running = process.is_alive()
+    if still_running:
+        process.terminate()
+        process.join()
+    assert not still_running, "read_float on exhausted stream: still running after 5s"
+    assert "Unexpected end of file" in queue.get()
 
 
 def test_read_float_reads_value_separated_by_whitespace():
