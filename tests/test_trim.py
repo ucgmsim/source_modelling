@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.typing as npt
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -94,3 +95,15 @@ def test_trim_array_to_target_length_bounds(
         assert 0 <= left < right <= arr.shape[1]
     except ValueError:
         pass
+
+
+def test_trim_all_zero_slip_raises_value_error():
+    """An untrimmable array must raise ValueError, as the docstring promises.
+
+    Regression test: the zero-stripping loops evaluated
+    ``slip_function[left]`` before the ``left < right`` guard, so an all-zero
+    array walked ``left`` off the end of the array and raised ``IndexError``
+    instead of the documented ``ValueError``.
+    """
+    with pytest.raises(ValueError, match="Cannot trim array to target length"):
+        trim.trim_array_to_target_length(np.zeros((5, 1)), dx=1.0, target_length=1.0)
