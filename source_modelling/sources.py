@@ -1811,11 +1811,12 @@ def simplify_fault(fault: Fault, length_tolerance: float) -> Fault:
             plane = planes[min_length_index]
             # Test which plane to absorb into by total deviation.
             # Calculated by finding the perpendicular distance between
-            # the two new edges.
+            # the vertex that would disappear and the new edge that
+            # would replace it.
             if geo.point_to_segment_distance(
-                plane.bounds[0], left.bounds[0], right.bounds[0]
+                plane.bounds[0], left.bounds[0], plane.bounds[1]
             ) < geo.point_to_segment_distance(
-                plane.bounds[-1], left.bounds[-1], right.bounds[-1]
+                plane.bounds[1], plane.bounds[0], right.bounds[1]
             ):
                 planes = (
                     planes[: min_length_index - 1]
