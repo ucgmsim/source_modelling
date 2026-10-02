@@ -1,3 +1,4 @@
+import dataclasses
 import gzip
 import tempfile
 from pathlib import Path
@@ -394,6 +395,26 @@ def test_writing_christchurch():
         assert christchurch_srf.header.equals(christchurch_srf_tmp.header)
         assert christchurch_srf.points.equals(christchurch_srf_tmp.points)
         assert (christchurch_srf.slip != christchurch_srf_tmp.slip).nnz == 0
+
+
+def test_write_srf_rejects_points_header_mismatch(tmp_path: Path):
+    """write_srf must reject points whose count disagrees with the PLANE header."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    truncated = dataclasses.replace(
+        christchurch_srf, points=christchurch_srf.points.iloc[:-10]
+    )
+    with pytest.raises(ValueError):
+        truncated.write_srf(tmp_path / "truncated_points.srf")
+
+
+def test_write_srf_rejects_slip_points_mismatch(tmp_path: Path):
+    """write_srf must reject a slipt1_array with a different row count than points."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    truncated = dataclasses.replace(
+        christchurch_srf, slipt1_array=christchurch_srf.slip[:-10]
+    )
+    with pytest.raises(ValueError):
+        truncated.write_srf(tmp_path / "truncated_slip.srf")
 
 
 def test_planes_nstk_1_ndip_gt_1():

@@ -28,6 +28,37 @@ fn marshall_value_error<T, U: error::Error>(e: U) -> PyResult<T> {
     Err(PyErr::new::<PyValueError, _>(e.to_string()))
 }
 
+// Returns the shared length of every per-point metadata array, or `None` if
+// they disagree.
+fn metadata_point_count(metadata: &SrfMetadataVersioned<&[f32]>) -> Option<usize> {
+    let base = match metadata {
+        SrfMetadataVersioned::V1(base) => base,
+        SrfMetadataVersioned::V2(v2) => &v2.base,
+    };
+    let lens = [
+        base.lat.len(),
+        base.dep.len(),
+        base.stk.len(),
+        base.dip.len(),
+        base.area.len(),
+        base.tinit.len(),
+        base.dt.len(),
+        base.rake.len(),
+        base.slip1.len(),
+        base.rise.len(),
+    ];
+    let n = base.lon.len();
+    if lens.iter().any(|&len| len != n) {
+        return None;
+    }
+    if let SrfMetadataVersioned::V2(v2) = metadata
+        && (v2.vs.len() != n || v2.density.len() != n)
+    {
+        return None;
+    }
+    Some(n)
+}
+
 fn buffer_bytes(buf: &PyBuffer<u8>) -> &[u8] {
     // SAFETY: caller guarantees a live, C-contiguous, readable u8 export.
     // Lifetime is tied to `buf`, so the borrow checker forbids dropping the
@@ -118,6 +149,24 @@ pub fn write_srf(py: Python<'_>, py_srf_file: Py<PySrfFile>, file_path: &str) ->
             data: data.as_slice()?,
         },
     };
+
+    let n_points = metadata_point_count(&srf_view.metadata).ok_or_else(|| {
+        PyErr::new::<PyValueError, _>("SRF metadata arrays must all have the same length")
+    })?;
+
+    let expected_points: usize = srf_view.planes.iter().map(SrfPlane::points).sum();
+    if expected_points != n_points {
+        return Err(PyErr::new::<PyValueError, _>(format!(
+            "PLANE headers expect {expected_points} total points but metadata has {n_points} points"
+        )));
+    }
+
+    let n_rows = srf_view.slipt1.row_ptr.len().saturating_sub(1);
+    if n_rows != n_points {
+        return Err(PyErr::new::<PyValueError, _>(format!(
+            "slipt1 has {n_rows} rows but metadata has {n_points} points"
+        )));
+    }
 
     // The view only borrows plain slices, so the whole write can run without
     // the GIL.
