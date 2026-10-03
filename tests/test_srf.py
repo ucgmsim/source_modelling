@@ -1,3 +1,4 @@
+import dataclasses
 import gzip
 import tempfile
 from pathlib import Path
@@ -229,6 +230,13 @@ def test_darfield_srf():
         assert len(segment) == segment_header["nstk"] * segment_header["ndip"]
         assert (segment["dip"] == segment_header["dip"]).all()
         assert (segment["stk"] == segment_header["stk"]).all()
+    n_segments = len(darfield_srf.segments)
+    assert darfield_srf.segments[-1].equals(darfield_srf.segments[n_segments - 1])
+    assert darfield_srf.segments[-n_segments].equals(darfield_srf.segments[0])
+    with pytest.raises(IndexError):
+        darfield_srf.segments[n_segments]
+    with pytest.raises(IndexError):
+        darfield_srf.segments[-n_segments - 1]
     for (_, header), plane in zip(darfield_srf.header.iterrows(), darfield_srf.planes):
         assert header[["elat", "elon"]].values == pytest.approx(
             plane.centroid[:2], abs=0.1
@@ -387,6 +395,26 @@ def test_writing_christchurch():
         assert christchurch_srf.header.equals(christchurch_srf_tmp.header)
         assert christchurch_srf.points.equals(christchurch_srf_tmp.points)
         assert (christchurch_srf.slip != christchurch_srf_tmp.slip).nnz == 0
+
+
+def test_write_srf_rejects_points_header_mismatch(tmp_path: Path):
+    """write_srf must reject points whose count disagrees with the PLANE header."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    truncated = dataclasses.replace(
+        christchurch_srf, points=christchurch_srf.points.iloc[:-10]
+    )
+    with pytest.raises(ValueError):
+        truncated.write_srf(tmp_path / "truncated_points.srf")
+
+
+def test_write_srf_rejects_slip_points_mismatch(tmp_path: Path):
+    """write_srf must reject a slipt1_array with a different row count than points."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    truncated = dataclasses.replace(
+        christchurch_srf, slipt1_array=christchurch_srf.slip[:-10]
+    )
+    with pytest.raises(ValueError):
+        truncated.write_srf(tmp_path / "truncated_slip.srf")
 
 
 def test_planes_nstk_1_ndip_gt_1():
@@ -567,6 +595,65 @@ def test_hdf5_read_write():
         assert (original_srf.slipt1_array != reconstructed_srf.slipt1_array).nnz == 0, (  # ty: ignore[unresolved-attribute]
             "slipt1_array content mismatch"
         )
+
+
+def test_hdf5_read_write_no_slip_time_function():
+    """Test that HDF5 files written without a slip-time function can be read back.
+
+    Regression test for https://github.com/ucgmsim/source_modelling/issues/115:
+    `from_hdf5` used to always look up the `data`/`indices`/`indptr`
+    variables and raised a `KeyError` when the file was written with
+    `include_slip_time_function=False`.
+    """
+    original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+
+    with tempfile.NamedTemporaryFile(suffix=".hdf5") as tmp_hdf5_file:
+        hdf5_ffp = Path(tmp_hdf5_file.name)
+
+        original_srf.write_hdf5(hdf5_ffp, include_slip_time_function=False)
+
+        reconstructed_srf = srf.SrfFile.from_hdf5(hdf5_ffp)
+
+        assert original_srf.version == reconstructed_srf.version, "Version mismatch"
+        assert original_srf.header.equals(reconstructed_srf.header), "Header mismatch"
+        assert original_srf.points.equals(reconstructed_srf.points), "Points mismatch"
+        assert reconstructed_srf.slipt1_array.shape == (len(original_srf.points), 0)
+
+
+def test_hdf5_read_write_preserves_nt_with_trailing_zero_timesteps():
+    """Test that `from_hdf5` preserves `nt` even with trailing all-zero timesteps.
+
+    Regression test for https://github.com/ucgmsim/source_modelling/issues/115:
+    `from_hdf5` rebuilt the sparse array without an explicit `shape`, so
+    scipy inferred the number of columns from the largest stored index,
+    silently dropping trailing all-zero timesteps on read.
+    """
+    original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+
+    n_patches, n_timesteps = original_srf.slipt1_array.shape
+    padded_array = sp.sparse.csr_array(
+        (
+            original_srf.slipt1_array.data,
+            original_srf.slipt1_array.indices,
+            original_srf.slipt1_array.indptr,
+        ),
+        shape=(n_patches, n_timesteps + 50),
+    )
+    padded_srf = srf.SrfFile(
+        version=original_srf.version,
+        header=original_srf.header,
+        points=original_srf.points,
+        slipt1_array=padded_array,
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".hdf5") as tmp_hdf5_file:
+        hdf5_ffp = Path(tmp_hdf5_file.name)
+
+        padded_srf.write_hdf5(hdf5_ffp)
+
+        reconstructed_srf = srf.SrfFile.from_hdf5(hdf5_ffp)
+
+        assert reconstructed_srf.slipt1_array.shape == padded_srf.slipt1_array.shape
 
 
 def test_sw4_hdf5_read_write(tmp_path: Path):
