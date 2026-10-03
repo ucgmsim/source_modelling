@@ -67,14 +67,37 @@ def solution_features(
     classifier: fm.CMTClassifier, frame: pd.DataFrame
 ) -> list[fm.EventFeatures]:
     """Compute features for every row of a GeoNet-format data frame."""
+    columns = [
+        "Latitude",
+        "Longitude",
+        "CD",
+        "strike1",
+        "dip1",
+        "rake1",
+        "strike2",
+        "dip2",
+        "rake2",
+        "Mw",
+    ]
     return [
         classifier.features(
-            np.array([row.Latitude, row.Longitude, row.CD]),
-            NodalPlane(row.strike1, row.dip1, row.rake1),
-            NodalPlane(row.strike2, row.dip2, row.rake2),
-            row.Mw,
+            np.array([lat, lon, depth]),
+            NodalPlane(strike1, dip1, rake1),
+            NodalPlane(strike2, dip2, rake2),
+            mw,
         )
-        for row in frame.itertuples()
+        for (
+            lat,
+            lon,
+            depth,
+            strike1,
+            dip1,
+            rake1,
+            strike2,
+            dip2,
+            rake2,
+            mw,
+        ) in frame[columns].to_numpy(dtype=float).tolist()
     ]
 
 
@@ -255,8 +278,10 @@ def main() -> None:
     labelled = solution_features(classifier, labelled_frame)
     groups = np.array(
         [
-            f"{round(r.Latitude)}_{round(r.Longitude)}"
-            for r in labelled_frame.itertuples()
+            f"{round(lat)}_{round(lon)}"
+            for lat, lon in labelled_frame[["Latitude", "Longitude"]]
+            .to_numpy(dtype=float)
+            .tolist()
         ]
     )
     print(

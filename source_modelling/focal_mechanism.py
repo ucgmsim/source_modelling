@@ -489,6 +489,13 @@ class SlabModel:
 
     Contains the Kermadec-Hikurangi ("ker") and Puysegur ("puy") regions of
     Slab2 (Hayes et al. 2018) on their native 0.05 and 0.02 degree grids.
+
+    Parameters
+    ----------
+    grids : dict[str, npt.NDArray]
+        Mapping with keys ``<region>_lat``, ``<region>_lon``,
+        ``<region>_depth``, ``<region>_dip`` and ``<region>_strike``
+        for each region.
     """
 
     def __init__(self, grids: dict[str, npt.NDArray]):
@@ -594,6 +601,11 @@ class FaultSegmentIndex:
 
     Segments are oriented so that the dip direction is strike + 90 (the
     Aki-Richards convention) wherever the CFM records a dip direction.
+
+    Parameters
+    ----------
+    faults : list[CommunityFault]
+        Faults from the community fault model.
     """
 
     def __init__(self, faults: list[CommunityFault]):
@@ -1045,6 +1057,15 @@ class Forest:
     ``children_right``, ``feature``, ``threshold`` and per-leaf class
     probabilities ``value``. The forest prediction is the mean of the tree
     probabilities.
+
+    Parameters
+    ----------
+    trees : list[dict]
+        Tree dictionaries with the scikit-learn array layout.
+    feature_names : list[str]
+        Feature names in input order.
+    classes : list
+        Class labels in probability-column order.
     """
 
     def __init__(self, trees: list[dict], feature_names: list[str], classes: list):
@@ -1204,7 +1225,21 @@ def _load_forest(filename: str) -> Forest | None:
 
 
 class CMTClassifier:
-    """Nodal plane selection and tectonic type classification for CMT solutions."""
+    """Nodal plane selection and tectonic type classification for CMT solutions.
+
+    Parameters
+    ----------
+    segments : FaultSegmentIndex
+        Indexed CFM fault segments.
+    slab_model : SlabModel
+        Subduction interface geometry.
+    nodal_plane_model : Forest | None
+        Trained nodal plane forest. If None, `most_likely_nodal_plane`
+        raises.
+    tectonic_type_model : Forest | None
+        Trained tectonic type forest. If None, `tectonic_type` falls
+        back to `tectonic_type_rule`.
+    """
 
     def __init__(
         self,

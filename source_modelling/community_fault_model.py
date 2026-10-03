@@ -294,10 +294,13 @@ def load_community_fault_model(
 
     def feature_trace(feature: fiona.Feature) -> shapely.LineString:
         points = np.array(feature.geometry.coordinates)[:, ::-1]
-        strike = line_segment_strike(points[0], points[1])
+        strike = line_segment_strike(points[0], points[-1])
         try:
             compass_direction = CompassDirection[feature.properties["Dip_dir"]]
-            if strike > compass_direction.value:
+            # Orient the trace so the fault dips to the right (dip
+            # direction = strike + 90, the Aki-Richards convention).
+            misfit = (strike + 90 - compass_direction.value + 180) % 360 - 180
+            if abs(misfit) > 90:
                 points = points[::-1]
         except KeyError:
             pass
