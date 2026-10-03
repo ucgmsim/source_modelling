@@ -1661,7 +1661,7 @@ dev = [
     { name = "ruff" },
     { name = "ty" },
 ]
-ml = [{ name = "scikit-learn" }]
+ml = [{ name = "scikit-learn", specifier = ">=1.6" }]
 
 [[package]]
 name = "sphinx"

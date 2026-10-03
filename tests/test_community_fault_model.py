@@ -37,12 +37,13 @@ def test_most_likely_nodal_plane():
                 np.array([solution["Latitude"], solution["Longitude"], solution["CD"]]),
                 nodal_plane_1,
                 nodal_plane_2,
-                solution["Mw"],
             )
             == nodal_plane_1
         ):
             correct += 1
 
-    # The previous strike-only vote scored 81/98; grouped cross-validation of
-    # the current model is ~0.87 so the in-sample score must be at least 85.
+    # Grouped cross-validation accuracy of the model is ~0.87 (see
+    # source_modelling/NZ_CFM/training_report.json), so the in-sample score
+    # must be at least 85. The previous strike-only vote scored 81/98 in this
+    # ordering but only 56/98 with the planes swapped.
     assert correct >= 85

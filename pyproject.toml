@@ -42,7 +42,7 @@ fiona = ["fiona", "geopandas"]
 
 [dependency-groups]
 dev = ["ruff", "deptry", "ty", "numpydoc"]
-ml = ["scikit-learn"]
+ml = ["scikit-learn>=1.6"]
 
 
 [tool.setuptools.package-data]

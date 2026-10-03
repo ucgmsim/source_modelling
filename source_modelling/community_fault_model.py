@@ -468,15 +468,13 @@ def most_likely_nodal_plane(
     centroid: npt.NDArray,
     nodal_plane_1: NodalPlane,
     nodal_plane_2: NodalPlane,
-    magnitude: float = float("nan"),
 ) -> NodalPlane:
     """Find the nodal plane most likely to be the fault plane.
 
     This delegates to `source_modelling.focal_mechanism.CMTClassifier`,
     which scores each plane against nearby faults in the community fault
-    model (strike, dip direction, dip, rake and the up-dip projection of
-    the plane onto the mapped trace), the Slab2 subduction interface
-    geometry and Andersonian faulting mechanics.
+    model: strike, dip direction, dip, rake and the up-dip projection of
+    the plane onto the mapped trace.
 
     Parameters
     ----------
@@ -489,8 +487,6 @@ def most_likely_nodal_plane(
         The first nodal plane.
     nodal_plane_2 : NodalPlane
         The second nodal plane.
-    magnitude : float, optional
-        The moment magnitude, if known.
 
     Returns
     -------
@@ -500,9 +496,7 @@ def most_likely_nodal_plane(
     from source_modelling.focal_mechanism import CMTClassifier
 
     classifier = CMTClassifier.from_faults(faults)
-    return classifier.most_likely_nodal_plane(
-        centroid, nodal_plane_1, nodal_plane_2, magnitude
-    )
+    return classifier.most_likely_nodal_plane(centroid, nodal_plane_1, nodal_plane_2)
 
 
 def line_segment_strike(point_a: npt.ArrayLike, point_b: npt.ArrayLike) -> float:
