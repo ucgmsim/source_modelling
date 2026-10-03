@@ -17,6 +17,7 @@ dependencies = [
   "numpy>=2.0",
   "pandas",
   "parse",
+  "pyproj",
   "qcore-utils>=2026.8.2",
   "scipy",
   "shapely>=2.0",

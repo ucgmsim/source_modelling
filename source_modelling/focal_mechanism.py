@@ -39,6 +39,7 @@ from typing import NamedTuple
 
 import numpy as np
 import numpy.typing as npt
+import pyproj
 import scipy as sp
 import shapely
 
@@ -267,20 +268,12 @@ class FaultSegmentIndex:
         ]
         """Whether the parent fault has a recorded dip direction."""
 
-        # Initial great-circle bearing from the start to the end of each segment.
-        lat_1, lon_1 = np.radians(coordinates.nztm_to_wgs_depth(self.start)[:, :2].T)
-        lat_2, lon_2 = np.radians(coordinates.nztm_to_wgs_depth(self.end)[:, :2].T)
-        delta_lon = lon_2 - lon_1
-        self.strike = (
-            np.degrees(
-                np.arctan2(
-                    np.sin(delta_lon) * np.cos(lat_2),
-                    np.cos(lat_1) * np.sin(lat_2)
-                    - np.sin(lat_1) * np.cos(lat_2) * np.cos(delta_lon),
-                )
-            )
-            % 360.0
+        start_wgs = coordinates.nztm_to_wgs_depth(self.start)
+        end_wgs = coordinates.nztm_to_wgs_depth(self.end)
+        forward_azimuth, _, _ = pyproj.Geod(ellps="WGS84").inv(
+            start_wgs[:, 1], start_wgs[:, 0], end_wgs[:, 1], end_wgs[:, 0]
         )
+        self.strike = np.asarray(forward_azimuth) % 360.0
         """Strike of each segment (degrees)."""
 
     def _distances(self, point: npt.NDArray) -> npt.NDArray[np.float64]:
