@@ -8,12 +8,20 @@ from source_modelling.community_fault_model import NodalPlane
 def test_can_load_community_fault_model():
     model = community_fault_model.get_community_fault_model()
     assert len(model) == 880
+    # Traces are oriented so that the fault dips to the right of the trace.
+    for fault in model:
+        if fault.dip_dir is None:
+            continue
+        coords = np.asarray(fault.trace.coords)
+        strike = community_fault_model.line_segment_strike(coords[0], coords[-1])
+        misfit = (strike + 90 - fault.dip_dir.value + 180) % 360 - 180
+        assert abs(misfit) <= 90, fault.name
     gdf = community_fault_model.community_fault_model_as_geodataframe()
     assert len(gdf) == 880
 
 
 def test_most_likely_nodal_plane():
-    solutions = pd.read_csv("tests/data/GeoNet_Test_Solutions.csv")
+    solutions = pd.read_csv("tests/data/nodal_plane_labels.csv")
     model = community_fault_model.get_community_fault_model()
     correct = 0
     for _, solution in solutions.iterrows():
@@ -26,7 +34,7 @@ def test_most_likely_nodal_plane():
         if (
             community_fault_model.most_likely_nodal_plane(
                 model,
-                np.array([solution["Latitude"], solution["Longitude"]]),
+                np.array([solution["Latitude"], solution["Longitude"], solution["CD"]]),
                 nodal_plane_1,
                 nodal_plane_2,
             )
@@ -34,4 +42,6 @@ def test_most_likely_nodal_plane():
         ):
             correct += 1
 
-    assert correct > 75
+    # The model's grouped cross-validation accuracy is ~0.90 and it scores
+    # 116/128 on its own training labels.
+    assert correct >= 112

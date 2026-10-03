@@ -17,6 +17,7 @@ dependencies = [
   "numpy>=2.0",
   "pandas",
   "parse",
+  "pyproj",
   "qcore-utils>=2026.8.2",
   "scipy",
   "shapely>=2.0",
@@ -42,6 +43,7 @@ fiona = ["fiona", "geopandas"]
 
 [dependency-groups]
 dev = ["ruff", "deptry", "ty", "numpydoc"]
+ml = ["scikit-learn>=1.6"]
 
 
 [tool.setuptools.package-data]
@@ -165,3 +167,6 @@ optional_dependencies_dev_groups = ["test", "types"]
 [tool.deptry.per_rule_ignores]
 # h5netcdf is never imported directly; xarray loads it via engine="h5netcdf".
 DEP002 = ["h5netcdf"]
+# scikit-learn is only needed to (re)train the CMT classifiers in scripts/,
+# which is not part of the installed package.
+DEP004 = ["sklearn"]
