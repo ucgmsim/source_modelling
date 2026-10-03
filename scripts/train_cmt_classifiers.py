@@ -7,13 +7,19 @@ Run with the ``ml`` dependency group::
 The nodal plane model is an L2-regularised logistic regression on the
 difference between the two planes' CFM misfits
 (`source_modelling.focal_mechanism.NODAL_PLANE_FEATURE_NAMES`), fitted to
-human-picked GeoNet solutions (``tests/data/GeoNet_Test_Solutions.csv``,
-where plane 1 is the preferred plane). It has no intercept and is fitted on
-both plane orderings, so swapping the planes exactly flips the prediction.
+human-picked fault planes for GeoNet CMT solutions
+(``tests/data/nodal_plane_labels.csv``, where plane 1 is the preferred
+plane). The labels combine two independent sets of picks: Robin Lee's
+(``tests/data/GeoNet_Test_Solutions.csv``) and the fault planes of a suite
+of moderate crustal events prepared for simulation validation. The two
+agree on 45 of the 48 events they share; the 3 disputed events are left
+out. The ``source`` column records which set each event came from. The
+model has no intercept and is fitted on both plane orderings, so swapping
+the planes exactly flips the prediction.
 
 It is evaluated with repeated grouped cross-validation, grouping events by
 1-degree cell so that an earthquake sequence never straddles the
-train/test split. The 98 events fall in only about 26 groups, so the
+train/test split. The events fall in only about 34 groups, so the
 cross-validated accuracy has a standard error of a few percent: more
 flexible models (random forests on these and slab, Andersonian and
 magnitude features) were no more accurate under the same procedure.
@@ -92,7 +98,7 @@ def main() -> None:
     """Train and export the nodal plane classifier."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--labelled", type=Path, default=REPO / "tests/data/GeoNet_Test_Solutions.csv"
+        "--labelled", type=Path, default=REPO / "tests/data/nodal_plane_labels.csv"
     )
     parser.add_argument(
         "--output-dir", type=Path, default=REPO / "source_modelling/NZ_CFM"

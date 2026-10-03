@@ -21,7 +21,7 @@ def test_can_load_community_fault_model():
 
 
 def test_most_likely_nodal_plane():
-    solutions = pd.read_csv("tests/data/GeoNet_Test_Solutions.csv")
+    solutions = pd.read_csv("tests/data/nodal_plane_labels.csv")
     model = community_fault_model.get_community_fault_model()
     correct = 0
     for _, solution in solutions.iterrows():
@@ -42,8 +42,8 @@ def test_most_likely_nodal_plane():
         ):
             correct += 1
 
-    # Grouped cross-validation accuracy of the model is ~0.87 (see
-    # source_modelling/NZ_CFM/training_report.json), so the in-sample score
-    # must be at least 85. The previous strike-only vote scored 81/98 in this
-    # ordering but only 56/98 with the planes swapped.
-    assert correct >= 85
+    # Grouped cross-validation accuracy of the model is ~0.90 (see
+    # source_modelling/NZ_CFM/training_report.json) and it scores 116/128
+    # in-sample. The previous strike-only vote scored 81/98 on Robin Lee's
+    # picks in their given ordering but only 56/98 with the planes swapped.
+    assert correct >= 112

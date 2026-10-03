@@ -1,7 +1,7 @@
 {
- "n_labelled": 98,
- "n_groups": 26,
- "cv_accuracy_mean": 0.8683673469387754,
- "cv_accuracy_std": 0.015441577500430154,
- "in_sample_accuracy": 0.8877551020408163
+ "n_labelled": 128,
+ "n_groups": 34,
+ "cv_accuracy_mean": 0.8953125,
+ "cv_accuracy_std": 0.012203515118604147,
+ "in_sample_accuracy": 0.90625
 }
