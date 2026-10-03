@@ -4,27 +4,21 @@ Run with the ``ml`` dependency group::
 
     uv run --group ml scripts/train_cmt_classifiers.py
 
-The nodal plane model is an L2-regularised logistic regression on the
-difference between the two planes' CFM misfits
-(`source_modelling.focal_mechanism.NODAL_PLANE_FEATURE_NAMES`), fitted to
-human-picked fault planes for GeoNet CMT solutions
-(``tests/data/nodal_plane_labels.csv``, where plane 1 is the preferred
-plane). The labels combine two independent sets of picks: Robin Lee's
-(``tests/data/GeoNet_Test_Solutions.csv``) and the fault planes of a suite
-of moderate crustal events prepared for simulation validation. The two
-agree on 45 of the 48 events they share; the 3 disputed events are left
-out. The ``source`` column records which set each event came from. The
-model has no intercept and is fitted on both plane orderings, so swapping
-the planes exactly flips the prediction.
+The model is an L2-regularised logistic regression without intercept on the
+plane 1 - plane 2 CFM misfits
+(`source_modelling.focal_mechanism.NODAL_PLANE_FEATURE_NAMES`), fitted on
+both plane orderings so that swapping the planes flips the prediction.
 
-It is evaluated with repeated grouped cross-validation, grouping events by
-1-degree cell so that an earthquake sequence never straddles the
-train/test split. The events fall in only about 34 groups, so the
-cross-validated accuracy has a standard error of a few percent: more
-flexible models (random forests on these and slab, Andersonian and
-magnitude features) were no more accurate under the same procedure.
+The labels (``tests/data/nodal_plane_labels.csv``, plane 1 preferred)
+combine two independent sets of human-picked fault planes for GeoNet CMT
+solutions: Robin Lee's picks and those of a suite of moderate crustal events
+prepared for simulation validation. Events where the two sets disagree are
+excluded, and the ``source`` column records which set each event came from.
 
-The weights are exported to ``source_modelling/NZ_CFM/nodal_plane_model.json``.
+Accuracy is estimated by repeated grouped cross-validation, grouping events
+by 1-degree cell so that an earthquake sequence never straddles the
+train/test split. The weights are exported to
+``source_modelling/NZ_CFM/nodal_plane_model.json``.
 """
 
 import argparse
@@ -44,29 +38,9 @@ REGULARISATION = 0.03
 """Inverse L2 regularisation strength (scikit-learn's ``C``) on standardised features."""
 
 
-def misfit_differences(
-    segments: fm.FaultSegmentIndex, frame: pd.DataFrame
-) -> np.ndarray:
-    """Plane 1 - plane 2 CFM misfits for every row of a GeoNet-format data frame."""
-    columns = ["Latitude", "Longitude", "CD"]
-    columns += ["strike1", "dip1", "rake1", "strike2", "dip2", "rake2"]
-    return np.array(
-        [
-            segments.plane_misfits(lat, lon, depth, NodalPlane(*planes[:3]))
-            - segments.plane_misfits(lat, lon, depth, NodalPlane(*planes[3:]))
-            for lat, lon, depth, *planes in frame[columns].to_numpy(float).tolist()
-        ]
-    )
-
-
-def fit_weights(differences: np.ndarray) -> np.ndarray:
-    """Fit the antisymmetric logistic regression and return weights on raw differences.
-
-    Plane 1 is the preferred plane, so each difference has label 1 and its
-    negation (the swapped ordering) label 0. Features are scaled by the
-    spread of the absolute differences so one regularisation strength suits
-    all of them.
-    """
+def _fit_weights(differences: np.ndarray) -> np.ndarray:
+    """Fit the antisymmetric logistic regression and return weights on the raw differences."""
+    # Scale by the spread of each feature so one regularisation strength suits all.
     scale = np.std(np.abs(differences), axis=0) + 1e-9
     x = np.vstack([differences, -differences]) / scale
     y = np.r_[np.ones(len(differences)), np.zeros(len(differences))]
@@ -74,12 +48,7 @@ def fit_weights(differences: np.ndarray) -> np.ndarray:
     return model.coef_[0] / scale
 
 
-def accuracy(weights: np.ndarray, differences: np.ndarray) -> float:
-    """Fraction of events for which plane 1 is predicted."""
-    return float(np.mean(differences @ weights >= 0))
-
-
-def cross_validate(
+def _cross_validate(
     differences: np.ndarray, groups: np.ndarray, n_splits: int = 5, repeats: int = 10
 ) -> np.ndarray:
     """Grouped cross-validation accuracy for each repeat."""
@@ -88,8 +57,7 @@ def cross_validate(
         folds = GroupKFold(n_splits=n_splits, shuffle=True, random_state=repeat)
         correct = np.zeros(len(differences), dtype=bool)
         for train, test in folds.split(differences, groups=groups):
-            weights = fit_weights(differences[train])
-            correct[test] = differences[test] @ weights >= 0
+            correct[test] = differences[test] @ _fit_weights(differences[train]) >= 0
         scores.append(correct.mean())
     return np.array(scores)
 
@@ -108,27 +76,31 @@ def main() -> None:
 
     segments = fm.FaultSegmentIndex(get_community_fault_model())
     labelled = pd.read_csv(args.labelled)
-    differences = misfit_differences(segments, labelled)
+    # Plane 1 - plane 2 misfits for every event.
+    columns = ["Latitude", "Longitude", "CD"]
+    columns += ["strike1", "dip1", "rake1", "strike2", "dip2", "rake2"]
+    differences = np.array(
+        [
+            segments.plane_misfits(lat, lon, depth, NodalPlane(*planes[:3]))
+            - segments.plane_misfits(lat, lon, depth, NodalPlane(*planes[3:]))
+            for lat, lon, depth, *planes in labelled[columns].to_numpy(float).tolist()
+        ]
+    )
     groups = (
         labelled.Latitude.round().astype(int).astype(str)
         + "_"
         + labelled.Longitude.round().astype(int).astype(str)
     ).to_numpy()
-    n_groups = len(np.unique(groups))
-    print(f"Labelled events: {len(differences)} in {n_groups} spatial groups")
+    print(
+        f"Labelled events: {len(differences)} in {len(np.unique(groups))} spatial groups"
+    )
 
-    scores = cross_validate(differences, groups)
-    weights = fit_weights(differences)
-    report = {
-        "n_labelled": len(differences),
-        "n_groups": n_groups,
-        "cv_accuracy_mean": float(scores.mean()),
-        "cv_accuracy_std": float(scores.std()),
-        "in_sample_accuracy": accuracy(weights, differences),
-    }
+    scores = _cross_validate(differences, groups)
+    weights = _fit_weights(differences)
+    in_sample = np.mean(differences @ weights >= 0)
     print(
         f"Grouped 5-fold CV accuracy: {scores.mean():.3f} ± {scores.std():.3f}; "
-        f"in-sample {report['in_sample_accuracy']:.3f}"
+        f"in-sample {in_sample:.3f}"
     )
     print("Weights on plane 1 - plane 2 misfits:")
     for name, weight in zip(fm.NODAL_PLANE_FEATURE_NAMES, weights):
@@ -145,8 +117,6 @@ def main() -> None:
                 handle,
                 indent=1,
             )
-        with open(args.output_dir / "training_report.json", "w") as handle:
-            json.dump(report, handle, indent=1)
         print(f"Exported model to {args.output_dir}")
 
 

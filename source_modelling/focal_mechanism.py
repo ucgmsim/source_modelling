@@ -1,28 +1,18 @@
 """Nodal plane selection and tectonic type classification for CMT solutions.
 
-A centroid moment tensor (CMT) solution provides two orthogonal nodal
-planes. The moment tensor alone cannot distinguish which one is the fault
-plane; the choice has to come from external constraints. This module scores
-each plane against the mapped faults near the centroid in the New Zealand
-Community Fault Model (CFM): agreement in strike (with and without the dip
-direction), dip and rake, and the "hanging-wall" test in which the plane
-projected up-dip from the centroid should reach the surface at a similarly
-oriented mapped trace.
+The fault plane of a centroid moment tensor (CMT) solution is chosen by
+scoring both nodal planes against the nearby mapped faults of the New
+Zealand Community Fault Model (CFM): agreement in strike (with and without
+dip direction), dip and rake, and the distance from the plane's up-dip
+projection to a similarly oriented mapped trace. A logistic regression
+without intercept on the difference of the two planes' misfits gives the
+probability that plane 1 is the fault plane, so swapping the planes flips
+the answer. The weights are fitted with ``scripts/train_cmt_classifiers.py``.
 
-The six per-plane misfits are combined by a logistic regression on the
-difference between the two planes' misfits, with no intercept, so swapping
-the planes exactly flips the answer. The weights are fitted to human-picked
-GeoNet solutions with ``scripts/train_cmt_classifiers.py``.
-
-The tectonic type (crustal, subduction interface or intraslab) is
-classified by the NZ NSHM 2022 rule (Rollins et al. 2022) against the Slab2
-interface geometry (Hayes et al. 2018): events outside the slab footprint
-are crustal; events with an interface-like mechanism within 10 km of the
-interface are interface; otherwise events above the interface are crustal
-and events below it are intraslab (with normal faulting inside the
-tolerance band also taken as intraslab). Class probabilities follow from
-applying the same rule under Gaussian uncertainty in the depth below the
-interface.
+The tectonic type (crustal, subduction interface or intraslab) follows the
+NZ NSHM 2022 rule (Rollins et al. 2022) against the Slab2 interface
+geometry (Hayes et al. 2018), with probabilities from Gaussian uncertainty
+in the depth below the interface.
 
 Examples
 --------
@@ -86,7 +76,7 @@ STRIKE_MATCH_TOLERANCE = 30.0
 """Maximum strike difference for a fault segment to count as a match in the projected trace test."""
 
 MAX_DISTANCE_KM = 100.0
-"""Distances larger than this are clipped before being used as features."""
+"""Projected trace distances are clipped to this value."""
 
 NODAL_PLANE_FEATURE_NAMES = [
     "cfm_strike_unoriented",
@@ -114,26 +104,10 @@ class TectonicType(Enum):
     """Intraslab (including outer-rise) earthquake."""
 
 
-def angular_difference(
+def _angular_difference(
     a: npt.ArrayLike, b: npt.ArrayLike, period: float = 360.0
 ) -> npt.NDArray[np.float64]:
-    """Smallest absolute difference between two angles.
-
-    Parameters
-    ----------
-    a : npt.ArrayLike
-        First angle(s) in degrees.
-    b : npt.ArrayLike
-        Second angle(s) in degrees.
-    period : float, optional
-        Period of the angle: 360 for oriented angles such as strike with a
-        known dip direction, 180 for unoriented angles.
-
-    Returns
-    -------
-    npt.NDArray[np.float64]
-        Absolute angular difference in the range [0, period / 2].
-    """
+    """Smallest absolute difference between angles in degrees with the given period."""
     difference = np.mod(np.asarray(a, dtype=float) - np.asarray(b, dtype=float), period)
     return np.minimum(difference, period - difference)
 
@@ -144,70 +118,6 @@ def _plane_normal(strike: float, dip: float) -> npt.NDArray[np.float64]:
     return np.array(
         [-np.sin(dip) * np.sin(strike), np.sin(dip) * np.cos(strike), -np.cos(dip)]
     )
-
-
-def angle_between_planes(
-    strike_1: float, dip_1: float, strike_2: float, dip_2: float
-) -> float:
-    """Angle between two planes (angle between their normals).
-
-    Parameters
-    ----------
-    strike_1 : float
-        Strike of the first plane in degrees.
-    dip_1 : float
-        Dip of the first plane in degrees.
-    strike_2 : float
-        Strike of the second plane in degrees.
-    dip_2 : float
-        Dip of the second plane in degrees.
-
-    Returns
-    -------
-    float
-        Angle between the planes in degrees, in [0, 90].
-    """
-    cosine = abs(float(_plane_normal(strike_1, dip_1) @ _plane_normal(strike_2, dip_2)))
-    return float(np.degrees(np.arccos(min(cosine, 1.0))))
-
-
-def is_normal_faulting(nodal_plane_1: NodalPlane, nodal_plane_2: NodalPlane) -> bool:
-    """Whether a double couple is normal faulting.
-
-    Both nodal planes of a double couple share the sign of their rake, so
-    the normal/reverse sense is unambiguous. The dip-slip/strike-slip
-    distinction is taken from the plane with the larger dip-slip component,
-    which makes the result independent of the plane ordering.
-
-    Parameters
-    ----------
-    nodal_plane_1 : NodalPlane
-        First nodal plane.
-    nodal_plane_2 : NodalPlane
-        Second nodal plane.
-
-    Returns
-    -------
-    bool
-        True if the dominant dip-slip plane is normal or normal-oblique.
-    """
-    dominant = max(
-        nodal_plane_1, nodal_plane_2, key=lambda p: abs(np.sin(np.radians(p.rake)))
-    )
-    return rake_type(dominant.rake) in (RakeType.NORMAL, RakeType.NORMAL_OBLIQUE)
-
-
-def _great_circle_bearing(
-    lat_1: npt.NDArray, lon_1: npt.NDArray, lat_2: npt.NDArray, lon_2: npt.NDArray
-) -> npt.NDArray[np.float64]:
-    """Initial great-circle bearing from point 1 to point 2 (degrees, vectorised)."""
-    lat_1, lon_1, lat_2, lon_2 = (np.radians(x) for x in (lat_1, lon_1, lat_2, lon_2))
-    delta_lon = lon_2 - lon_1
-    y = np.sin(delta_lon) * np.cos(lat_2)
-    x = np.cos(lat_1) * np.sin(lat_2) - np.sin(lat_1) * np.cos(lat_2) * np.cos(
-        delta_lon
-    )
-    return np.degrees(np.arctan2(y, x)) % 360.0
 
 
 class SlabQuery(NamedTuple):
@@ -232,9 +142,8 @@ class SlabModel:
     """Slab2 subduction interface geometry cropped to New Zealand.
 
     Contains the Kermadec-Hikurangi ("ker") and Puysegur ("puy") regions of
-    Slab2 (Hayes et al. 2018) on their native 0.05 and 0.02 degree grids,
-    interpolated bilinearly. Strike is interpolated as a unit vector to
-    avoid wraparound.
+    Slab2 (Hayes et al. 2018), interpolated bilinearly. Strike is
+    interpolated as a unit vector to avoid wraparound.
 
     Parameters
     ----------
@@ -357,26 +266,25 @@ class FaultSegmentIndex:
             segment_fault
         ]
         """Whether the parent fault has a recorded dip direction."""
-        start_wgs = coordinates.nztm_to_wgs_depth(self.start)
-        end_wgs = coordinates.nztm_to_wgs_depth(self.end)
-        self.strike = _great_circle_bearing(
-            start_wgs[:, 0], start_wgs[:, 1], end_wgs[:, 0], end_wgs[:, 1]
+
+        # Initial great-circle bearing from the start to the end of each segment.
+        lat_1, lon_1 = np.radians(coordinates.nztm_to_wgs_depth(self.start)[:, :2].T)
+        lat_2, lon_2 = np.radians(coordinates.nztm_to_wgs_depth(self.end)[:, :2].T)
+        delta_lon = lon_2 - lon_1
+        self.strike = (
+            np.degrees(
+                np.arctan2(
+                    np.sin(delta_lon) * np.cos(lat_2),
+                    np.cos(lat_1) * np.sin(lat_2)
+                    - np.sin(lat_1) * np.cos(lat_2) * np.cos(delta_lon),
+                )
+            )
+            % 360.0
         )
         """Strike of each segment (degrees)."""
 
-    def distances(self, point: npt.NDArray) -> npt.NDArray[np.float64]:
-        """Distance in km from a point to every segment.
-
-        Parameters
-        ----------
-        point : npt.NDArray
-            Point in NZTM (northing, easting).
-
-        Returns
-        -------
-        npt.NDArray[np.float64]
-            Distance to each segment in km.
-        """
+    def _distances(self, point: npt.NDArray) -> npt.NDArray[np.float64]:
+        """Distance in km from an NZTM point to every segment."""
         direction = self.end - self.start
         offset = point[:2] - self.start
         length_sq = np.maximum(np.einsum("ij,ij->i", direction, direction), 1e-9)
@@ -406,26 +314,26 @@ class FaultSegmentIndex:
             Misfits in `NODAL_PLANE_FEATURE_NAMES` order. Smaller values mean
             a better match.
         """
-        distances = self.distances(coordinates.wgs_depth_to_nztm(np.array([lat, lon])))
+        distances = self._distances(coordinates.wgs_depth_to_nztm(np.array([lat, lon])))
         nearest = np.argsort(distances)[:FAULT_NEIGHBOURS]
         weights = 1.0 / (distances[nearest] + 2.0)
         weights /= weights.sum()
 
-        unoriented = angular_difference(self.strike, plane.strike, 180.0)
+        unoriented = _angular_difference(self.strike, plane.strike, 180.0)
         # Faults with unknown dip direction only constrain the unoriented strike.
         oriented = np.where(
-            self.dip_known, angular_difference(self.strike, plane.strike), unoriented
+            self.dip_known, _angular_difference(self.strike, plane.strike), unoriented
         )
 
-        # Hanging-wall test: project the plane up-dip to the surface and find
-        # the nearest similarly striking trace.
+        # Project the plane up-dip to the surface and find the nearest
+        # similarly striking trace.
         surface_lat, surface_lon = geo.ll_shift(
             lat,
             lon,
             depth / np.tan(np.radians(max(plane.dip, 5.0))),
             (plane.strike - 90.0) % 360.0,
         )
-        surface_distances = self.distances(
+        surface_distances = self._distances(
             coordinates.wgs_depth_to_nztm(np.array([surface_lat, surface_lon]))
         )
 
@@ -438,7 +346,7 @@ class FaultSegmentIndex:
                 weights @ unoriented[nearest],
                 weights @ oriented[nearest],
                 weights @ np.abs(self.dip[nearest] - plane.dip),
-                weights @ angular_difference(self.rake[nearest], plane.rake),
+                weights @ _angular_difference(self.rake[nearest], plane.rake),
                 projected_distance(unoriented),
                 projected_distance(oriented),
             ]
@@ -446,6 +354,7 @@ class FaultSegmentIndex:
 
 
 def _parse_centroid(centroid: npt.ArrayLike) -> tuple[float, float, float]:
+    """Split a (lat, lon[, depth_km]) centroid, warning if the depth is missing."""
     centroid = np.asarray(centroid, dtype=float).ravel()
     if centroid.size == 2:
         warnings.warn(
@@ -460,28 +369,22 @@ def _parse_centroid(centroid: npt.ArrayLike) -> tuple[float, float, float]:
     return float(centroid[0]), float(centroid[1]), float(centroid[2])
 
 
-def is_interface_like(plane: NodalPlane, slab: SlabQuery) -> bool:
-    """Whether a nodal plane could be slip on the subduction interface.
-
-    Parameters
-    ----------
-    plane : NodalPlane
-        The nodal plane.
-    slab : SlabQuery
-        Slab geometry beneath the centroid.
-
-    Returns
-    -------
-    bool
-        True if the plane is thrust-like, not too steep, and close to
-        parallel to the slab surface.
-    """
+def _is_interface_like(plane: NodalPlane, slab: SlabQuery) -> bool:
+    """Whether a plane is thrust-like, not too steep and near parallel to the slab surface."""
+    if not slab.present:
+        return False
+    # Angle between the plane and the slab surface (between their normals).
+    cosine = abs(
+        float(
+            _plane_normal(plane.strike, plane.dip)
+            @ _plane_normal(slab.strike, slab.dip)
+        )
+    )
+    slab_angle = np.degrees(np.arccos(min(cosine, 1.0)))
     return bool(
-        slab.present
-        and angular_difference(plane.rake, 90.0) <= INTERFACE_RAKE_TOLERANCE
+        _angular_difference(plane.rake, 90.0) <= INTERFACE_RAKE_TOLERANCE
         and plane.dip <= INTERFACE_MAX_DIP
-        and angle_between_planes(plane.strike, plane.dip, slab.strike, slab.dip)
-        <= INTERFACE_MAX_SLAB_ANGLE
+        and slab_angle <= INTERFACE_MAX_SLAB_ANGLE
     )
 
 
@@ -493,22 +396,13 @@ def tectonic_type_probabilities(
 ) -> dict[TectonicType, float]:
     """Tectonic type probabilities by the NZ NSHM 2022 rule (Rollins et al. 2022).
 
-    The rule: crustal outside the slab footprint. Inside it, interface if a
-    plane is interface-like and the centroid is within
-    `INTERFACE_DEPTH_TOLERANCE_KM` of the slab surface; otherwise crustal
-    above the slab surface and intraslab below it.
-
-    One refinement to Rollins et al. (2022) is made: a normal-faulting
-    event within the interface tolerance band is classified as intraslab
-    rather than crustal. Normal faulting at interface depth reflects
-    bending or down-dip tension in the subducting plate (for example the
-    2007 Gisborne, 2014 Eketahuna and 2016 Te Araroa earthquakes), and CMT
-    centroid depths for such events are often several kilometres too
-    shallow.
-
-    The rule is applied with the depth below the slab treated as normally
-    distributed, so the probabilities express how robust the class is to
-    depth uncertainty.
+    Events outside the slab footprint are crustal. Inside it, events within
+    `INTERFACE_DEPTH_TOLERANCE_KM` of the slab surface are interface if a
+    plane is interface-like and intraslab if the mechanism is normal
+    faulting (bending of the subducting plate, whose CMT centroids are often
+    too shallow). Other events are crustal above the slab surface and
+    intraslab below it. The rule is applied with the depth below the slab
+    normally distributed.
 
     Parameters
     ----------
@@ -516,9 +410,9 @@ def tectonic_type_probabilities(
         Centroid depth below the slab surface in km (negative above it),
         NaN outside the slab footprint.
     interface_like : bool
-        Whether either nodal plane is interface-like (see `is_interface_like`).
+        Whether either nodal plane is interface-like.
     normal_like : bool
-        Whether the mechanism is normal faulting (see `is_normal_faulting`).
+        Whether the mechanism is normal faulting.
     sigma : float, optional
         Standard deviation of the depth below the slab in km. With
         ``sigma=0`` the deterministic rule is applied.
@@ -557,15 +451,6 @@ def tectonic_type_probabilities(
         TectonicType.INTERFACE: float(interface),
         TectonicType.SLAB: float(1.0 - above_band_bottom + band_slab),
     }
-
-
-@functools.cache
-def _load_nodal_plane_weights() -> npt.NDArray[np.float64]:
-    with (_DATA_DIR / "nodal_plane_model.json").open("r") as handle:
-        model = json.load(handle)
-    if model["feature_names"] != NODAL_PLANE_FEATURE_NAMES:
-        raise ValueError("Packaged nodal plane model does not match the features.")
-    return np.asarray(model["weights"], dtype=float)
 
 
 class CMTClassifier:
@@ -618,8 +503,14 @@ class CMTClassifier:
         CMTClassifier
             The classifier.
         """
+        with (_DATA_DIR / "nodal_plane_model.json").open("r") as handle:
+            model = json.load(handle)
+        if model["feature_names"] != NODAL_PLANE_FEATURE_NAMES:
+            raise ValueError("Packaged nodal plane model does not match the features.")
         return cls(
-            FaultSegmentIndex(faults), SlabModel.load(), _load_nodal_plane_weights()
+            FaultSegmentIndex(faults),
+            SlabModel.load(),
+            np.asarray(model["weights"], dtype=float),
         )
 
     @classmethod
@@ -672,8 +563,6 @@ class CMTClassifier:
         nodal_plane_2: NodalPlane,
     ) -> float:
         """Probability that the first nodal plane is the fault plane.
-
-        Swapping the planes gives exactly one minus this value.
 
         Parameters
         ----------
@@ -730,9 +619,7 @@ class CMTClassifier:
         nodal_plane_2: NodalPlane,
         sigma: float = DEPTH_BELOW_SLAB_SIGMA_KM,
     ) -> dict[TectonicType, float]:
-        """Tectonic type probabilities under depth uncertainty.
-
-        See the module-level `tectonic_type_probabilities` for the rule.
+        """Tectonic type probabilities (see the module-level `tectonic_type_probabilities`).
 
         Parameters
         ----------
@@ -753,11 +640,16 @@ class CMTClassifier:
         """
         lat, lon, depth = _parse_centroid(centroid)
         slab = self.slab_model.query(lat, lon)
+        # The planes share the slip sense; the plane with more dip-slip
+        # decides whether the mechanism is normal or strike-slip.
+        dominant = max(
+            nodal_plane_1, nodal_plane_2, key=lambda p: abs(np.sin(np.radians(p.rake)))
+        )
         return tectonic_type_probabilities(
             depth - slab.depth,
-            is_interface_like(nodal_plane_1, slab)
-            or is_interface_like(nodal_plane_2, slab),
-            is_normal_faulting(nodal_plane_1, nodal_plane_2),
+            _is_interface_like(nodal_plane_1, slab)
+            or _is_interface_like(nodal_plane_2, slab),
+            rake_type(dominant.rake) in (RakeType.NORMAL, RakeType.NORMAL_OBLIQUE),
             sigma,
         )
 

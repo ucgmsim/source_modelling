@@ -42,8 +42,6 @@ def test_most_likely_nodal_plane():
         ):
             correct += 1
 
-    # Grouped cross-validation accuracy of the model is ~0.90 (see
-    # source_modelling/NZ_CFM/training_report.json) and it scores 116/128
-    # in-sample. The previous strike-only vote scored 81/98 on Robin Lee's
-    # picks in their given ordering but only 56/98 with the planes swapped.
+    # The model's grouped cross-validation accuracy is ~0.90 and it scores
+    # 116/128 on its own training labels.
     assert correct >= 112
