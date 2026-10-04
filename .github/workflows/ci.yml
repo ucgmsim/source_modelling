@@ -14,3 +14,4 @@ jobs:
       exclude-init: false
       enable-coverage: true
       cov-package: source_modelling
+      cov-fail-under: 95
