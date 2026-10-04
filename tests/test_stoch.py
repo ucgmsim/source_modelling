@@ -1,4 +1,5 @@
 import io
+import multiprocessing
 from pathlib import Path
 
 import numpy as np
@@ -58,6 +59,20 @@ def sample_stoch_file_multi_plane(tmp_path: Path) -> Path:
         5.0 6.0 7.0 8.0
         0.5 0.6 0.7 0.8
         0.05 0.06 0.07 0.08
+        """)
+    return stoch_filepath
+
+
+@pytest.fixture
+def truncated_stoch_file(tmp_path: Path) -> Path:
+    """A stoch file that claims 2 planes but only contains 1."""
+    stoch_filepath = tmp_path / "truncated_stoch_file"
+    with open(stoch_filepath, "w") as f:
+        f.write("""2
+        174.5 -41.3 2 2 1.0 1.0 45 60 90 0.5 2.5 1.5
+        1.0 2.0 3.0 4.0
+        0.1 0.2 0.3 0.4
+        0.01 0.02 0.03 0.04
         """)
     return stoch_filepath
 
@@ -283,6 +298,33 @@ def test_stoch_file_invalid_planes(bad_header_file: Path):
         parse_utils.ParseError, match="Expected positive integer number of planes"
     ):
         StochFile.from_file(file_path)
+
+
+def _run_stoch_from_file(filename: Path, queue: multiprocessing.Queue) -> None:
+    try:
+        StochFile.from_file(filename)
+        queue.put("returned")
+    except parse_utils.ParseError as exc:
+        queue.put(str(exc))
+
+
+def test_stoch_file_truncated_raises_instead_of_hanging(truncated_stoch_file: Path):
+    """A stoch file with a plane count larger than the data present should
+    raise ParseError instead of hanging forever."""
+    queue: multiprocessing.Queue = multiprocessing.Queue()
+    process = multiprocessing.Process(
+        target=_run_stoch_from_file, args=(truncated_stoch_file, queue)
+    )
+    process.start()
+    process.join(timeout=5)
+    still_running = process.is_alive()
+    if still_running:
+        process.terminate()
+        process.join()
+    assert not still_running, (
+        "StochFile.from_file on truncated file: still running after 5s"
+    )
+    assert "Unexpected end of file" in queue.get()
 
 
 def dump_and_reload(stoch_file: StochFile, tmp_path: Path) -> StochFile:
