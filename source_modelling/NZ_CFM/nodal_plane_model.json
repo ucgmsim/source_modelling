@@ -1,0 +1,18 @@
+{
+ "feature_names": [
+  "cfm_strike_unoriented",
+  "cfm_strike_oriented",
+  "cfm_dip_misfit",
+  "cfm_rake_misfit",
+  "log_projected_distance_unoriented",
+  "log_projected_distance_oriented"
+ ],
+ "weights": [
+  -0.020953660283283927,
+  -0.010182355642922974,
+  -0.02657126669287631,
+  -0.008798443499685074,
+  -0.2741400603791021,
+  -0.3165094578950498
+ ]
+}
