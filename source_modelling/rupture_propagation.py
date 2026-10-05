@@ -33,27 +33,29 @@ def spanning_tree_with_probabilities(
     graph: nx.Graph,
 ) -> tuple[list[nx.DiGraph], list[float]]:
     r"""
-    Compute all spanning trees of a graph and their probabilities.
+    Compute all spanning trees of a graph and their unnormalised weights.
 
-    Trees from have probability:
+    Each spanning tree T is assigned the weight:
 
     P(T) = \prod_{(u, v) \in T} w(u, v) * \prod_{(u, v) \notin T}(1 - w(u, v)),
 
-    where w(u, v) is the weight of the edge between u and v.
+    where w(u, v) is the weight of the edge between u and v. Subgraphs that
+    are not spanning trees are not enumerated, so these weights do not in
+    general sum to 1. Divide by their sum to obtain probabilities conditioned
+    on the outcome being a spanning tree.
 
     Parameters
     ----------
-    graph : nx.DiGraph
-        Directed graph with weighted edges.
+    graph : nx.Graph
+        Graph with weighted edges.
 
     Returns
     -------
     list[nx.DiGraph]
         A list of spanning trees of the graph.
     list[float]
-        An array of probabilities corresponding to each spanning tree. Each
-        probability represents the likelihood of the corresponding spanning tree
-        based on edge weights in the graph.
+        The unnormalised weight P(T) of each spanning tree, in the same order
+        as the list of trees.
     """
 
     trees = []
@@ -286,11 +288,11 @@ def shaw_dieterich_distance_model(distance: float, d0: float, delta: float) -> f
     Parameters
     ----------
     distance : float
-        The distance between two faults (in metres).
+        The distance between two faults (in kilometres).
     d0 : float
-        The characteristic distance parameter (in metres).
+        The characteristic distance parameter (in kilometres).
     delta : float
-        The characteristic slip distance parameter (in metres).
+        The characteristic slip distance parameter (in kilometres).
 
     Returns
     -------
