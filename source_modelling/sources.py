@@ -528,7 +528,7 @@ class Plane:
             raise ValueError("Must supply at least one of dip_dir or dip_dir_nztm.")
 
         if dip_dir_nztm is None and dip_dir is not None:
-            if np.isclose(dip, 90) or dip_dir == 0.0:
+            if np.isclose(dip, 90):
                 dip_dir_nztm = 0
             else:
                 width = (dbottom - dtop) / np.sin(np.deg2rad(dip))
