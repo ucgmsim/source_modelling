@@ -255,3 +255,67 @@ def test_velocity_model_must_start_at_zero():
     bad_vm = pd.DataFrame({"depth_km": [1.0, 2.0]})
     with pytest.raises(ValueError, match="Velocity model does not begin at 0km depth"):
         moment.velocity_model_layer_index(bad_vm, 1.0)
+
+
+def test_magnitude_to_moment_reference_values():
+    """Magnitude to moment matches Hanks and Kanamori (1979) in both conventions.
+
+    Equation 4 (`Mw`) gives log10(M0) = 1.5 Mw + 9.1 and equation 7 (`BoldM`)
+    gives log10(M0) = 1.5 M + 9.05, with M0 in Nm. The tolerance allows for
+    the four decimal places of the coefficients, but is far tighter than the
+    ~12% difference between the two conventions.
+    """
+    mw_moment = moment.magnitude_to_moment(moment.Mw(6.0), bold_m=False)
+    bold_m_moment = moment.magnitude_to_moment(moment.BoldM(6.0), bold_m=True)
+
+    assert mw_moment == pytest.approx(10**18.1, rel=1e-3)
+    assert bold_m_moment == pytest.approx(10**18.05, rel=1e-3)
+    # BoldM is the default convention.
+    assert moment.magnitude_to_moment(moment.BoldM(6.0)) == bold_m_moment
+    # The same magnitude is a larger moment under the Mw convention.
+    assert mw_moment > bold_m_moment
+
+
+@given(magnitude=st.floats(min_value=-2.0, max_value=9.5))
+def test_magnitude_moment_round_trip(magnitude: float):
+    """Converting magnitude to moment and back recovers the magnitude in each convention."""
+    bold_m_moment = moment.magnitude_to_moment(moment.BoldM(magnitude), bold_m=True)
+    assert moment.moment_to_magnitude(bold_m_moment, bold_m=True) == pytest.approx(
+        magnitude
+    )
+
+    mw_moment = moment.magnitude_to_moment(moment.Mw(magnitude), bold_m=False)
+    assert moment.moment_to_magnitude(mw_moment, bold_m=False) == pytest.approx(
+        magnitude
+    )
+
+
+@given(moment_nm=st.floats(min_value=1e5, max_value=1e23))
+def test_moment_to_magnitude_conventions_agree(moment_nm: float):
+    """The Mw and BoldM magnitudes of a moment are related by the convention converters."""
+    bold_m = moment.moment_to_magnitude(moment_nm, bold_m=True)
+    mw = moment.moment_to_magnitude(moment_nm, bold_m=False)
+
+    assert mw == pytest.approx(bold_m - (6.0667 - 6.0333))
+    assert moment.boldm_to_mw(bold_m) == pytest.approx(mw)
+    assert moment.mw_to_boldm(mw) == pytest.approx(bold_m)
+
+
+def test_moment_to_magnitude_mw_units():
+    """The Mw convention also rejects moments supplied in dyne-cm."""
+    with pytest.raises(ValueError, match="Magnitude for moment is unreasonably large"):
+        moment.moment_to_magnitude(1.44e28, bold_m=False)
+
+
+def test_dyne_cm_to_newton_metre():
+    """1 Nm is 1e7 dyne-cm, and converted moments give plausible magnitudes."""
+    assert moment.dyne_cm_to_newton_metre(1e7) == pytest.approx(1.0)
+    assert moment.dyne_cm_to_newton_metre(0.0) == 0.0
+    assert moment.dyne_cm_to_newton_metre(2.5e7) == pytest.approx(2.5)
+
+    # Dusky Sound earthquake: GCMT moment of 1.44e28 dyne-cm, nominally Mw ~ 8.0.
+    dusky_sound_moment = moment.dyne_cm_to_newton_metre(1.44e28)
+    assert dusky_sound_moment == pytest.approx(1.44e21)
+    assert moment.moment_to_magnitude(dusky_sound_moment, bold_m=False) == (
+        pytest.approx(8.0, abs=5e-2)
+    )
