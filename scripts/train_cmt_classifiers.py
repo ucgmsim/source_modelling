@@ -9,15 +9,19 @@ plane 1 - plane 2 CFM misfits
 (`source_modelling.focal_mechanism.NODAL_PLANE_FEATURE_NAMES`), fitted on
 both plane orderings so that swapping the planes flips the prediction.
 
-The labels (``tests/data/nodal_plane_labels.csv``, plane 1 preferred)
-combine two independent sets of human-picked fault planes for GeoNet CMT
-solutions: Robin Lee's picks and those of a suite of moderate crustal events
-prepared for simulation validation. Events where the two sets disagree are
-excluded, and the ``source`` column records which set each event came from.
+The labels (``tests/data/nodal_plane_labels.csv``, plane 1 preferred) are
+human-picked fault planes for GeoNet CMT solutions. They combine Felipe's
+review of GeoNet CMTs, Robin Lee's picks and those of a suite of moderate
+crustal events prepared for simulation validation; the ``source`` column
+records which sets agree on each event. Where they disagree, the reviewed
+GeoNet pick is used.
 
 Accuracy is estimated by repeated grouped cross-validation, grouping events
 by 1-degree cell so that an earthquake sequence never straddles the
-train/test split. The weights are exported to
+train/test split. The mapped crustal faults say less about deeper events,
+so the log-odds are then scaled by a depth temperature
+(`source_modelling.focal_mechanism.depth_temperature`) fitted to the
+out-of-fold log-odds. The weights and temperature are exported to
 ``source_modelling/NZ_CFM/nodal_plane_model.json``.
 """
 
@@ -27,6 +31,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import scipy as sp
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GroupKFold
 
@@ -51,15 +56,30 @@ def _fit_weights(differences: np.ndarray) -> np.ndarray:
 def _cross_validate(
     differences: np.ndarray, groups: np.ndarray, n_splits: int = 5, repeats: int = 10
 ) -> np.ndarray:
-    """Grouped cross-validation accuracy for each repeat."""
-    scores = []
+    """Out-of-fold plane 1 log-odds from grouped cross-validation, one row per repeat."""
+    log_odds = np.zeros((repeats, len(differences)))
     for repeat in range(repeats):
         folds = GroupKFold(n_splits=n_splits, shuffle=True, random_state=repeat)
-        correct = np.zeros(len(differences), dtype=bool)
         for train, test in folds.split(differences, groups=groups):
-            correct[test] = differences[test] @ _fit_weights(differences[train]) >= 0
-        scores.append(correct.mean())
-    return np.array(scores)
+            log_odds[repeat, test] = differences[test] @ _fit_weights(
+                differences[train]
+            )
+    return log_odds
+
+
+def _log_loss(log_odds: np.ndarray, temperature: np.ndarray | float = 1.0) -> float:
+    """Mean log-loss of plane 1 log-odds (plane 1 is always the label)."""
+    return float(np.mean(np.logaddexp(0.0, -temperature * log_odds)))
+
+
+def _fit_temperature(log_odds: np.ndarray, depth: np.ndarray) -> tuple[float, float]:
+    """Fit the depth temperature's scale and decay rate to out-of-fold log-odds."""
+    result = sp.optimize.minimize(
+        lambda p: _log_loss(log_odds, fm.depth_temperature(depth, *p)),
+        [1.0, 0.0],
+        bounds=[(0.0, None), (0.0, None)],
+    )
+    return float(result.x[0]), float(result.x[1])
 
 
 def main() -> None:
@@ -95,7 +115,8 @@ def main() -> None:
         f"Labelled events: {len(differences)} in {len(np.unique(groups))} spatial groups"
     )
 
-    scores = _cross_validate(differences, groups)
+    log_odds = _cross_validate(differences, groups)
+    scores = np.mean(log_odds >= 0, axis=1)
     weights = _fit_weights(differences)
     in_sample = np.mean(differences @ weights >= 0)
     print(
@@ -106,6 +127,27 @@ def main() -> None:
     for name, weight in zip(fm.NODAL_PLANE_FEATURE_NAMES, weights):
         print(f"  {name:40s} {weight:+.4f}")
 
+    depth = labelled.CD.to_numpy(float)
+    scale, depth_rate = _fit_temperature(
+        log_odds, np.broadcast_to(depth, log_odds.shape)
+    )
+    temperature = fm.depth_temperature(depth, scale, depth_rate)
+    print(
+        f"Depth temperature: {scale:.3f} * exp(-{depth_rate:.5f} * depth); "
+        f"CV log-loss {_log_loss(log_odds):.3f} -> {_log_loss(log_odds, temperature):.3f}"
+    )
+    print("Mean CV confidence by depth (before -> after temperature; accuracy):")
+    for low, high in [(0, 20), (20, 40), (40, 100), (100, np.inf)]:
+        in_bin = (depth > low) & (depth <= high)
+        before = sp.special.expit(np.abs(log_odds[:, in_bin])).mean()
+        after = sp.special.expit(
+            np.abs(temperature[in_bin] * log_odds[:, in_bin])
+        ).mean()
+        print(
+            f"  {low:3.0f}-{high:<4.0f} km (n={in_bin.sum():3d}): "
+            f"{before:.3f} -> {after:.3f}; {np.mean(log_odds[:, in_bin] >= 0):.3f}"
+        )
+
     if not args.no_export:
         args.output_dir.mkdir(parents=True, exist_ok=True)
         with open(args.output_dir / "nodal_plane_model.json", "w") as handle:
@@ -113,6 +155,7 @@ def main() -> None:
                 {
                     "feature_names": fm.NODAL_PLANE_FEATURE_NAMES,
                     "weights": weights.tolist(),
+                    "temperature": {"scale": scale, "depth_rate": depth_rate},
                 },
                 handle,
                 indent=1,

@@ -33,6 +33,28 @@ def test_contributions_sum_to_log_odds(classifier: focal_mechanism.CMTClassifier
     assert sum(contributions.values()) == pytest.approx(np.log(p / (1 - p)))
 
 
+def test_deeper_centroid_is_less_confident(
+    classifier: focal_mechanism.CMTClassifier,
+):
+    depths = [0.0, 50.0, 200.0]
+    temperature = focal_mechanism.depth_temperature(
+        depths, classifier.temperature_scale, classifier.temperature_depth_rate
+    )
+    assert np.all(np.diff(temperature) < 0)
+    untempered = focal_mechanism.CMTClassifier(
+        classifier.segments, classifier.slab_model, classifier.weights
+    )
+    for depth, expected in zip(depths, temperature):
+        centroid = [*CENTROID[:2], depth]
+        log_odds = sum(
+            classifier.nodal_plane_contributions(centroid, PLANE_1, PLANE_2).values()
+        )
+        untempered_log_odds = sum(
+            untempered.nodal_plane_contributions(centroid, PLANE_1, PLANE_2).values()
+        )
+        assert log_odds == pytest.approx(expected * untempered_log_odds)
+
+
 def test_centroid_without_depth_warns(classifier: focal_mechanism.CMTClassifier):
     with pytest.warns(UserWarning, match="without depth"):
         classifier.most_likely_nodal_plane(CENTROID[:2], PLANE_1, PLANE_2)
