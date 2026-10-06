@@ -7,7 +7,10 @@ dip direction), dip and rake, and the distance from the plane's up-dip
 projection to a similarly oriented mapped trace. A logistic regression
 without intercept on the difference of the two planes' misfits gives the
 probability that plane 1 is the fault plane, so swapping the planes flips
-the answer. The weights are fitted with ``scripts/train_cmt_classifiers.py``.
+the answer. The log-odds are scaled by a temperature that decays with
+centroid depth, because the mapped crustal faults say less about deeper
+events. The weights and temperature are fitted with
+``scripts/train_cmt_classifiers.py``.
 
 The tectonic type (crustal, subduction interface or intraslab) follows the
 NZ NSHM 2022 rule (Rollins et al. 2022) against the Slab2 interface
@@ -650,6 +653,29 @@ def nga_sub_tectonic_type_probabilities(
     return probabilities
 
 
+def depth_temperature(
+    depth: npt.ArrayLike, scale: float, depth_rate: float
+) -> npt.NDArray[np.float64]:
+    """Multiplier on the nodal plane log-odds, ``scale * exp(-depth_rate * depth)``.
+
+    Parameters
+    ----------
+    depth : npt.ArrayLike
+        Centroid depth in km.
+    scale : float
+        Multiplier at the surface.
+    depth_rate : float
+        Decay rate per km of depth; positive values make deeper
+        predictions less confident.
+
+    Returns
+    -------
+    npt.NDArray[np.float64]
+        The log-odds multiplier at each depth.
+    """
+    return scale * np.exp(-depth_rate * np.asarray(depth, dtype=float))
+
+
 class CMTClassifier:
     """Nodal plane selection and tectonic type classification for CMT solutions.
 
@@ -662,6 +688,10 @@ class CMTClassifier:
     weights : npt.NDArray[np.float64]
         Logistic regression weights on the plane 1 - plane 2 misfit
         differences, in `NODAL_PLANE_FEATURE_NAMES` order.
+    temperature_scale : float, optional
+        Log-odds multiplier at the surface (see `depth_temperature`).
+    temperature_depth_rate : float, optional
+        Decay rate of the log-odds multiplier per km of centroid depth.
     """
 
     def __init__(
@@ -669,6 +699,8 @@ class CMTClassifier:
         segments: FaultSegmentIndex,
         slab_model: SlabModel,
         weights: npt.NDArray[np.float64],
+        temperature_scale: float = 1.0,
+        temperature_depth_rate: float = 0.0,
     ):
         """Create a classifier.
 
@@ -681,10 +713,16 @@ class CMTClassifier:
         weights : npt.NDArray[np.float64]
             Logistic regression weights on the plane 1 - plane 2 misfit
             differences, in `NODAL_PLANE_FEATURE_NAMES` order.
+        temperature_scale : float, optional
+            Log-odds multiplier at the surface (see `depth_temperature`).
+        temperature_depth_rate : float, optional
+            Decay rate of the log-odds multiplier per km of centroid depth.
         """
         self.segments = segments
         self.slab_model = slab_model
         self.weights = weights
+        self.temperature_scale = temperature_scale
+        self.temperature_depth_rate = temperature_depth_rate
 
     @classmethod
     def from_faults(cls, faults: list[CommunityFault]) -> CMTClassifier:
@@ -708,6 +746,8 @@ class CMTClassifier:
             FaultSegmentIndex(faults),
             SlabModel.load(),
             np.asarray(model["weights"], dtype=float),
+            model["temperature"]["scale"],
+            model["temperature"]["depth_rate"],
         )
 
     @classmethod
@@ -743,14 +783,21 @@ class CMTClassifier:
         Returns
         -------
         dict[str, float]
-            Log-odds contribution of each feature; they sum to the log-odds.
+            Log-odds contribution of each feature, including the depth
+            temperature; they sum to the log-odds.
         """
         lat, lon, depth = _parse_centroid(centroid)
         difference = self.segments.plane_misfits(
             lat, lon, depth, nodal_plane_1
         ) - self.segments.plane_misfits(lat, lon, depth, nodal_plane_2)
+        temperature = depth_temperature(
+            depth, self.temperature_scale, self.temperature_depth_rate
+        )
         return dict(
-            zip(NODAL_PLANE_FEATURE_NAMES, (self.weights * difference).tolist())
+            zip(
+                NODAL_PLANE_FEATURE_NAMES,
+                (temperature * self.weights * difference).tolist(),
+            )
         )
 
     def nodal_plane_1_probability(
