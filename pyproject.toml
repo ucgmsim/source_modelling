@@ -7,7 +7,13 @@ name = "source-modelling"
 authors = [{ name = "ucgmsim" }]
 description = "Source modelling library"
 readme = "README.md"
-requires-python = ">=3.12"
+# Python 3.15 is blocked by h5py, which backs the HDF5 SRF I/O
+# (directly and through xarray's h5netcdf engine). h5py has no cp315 wheels on PyPI yet (they are expected with h5py 3.17,
+# see https://github.com/h5py/h5py/issues/2972), and building it from the
+# sdist needs a system HDF5.
+# Lift the cap once h5py ships cp315 wheels. cibuildwheel then builds
+# cp315 wheels for us with no further changes.
+requires-python = ">=3.12,<3.15"
 dynamic = ["version"]
 dependencies = [
   "h5netcdf",
