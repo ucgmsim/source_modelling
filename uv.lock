@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -1491,8 +1491,6 @@ wheels = [
 name = "source-modelling"
 source = { editable = "." }
 dependencies = [
-    { name = "h5netcdf" },
-    { name = "h5py" },
     { name = "networkx" },
     { name = "numba" },
     { name = "numpy" },
@@ -1509,6 +1507,10 @@ dependencies = [
 fiona = [
     { name = "fiona" },
     { name = "geopandas" },
+]
+hdf5 = [
+    { name = "h5netcdf" },
+    { name = "h5py" },
 ]
 test = [
     { name = "coverage" },
@@ -1541,8 +1543,8 @@ requires-dist = [
     { name = "coverage", extras = ["toml"], marker = "extra == 'test'" },
     { name = "fiona", marker = "extra == 'fiona'" },
     { name = "geopandas", marker = "extra == 'fiona'" },
-    { name = "h5netcdf" },
-    { name = "h5py" },
+    { name = "h5netcdf", marker = "extra == 'hdf5'" },
+    { name = "h5py", marker = "extra == 'hdf5'" },
     { name = "hypothesis", extras = ["numpy", "pandas"], marker = "extra == 'test'" },
     { name = "hypothesis-networkx", marker = "extra == 'test'" },
     { name = "networkx" },
@@ -1563,7 +1565,7 @@ requires-dist = [
     { name = "types-shapely", marker = "extra == 'types'" },
     { name = "xarray" },
 ]
-provides-extras = ["test", "types", "fiona"]
+provides-extras = ["test", "types", "fiona", "hdf5"]
 
 [package.metadata.requires-dev]
 dev = [

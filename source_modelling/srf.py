@@ -41,9 +41,9 @@ import dataclasses
 import mmap
 from collections.abc import Buffer, Sequence
 from pathlib import Path
+from types import ModuleType
 from typing import Self
 
-import h5py
 import numpy as np
 import pandas as pd
 import scipy as sp
@@ -93,6 +93,33 @@ SW4_POINTS_DTYPE = np.dtype(
 )
 
 _SW4_POINTS_EXTERNAL_FIELDS = {"VS", "DEN", "NT1", "SLIP2", "NT2", "SLIP3", "NT3"}
+
+
+def _import_hdf5() -> ModuleType:
+    """Import the optional HDF5 dependencies.
+
+    h5py and h5netcdf are imported here rather than at module level so
+    the rest of the srf module may be used without them installed.
+
+    Returns
+    -------
+    ModuleType
+        The h5py module.
+
+    Raises
+    ------
+    ImportError
+        If h5py or h5netcdf is not installed.
+    """
+    try:
+        import h5netcdf  # noqa: F401 (xarray loads it via engine="h5netcdf")
+        import h5py
+    except ImportError as e:
+        e.add_note(
+            "HDF5 support can be installed using the optional dependency group hdf5, pip install source-modelling[hdf5]."
+        )
+        raise
+    return h5py
 
 
 class Segments(Sequence):
@@ -387,6 +414,7 @@ class SrfFile:
            Livermore National Laboratory, Livermore, CA.
            https://github.com/geodynamics/sw4/blob/master/doc/SW4_UsersGuide.pdf
         """
+        h5py = _import_hdf5()
         plane_data = np.empty(len(self.header), dtype=SW4_PLANE_DTYPE)
         assert SW4_PLANE_DTYPE.names is not None
         for field in SW4_PLANE_DTYPE.names:
@@ -430,7 +458,7 @@ class SrfFile:
             If True, include the slip time function in the HDF5
             output. Slower and outputs larger files.
         """
-
+        _import_hdf5()
         self.to_xarray(include_slip_time_function=include_slip_time_function).to_netcdf(
             hdf5_ffp,
             engine="h5netcdf",
@@ -461,6 +489,7 @@ class SrfFile:
             If the file was written with ``include_slip_time_function=False``,
             the resulting ``slipt1_array`` has no columns (shape ``(n, 0)``).
         """
+        _import_hdf5()
         with xr.open_dataset(hdf5_ffp, engine="h5netcdf") as ds:
             header_data = {
                 var_name[len("plane_") :]: ds[var_name].values
