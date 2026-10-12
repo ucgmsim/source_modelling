@@ -1,9 +1,10 @@
 import dataclasses
 import gzip
+import importlib.util
+import sys
 import tempfile
 from pathlib import Path
 
-import h5py
 import numpy as np
 import pandas as pd
 import pytest
@@ -14,6 +15,13 @@ from qcore import coordinates, geo
 from source_modelling import parse_utils, srf
 
 SRF_DIR = Path(__file__).parent / "srfs"
+
+# HDF5 I/O needs the optional hdf5 extra (h5py and h5netcdf).
+requires_hdf5 = pytest.mark.skipif(
+    importlib.util.find_spec("h5py") is None
+    or importlib.util.find_spec("h5netcdf") is None,
+    reason="needs source-modelling[hdf5]",
+)
 
 
 def test_christchurch_srf():
@@ -561,6 +569,7 @@ def test_planes_nstk_1_ndip_1():
     ) == pytest.approx(np.array([0.5, 0.5]), abs=1e-3)
 
 
+@requires_hdf5
 def test_hdf5_read_write():
     """
     Test that writing an SRF to HDF5 and reading it back produces an SrfFile
@@ -597,6 +606,7 @@ def test_hdf5_read_write():
         )
 
 
+@requires_hdf5
 def test_hdf5_read_write_no_slip_time_function():
     """Test that HDF5 files written without a slip-time function can be read back.
 
@@ -620,6 +630,7 @@ def test_hdf5_read_write_no_slip_time_function():
         assert reconstructed_srf.slipt1_array.shape == (len(original_srf.points), 0)
 
 
+@requires_hdf5
 def test_hdf5_read_write_preserves_nt_with_trailing_zero_timesteps():
     """Test that `from_hdf5` preserves `nt` even with trailing all-zero timesteps.
 
@@ -656,8 +667,10 @@ def test_hdf5_read_write_preserves_nt_with_trailing_zero_timesteps():
         assert reconstructed_srf.slipt1_array.shape == padded_srf.slipt1_array.shape
 
 
+@requires_hdf5
 def test_sw4_hdf5_read_write(tmp_path: Path):
     """Test that write_sw4_hdf5 preserves header, points, and slip data."""
+    import h5py
 
     original_srf = srf.read_srf(SRF_DIR / "3468575.srf")
 
@@ -890,8 +903,11 @@ def test_write_read_srf_v2(tmp_path: Path):
     assert (srf_v2.slip != reread.slip).nnz == 0
 
 
+@requires_hdf5
 def test_sw4_hdf5_v2(tmp_path: Path):
     """Test that write_sw4_hdf5 writes vs/den for a version 2.0 SRF."""
+    import h5py
+
     srf_v2 = srf.read_srf(SRF_DIR / "point_source_v2.srf")
     out = tmp_path / "v2.h5"
     srf_v2.write_sw4_hdf5(out)
@@ -900,3 +916,19 @@ def test_sw4_hdf5_v2(tmp_path: Path):
         points = h5file["POINTS"]
         assert points["VS"] == pytest.approx(srf_v2.points["vs"].to_numpy())
         assert points["DEN"] == pytest.approx(srf_v2.points["den"].to_numpy())
+
+
+@pytest.mark.parametrize("missing", ["h5py", "h5netcdf"])
+def test_hdf5_io_without_extra(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
+):
+    """Test that HDF5 I/O without the hdf5 extra raises an ImportError naming the extra."""
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    # A None entry in sys.modules makes the import raise ImportError.
+    monkeypatch.setitem(sys.modules, missing, None)
+    with pytest.raises(ImportError, match=r"source-modelling\[hdf5\]"):
+        christchurch_srf.write_hdf5(tmp_path / "srf.h5")
+    with pytest.raises(ImportError, match=r"source-modelling\[hdf5\]"):
+        christchurch_srf.write_sw4_hdf5(tmp_path / "sw4.h5")
+    with pytest.raises(ImportError, match=r"source-modelling\[hdf5\]"):
+        srf.SrfFile.from_hdf5(tmp_path / "srf.h5")
