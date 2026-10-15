@@ -1814,7 +1814,7 @@ def simplify_fault(fault: Fault, length_tolerance: float) -> Fault:
             # the vertex that would disappear and the new edge that
             # would replace it.
             if geo.point_to_segment_distance(
-                plane.bounds[0], left.bounds[0], plane.bounds[1]
+                plane.bounds[0], plane.bounds[1], left.bounds[0]
             ) < geo.point_to_segment_distance(
                 plane.bounds[1], plane.bounds[0], right.bounds[1]
             ):
