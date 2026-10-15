@@ -1314,6 +1314,44 @@ def test_simplify_fault(fault: Fault):
     assert simplified_fault.area() / fault.area() == pytest.approx(1, abs=0.2)
 
 
+def test_simplify_fault_absorbs_into_smaller_deviation():
+    """Regression test for #114.
+
+    The short middle plane should be absorbed into whichever neighbour
+    causes the smaller deviation from the original trace, not always
+    into the right-hand neighbour. Here P1 is collinear with P0 and P2,
+    so absorbing the short P1-P2 plane into its left neighbour (P0-P1)
+    reproduces the original trace exactly, while absorbing into the
+    right neighbour (P2-P3) discards the real corner at P2.
+    """
+    origin_nztm = np.array([5180000.0, 1570000.0])
+    trace_points_nztm = origin_nztm + np.array(
+        [
+            [0.0, 0.0],
+            [10000.0, 0.0],
+            [10500.0, 0.0],
+            [20500.0, 1000.0],
+        ]
+    )
+    fault = Fault(
+        [
+            Plane.from_nztm_trace(
+                trace_points_nztm[i : i + 2].copy(), 0, 10, 90, dip_dir_nztm=0
+            )
+            for i in range(3)
+        ]
+    )
+
+    simplified_fault = sources.simplify_fault(fault, 1.0)
+
+    assert len(simplified_fault.planes) == 2
+    trace = np.vstack(
+        [simplified_fault.planes[0].bounds[0]]
+        + [plane.bounds[1] for plane in simplified_fault.planes]
+    )
+    np.testing.assert_allclose(trace[:, :2], trace_points_nztm[[0, 2, 3]])
+
+
 @given(
     st.lists(
         fault(min_segments=2, max_segments=10, min_length=0.4, max_length=100),
