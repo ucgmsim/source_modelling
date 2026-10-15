@@ -42,6 +42,6 @@ def test_most_likely_nodal_plane():
         ):
             correct += 1
 
-    # The model's grouped cross-validation accuracy is ~0.90 and it scores
-    # 116/128 on its own training labels.
-    assert correct >= 112
+    # The model's grouped cross-validation accuracy is ~0.86 and it scores
+    # 316/364 on its own training labels.
+    assert correct >= 305
