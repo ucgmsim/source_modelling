@@ -1586,3 +1586,223 @@ def test_fault_still_reports_genuine_misses_as_not_on_fault():
     fault = Fault([_vertical_plane()])
     with pytest.raises(ValueError, match="not on fault"):
         fault.wgs_depth_coordinates_to_fault_coordinates(np.array([-41.0, 174.0, 0.0]))
+
+
+def _example_point() -> Point:
+    return Point.from_lat_lon_depth(
+        np.array([-43.5, 172.6, 5000.0]),
+        length_m=1000.0,
+        width_m=1000.0,
+        strike=0.0,
+        dip=45.0,
+        dip_dir=90.0,
+    )
+
+
+def test_point_geojson_is_lon_lat():
+    """The GeoJSON for a point gives (lon, lat), the GeoJSON axis order."""
+    geometry = json.loads(_example_point().geojson)
+    assert geometry["type"] == "Point"
+    assert geometry["coordinates"] == pytest.approx([172.6, -43.5])
+
+
+def test_point_coordinates_out_of_bounds():
+    """Points far from the source point have no fault-local coordinates."""
+    point = _example_point()
+    # 400 m away is within the 500 m half-length, 5 km away is not.
+    near = coordinates.nztm_to_wgs_depth(point.bounds + np.array([400.0, 0.0, 0.0]))
+    far = coordinates.nztm_to_wgs_depth(point.bounds + np.array([5000.0, 0.0, 0.0]))
+    assert np.allclose(point.wgs_depth_coordinates_to_fault_coordinates(near), 0.5)
+    with pytest.raises(ValueError, match="out of bounds for point source"):
+        point.wgs_depth_coordinates_to_fault_coordinates(far)
+
+
+def test_plane_geojson_matches_corners():
+    """The GeoJSON polygon for a plane traces its corners in (lon, lat) order."""
+    plane = Plane.from_centroid_strike_dip(
+        np.array([-43.5, 172.6, 5.0]),
+        dip=45,
+        length=10,
+        width=5,
+        strike_nztm=0,
+        dip_dir_nztm=90,
+    )
+    geometry = json.loads(plane.geojson)
+    assert geometry["type"] == "Polygon"
+    ring = np.array(geometry["coordinates"][0])
+    # A closed ring of the four corners.
+    assert ring.shape == (5, 2)
+    assert np.allclose(ring[0], ring[-1])
+    assert np.allclose(ring[:-1], plane.corners[:, 1::-1])
+
+
+def test_vertical_plane_geojson_is_trace():
+    """A vertical plane's GeoJSON is its surface trace as a LineString."""
+    plane = _vertical_plane()
+    geometry = json.loads(plane.geojson)
+    assert geometry["type"] == "LineString"
+    assert np.allclose(np.array(geometry["coordinates"]), plane.corners[:2, 1::-1])
+
+
+@pytest.mark.parametrize(
+    "kwargs, expected_message",
+    [
+        (
+            # dtop/dbottom agree with dip and width, but not with centroid depth.
+            {
+                "centroid": np.array([-43.5, 172.6, 10.0]),
+                "dtop": 1.0,
+                "dbottom": 1.0 + 4 * np.sin(np.radians(30)),
+                "strike_nztm": 0,
+            },
+            "not consistent with centroid depth",
+        ),
+        (
+            {"centroid": np.array([-43.5, 172.6]), "dtop": 0.0},
+            "exactly one of strike or NZTM strike",
+        ),
+        (
+            {
+                "centroid": np.array([-43.5, 172.6]),
+                "dtop": 0.0,
+                "strike": 0,
+                "strike_nztm": 0,
+            },
+            "exactly one of strike or NZTM strike",
+        ),
+        (
+            {
+                "centroid": np.array([-43.5, 172.6]),
+                "dtop": 0.0,
+                "strike_nztm": 0,
+                "dip_dir": 90,
+                "dip_dir_nztm": 90,
+            },
+            "at most one of dip direction or NZTM dip direction",
+        ),
+    ],
+)
+def test_from_centroid_strike_dip_argument_errors(kwargs: dict, expected_message: str):
+    with pytest.raises(ValueError, match=expected_message):
+        Plane.from_centroid_strike_dip(dip=30, length=4, width=4, **kwargs)
+
+
+def test_from_centroid_strike_dip_wgs_dip_dir():
+    """A WGS84 dip direction is honoured when building a plane."""
+    plane = Plane.from_centroid_strike_dip(
+        np.array([-43.5, 172.6, 5.0]),
+        dip=45,
+        length=10,
+        width=5,
+        strike=10,
+        dip_dir=100,
+    )
+    # Bearings are converted at the centroid but read back at the top-left
+    # corner, so they only agree approximately.
+    assert plane.strike == pytest.approx(10, abs=0.1)
+    assert plane.dip_dir == pytest.approx(100, abs=0.1)
+    assert plane.dip == pytest.approx(45)
+    assert np.allclose(plane.centroid, [-43.5, 172.6, 5000.0])
+
+
+def test_fault_from_corners_and_depths():
+    """Fault.from_corners rebuilds the fault (in strike order) from plane corners."""
+    trace = coordinates.nztm_to_wgs_depth(
+        coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.6]))
+        + np.array([[0.0, 0.0], [5000.0, 0.0], [12000.0, 0.0]])
+    )
+    fault = Fault.from_trace_points(trace, 1, 11, 60, dip_dir_nztm=90)
+    shuffled_corners = fault.corners.reshape((-1, 4, 3))[::-1]
+
+    rebuilt = Fault.from_corners(shuffled_corners)
+
+    assert len(rebuilt.planes) == 2
+    assert np.allclose(rebuilt.bounds, fault.bounds, atol=1e-3)
+    assert rebuilt.top_m == pytest.approx(1000)
+    assert rebuilt.bottom_m == pytest.approx(11000)
+
+
+def test_fault_rjb_single_point():
+    fault = connected_fault([5, 10], 5, 30, np.array([-43.5, 172.6]))
+    distance = 10_000
+    point = coordinates.nztm_to_wgs_depth(
+        np.array(shapely.buffer(fault.geometry, distance).exterior.coords[0])
+    )
+    rjb = fault.rjb_distance(point)
+    assert isinstance(rjb, float)
+    assert rjb == pytest.approx(distance, abs=1e-4)
+    # A point inside the surface projection is at zero distance.
+    assert fault.rjb_distance(fault.centroid) == pytest.approx(0, abs=1e-6)
+
+
+def _straight_fault(
+    lengths_m: list[float], dip_dir_nztm: list[float] | None = None
+) -> Fault:
+    """Build a north-striking, 45 degree dipping fault with segments of the given lengths."""
+    origin = coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.6]))
+    offsets = np.concatenate(([0.0], np.cumsum(lengths_m)))
+    trace = origin + np.column_stack((offsets, np.zeros_like(offsets)))
+    dip_dir_nztm = dip_dir_nztm or [90.0] * len(lengths_m)
+    return Fault(
+        [
+            Plane.from_nztm_trace(trace[i : i + 2], 0, 10, 45, dip_dir_nztm=dd)
+            for i, dd in enumerate(dip_dir_nztm)
+        ]
+    )
+
+
+def test_simplify_fault_single_plane():
+    fault = _straight_fault([100.0])
+    simplified = sources.simplify_fault(fault, 1.0)
+    assert len(simplified.planes) == 1
+    assert np.allclose(simplified.bounds, fault.bounds)
+    # The output does not alias the input planes.
+    assert simplified.planes[0] is not fault.planes[0]
+
+
+@pytest.mark.parametrize(
+    "lengths_m, dip_dir_nztm, expected_lengths_m",
+    [
+        # A short first segment is absorbed into its right neighbour.
+        ([200.0, 5000.0, 5000.0], None, [5200.0, 5000.0]),
+        # A short last segment is absorbed into its left neighbour.
+        ([5000.0, 5000.0, 200.0], None, [5000.0, 5200.0]),
+        # A short middle segment of a planar fault: both choices deviate
+        # equally, so it is absorbed into its right neighbour.
+        ([5000.0, 200.0, 5000.0], None, [5000.0, 5200.0]),
+        # The short middle segment dips slightly differently, so its bottom
+        # edge deviates more than its top edge: absorb into the left neighbour.
+        ([5000.0, 200.0, 5000.0], [90.0, 90.5, 90.0], [5200.0, 5000.0]),
+        # Absorption stops once no segment is below tolerance: the merged
+        # 500 m segment is long enough, so it is not absorbed further.
+        ([200.0, 300.0, 5000.0, 400.0], None, [500.0, 5000.0, 400.0]),
+        # Two short segments in a row are absorbed one after the other.
+        ([5000.0, 100.0, 100.0, 5000.0], None, [5000.0, 5200.0]),
+    ],
+)
+def test_simplify_fault_absorbs_short_segments(
+    lengths_m: list[float],
+    dip_dir_nztm: list[float] | None,
+    expected_lengths_m: list[float],
+):
+    fault = _straight_fault(lengths_m, dip_dir_nztm)
+    simplified = sources.simplify_fault(fault, 0.35)
+
+    assert simplified.lengths * 1000 == pytest.approx(expected_lengths_m, abs=1e-3)
+    assert simplified.length == pytest.approx(fault.length)
+    # The ends of the fault trace are preserved.
+    assert np.allclose(simplified.bounds[0], fault.bounds[0])
+    assert np.allclose(simplified.bounds[-3], fault.bounds[-3])
+    # The input fault is untouched.
+    assert len(fault.planes) == len(lengths_m)
+
+
+def test_absorb_planes():
+    left, right = _straight_fault([3000.0, 4000.0]).planes
+    merged = sources.absorb_planes(left, right)
+    assert np.allclose(
+        merged.bounds,
+        [left.bounds[0], right.bounds[1], right.bounds[2], left.bounds[3]],
+    )
+    assert merged.length == pytest.approx(7)
+    assert merged.dip == pytest.approx(45)
