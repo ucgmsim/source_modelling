@@ -1770,9 +1770,10 @@ def test_simplify_fault_single_plane():
         # A short middle segment of a planar fault: both choices deviate
         # equally, so it is absorbed into its right neighbour.
         ([5000.0, 200.0, 5000.0], None, [5000.0, 5200.0]),
-        # The short middle segment dips slightly differently, so its bottom
-        # edge deviates more than its top edge: absorb into the left neighbour.
-        ([5000.0, 200.0, 5000.0], [90.0, 90.5, 90.0], [5200.0, 5000.0]),
+        # The choice depends only on the trace deviation, so a short middle
+        # segment with a slightly different dip direction on a straight trace
+        # is still absorbed into its right neighbour.
+        ([5000.0, 200.0, 5000.0], [90.0, 90.5, 90.0], [5000.0, 5200.0]),
         # Absorption stops once no segment is below tolerance: the merged
         # 500 m segment is long enough, so it is not absorbed further.
         ([200.0, 300.0, 5000.0, 400.0], None, [500.0, 5000.0, 400.0]),
