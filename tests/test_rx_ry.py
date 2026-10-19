@@ -513,3 +513,44 @@ def test_ry0_multi_fault_warns() -> None:
     assert ry0.shape == (3,)
     assert ry0[0] == pytest.approx(0.0, abs=1e-3)
     assert np.all(ry0[1:] > 0)
+
+
+@pytest.mark.parametrize("multi_fault", [False, True])
+def test_ry0_vectorised(multi_fault: bool) -> None:
+    """Test that Ry0 over many points matches a per-point calculation."""
+    fault = sources.Fault.from_trace_points(
+        np.array(
+            [
+                [-43.58302058, 172.64739978],
+                [-43.49297907, 172.6474],
+                [-43.44832311516278, 172.7160675056574],
+            ]
+        ),
+        dtop=0.0,
+        dbottom=10.0,
+        dip=90.0,
+        dip_dir=90.0,
+    )
+    faults: list[sources.Fault | sources.Plane] = [fault]
+    if multi_fault:
+        faults.append(
+            sources.Plane.from_centroid_strike_dip(
+                np.array([-43.30, 172.80, 5.0]), 90.0, 10.0, width=5.0, strike=20.0
+            )
+        )
+    rng = np.random.default_rng(0)
+    points = np.column_stack(
+        [rng.uniform(-43.8, -43.2, 200), rng.uniform(172.4, 173.0, 200)]
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        ry0 = sources.ry0_distance(faults, points)
+        ry0_loop = np.array([sources.ry0_distance(faults, p) for p in points])
+        ry0_single_row = sources.ry0_distance(faults, points[:1])
+
+    assert ry0.shape == (200,)
+    assert ry0_loop.shape == (200,)
+    assert ry0_single_row.shape == (1,)
+    assert ry0 == pytest.approx(ry0_loop)
+    assert np.any(ry0 == 0) and np.any(ry0 > 0)

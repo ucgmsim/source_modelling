@@ -1582,12 +1582,13 @@ def ry0_distance(
     faults : Fault | Plane | Sequence[Fault | Plane]
         The fault, or faults, of the rupture.
     point : np.ndarray
-        Points to calculate distance to, has shape (n, 2).
+        Points to calculate distance to, has shape (n, 2) or (2,).
 
     Returns
     -------
     np.ndarray
-        The Ry0 distance (in metres) between the rupture and the points. Has shape (n,)
+        The Ry0 distance (in metres) between the rupture and the
+        points. Has shape (n,), or () for a single point of shape (2,).
     """
     if isinstance(faults, (Fault, Plane)):
         faults = [faults]
@@ -1616,7 +1617,8 @@ def ry0_distance(
         u_min = u_origins.min()
         u_max = (u_origins + segment_lengths).max()
 
-    return np.maximum(0.0, np.maximum(u_min - u, u - u_max))
+    ry0 = np.maximum(0.0, np.maximum(u_min - u, u - u_max))
+    return ry0.reshape(np.shape(point)[:-1])
 
 
 IsSource = Plane | Fault | Point
