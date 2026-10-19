@@ -1561,6 +1561,64 @@ def multi_fault_rx_ry_distance(
     return gc2_distances.multi_trace_rx_ry(trace_points, trace_indices, rx, ry)
 
 
+def ry0_distance(
+    faults: Fault | Plane | Sequence[Fault | Plane], point: np.ndarray
+) -> np.ndarray:
+    """Calculate the Ry0 distance between a rupture and a set of points.
+
+    Ry0 is the distance from the point to the ends of the rupture
+    measured parallel to strike, i.e. Ry0 = max(0, -U, U - L) where U
+    is the generalised ry distance and L is the length of the rupture
+    in the U coordinate system. Points with a projection along strike
+    falling within the rupture have Ry0 = 0.
+
+    For multi-fault ruptures, the rupture is taken to span the
+    range of U values covered by the fault traces. The transformation
+    is not well-defined for these ruptures, so a RuntimeWarning is
+    raised.
+
+    Parameters
+    ----------
+    faults : Fault | Plane | Sequence[Fault | Plane]
+        The fault, or faults, of the rupture.
+    point : np.ndarray
+        Points to calculate distance to, has shape (n, 2).
+
+    Returns
+    -------
+    np.ndarray
+        The Ry0 distance (in metres) between the rupture and the points. Has shape (n,)
+    """
+    if isinstance(faults, (Fault, Plane)):
+        faults = [faults]
+    faults = list(faults)
+
+    traces = [fault.trace[:, :2] for fault in faults]
+    if len(faults) == 1:
+        _, u = faults[0].rx_ry_distance(point)
+        segments = traces[0].reshape((-1, 2, 2))
+        u_min = 0.0
+        u_max = np.linalg.norm(segments[:, 1] - segments[:, 0], axis=-1).sum()
+    else:
+        warnings.warn(
+            "Ry0 is not well-defined for multi-fault ruptures."
+            " Using the extent of the fault traces along the GC2 U axis as the rupture length.",
+            RuntimeWarning,
+        )
+        _, u = multi_fault_rx_ry_distance(faults, point)
+        trace_points = np.concatenate(traces, axis=0)
+        trace_indices = np.cumulative_sum(
+            [len(trace) for trace in traces], include_initial=True
+        )
+        segment_lengths, u_origins = gc2_distances.multi_trace_u_origins(
+            trace_points, trace_indices
+        )
+        u_min = u_origins.min()
+        u_max = (u_origins + segment_lengths).max()
+
+    return np.maximum(0.0, np.maximum(u_min - u, u - u_max))
+
+
 IsSource = Plane | Fault | Point
 
 

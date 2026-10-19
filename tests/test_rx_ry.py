@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pytest
 import scipy as sp
@@ -426,3 +428,88 @@ def test_multi_trace_rx_ry_local_shift_accumulation() -> None:
     # Seg 1 Global U: 10 + 0 = 10
     # Seg 2 Global U: 5 + 5 = 10
     assert u.item() == pytest.approx(10.0)
+
+
+def test_ry0_plane() -> None:
+    """Test that Ry0 = max(0, -U, U - L) for a single plane."""
+    plane = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.538, 172.6474, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    points = np.array(
+        [
+            [-43.538, 172.6174],  # beside the plane
+            [-43.60, 172.6574],  # south of the plane
+            [-43.48, 172.6574],  # north of the plane
+        ]
+    )
+    _, ry = plane.rx_ry_distance(points)
+    length = plane.length_m
+
+    ry0 = sources.ry0_distance(plane, points)
+
+    assert ry0 == pytest.approx(np.maximum(0.0, np.maximum(-ry, ry - length)), abs=1e-3)
+    assert ry0[0] == pytest.approx(0.0, abs=1e-3)
+    assert ry0[1] > 0
+    assert ry0[2] > 0
+
+
+def test_ry0_fault() -> None:
+    """Test that Ry0 = max(0, -U, U - L) for a multi-plane fault."""
+    fault = sources.Fault.from_trace_points(
+        np.array(
+            [
+                [-43.58302058, 172.64739978],
+                [-43.49297907, 172.6474],
+                [-43.44832311516278, 172.7160675056574],
+            ]
+        ),
+        dtop=0.0,
+        dbottom=10.0,
+        dip=90.0,
+        dip_dir=90.0,
+    )
+    points = np.array(
+        [
+            [-43.538, 172.6174],
+            [-43.60, 172.6574],
+            [-43.40, 172.75],
+        ]
+    )
+    _, ry = fault.rx_ry_distance(points)
+    trace = fault.trace[:, :2]
+    length = np.linalg.norm(trace[1::2] - trace[::2], axis=1).sum()
+
+    ry0 = sources.ry0_distance(fault, points)
+
+    assert ry0 == pytest.approx(np.maximum(0.0, np.maximum(-ry, ry - length)), abs=1e-3)
+    assert ry0[0] == pytest.approx(0.0, abs=1e-3)
+    assert ry0[1] > 0
+    assert ry0[2] > 0
+
+
+def test_ry0_single_fault_does_not_warn() -> None:
+    """Test that Ry0 does not warn for single-fault ruptures."""
+    plane = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.538, 172.6474, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sources.ry0_distance([plane], np.array([[-43.538, 172.6174]]))
+
+
+def test_ry0_multi_fault_warns() -> None:
+    """Test that Ry0 raises a RuntimeWarning for multi-fault ruptures."""
+    plane_a = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.538, 172.6474, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    plane_b = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.40, 172.70, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    points = np.array([[-43.538, 172.6174], [-43.70, 172.65], [-43.20, 172.70]])
+
+    with pytest.warns(RuntimeWarning, match="multi-fault"):
+        ry0 = sources.ry0_distance([plane_a, plane_b], points)
+
+    assert ry0.shape == (3,)
+    assert ry0[0] == pytest.approx(0.0, abs=1e-3)
+    assert np.all(ry0[1:] > 0)

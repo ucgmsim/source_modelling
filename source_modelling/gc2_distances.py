@@ -389,13 +389,10 @@ def strike_corrected_directions(
     return trace_directions
 
 
-def multi_trace_rx_ry(
-    trace_points: np.ndarray,
-    trace_indices: np.ndarray,
-    rx: np.ndarray,
-    ry: np.ndarray,
+def multi_trace_u_origins(
+    trace_points: np.ndarray, trace_indices: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Multi-trace rx and ry calculations.
+    """Calculate segment lengths and U-coordinate origins for multi-trace systems.
 
     Parameters
     ----------
@@ -403,15 +400,13 @@ def multi_trace_rx_ry(
         Trace points.
     trace_indices : np.ndarray
         Trace indices for end of segments
-    rx : np.ndarray
-        The rx values calculated to points.
-    ry : np.ndarray
-        The ry values calculated to points.
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        The (T, U) generalised coordinates for Rx and Ry calculations.
+    segment_lengths : np.ndarray
+        The length of each segment, shape (m,).
+    u_shift_origins : np.ndarray
+        The U-coordinate origin of each segment, shape (m,).
     """
     direction_vectors = diff_reduction(trace_points, trace_indices)
     segment_lengths = np.linalg.norm(direction_vectors, axis=1)
@@ -449,4 +444,34 @@ def multi_trace_rx_ry(
         b_hat,
     )
 
+    return segment_lengths, u_shift_origins
+
+
+def multi_trace_rx_ry(
+    trace_points: np.ndarray,
+    trace_indices: np.ndarray,
+    rx: np.ndarray,
+    ry: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Multi-trace rx and ry calculations.
+
+    Parameters
+    ----------
+    trace_points : np.ndarray
+        Trace points.
+    trace_indices : np.ndarray
+        Trace indices for end of segments
+    rx : np.ndarray
+        The rx values calculated to points.
+    ry : np.ndarray
+        The ry values calculated to points.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        The (T, U) generalised coordinates for Rx and Ry calculations.
+    """
+    segment_lengths, u_shift_origins = multi_trace_u_origins(
+        trace_points, trace_indices
+    )
     return generalised_t_u_coordinates(segment_lengths, rx, ry, u_shift_origins)
