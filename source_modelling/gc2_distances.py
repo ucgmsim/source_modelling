@@ -389,6 +389,51 @@ def strike_corrected_directions(
     return trace_directions
 
 
+def _trace_endpoints(
+    trace_points: np.ndarray, trace_indices: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the first and last point of each trace."""
+    return trace_points[trace_indices[:-1]], trace_points[trace_indices[1:] - 1]
+
+
+def strike_corrected_traces(
+    trace_points: np.ndarray, trace_indices: np.ndarray
+) -> np.ndarray:
+    """Reverse the point order of discordant traces.
+
+    Implements the algorithm described in page 6. A trace is discordant
+    if its end-minus-start vector disagrees with the general strike
+    direction of the entire fault system. Discordant traces must be
+    reversed before calculating rx and ry for each segment.
+
+    Parameters
+    ----------
+    trace_points : np.ndarray
+        Trace points.
+    trace_indices : np.ndarray
+        Trace indices for end of segments
+
+    Returns
+    -------
+    np.ndarray
+        Trace points with the points of each discordant trace in reverse order.
+    """
+    trace_starts, trace_ends = _trace_endpoints(trace_points, trace_indices)
+    p_origin, p_end = trial_strike_vector(np.concatenate((trace_starts, trace_ends)))
+    trial_unit_vector = (p_end - p_origin) / np.linalg.norm(p_end - p_origin)
+    trace_directions = trace_ends - trace_starts
+    corrected_directions = strike_corrected_directions(
+        trace_directions, trial_unit_vector
+    )
+    discordant = np.any(corrected_directions != trace_directions, axis=1)
+
+    trace_points = trace_points.copy()
+    for j, (start, end) in enumerate(itertools.pairwise(trace_indices)):
+        if discordant[j]:
+            trace_points[start:end] = trace_points[start:end][::-1]
+    return trace_points
+
+
 def multi_trace_u_origins(
     trace_points: np.ndarray, trace_indices: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -397,7 +442,8 @@ def multi_trace_u_origins(
     Parameters
     ----------
     trace_points : np.ndarray
-        Trace points.
+        Trace points, with discordant traces reversed by
+        `strike_corrected_traces`.
     trace_indices : np.ndarray
         Trace indices for end of segments
 
@@ -417,24 +463,22 @@ def multi_trace_u_origins(
         directions_per_trace, include_initial=True
     )
 
-    trace_starts = trace_points[trace_indices[:-1]]
-    end_indices = trace_indices[1:] - 1
-    trace_ends = trace_points[end_indices]
-    trace_endpoints = np.concatenate((trace_starts, trace_ends))
+    trace_starts, trace_ends = _trace_endpoints(trace_points, trace_indices)
 
-    p_origin, p_end = trial_strike_vector(trace_endpoints)
-    trial_unit_vector = p_end - p_origin
-    trial_unit_vector /= np.linalg.norm(trial_unit_vector)
-    direction_vectors = strike_corrected_directions(
-        direction_vectors, trial_unit_vector
-    )
-    b_hat = np.sum(direction_vectors, axis=0)
+    # Equation 11: the nominal strike is the sum of the (corrected)
+    # end-minus-start vectors of every trace.
+    b_hat = np.sum(trace_ends - trace_starts, axis=0)
     b_hat_norm = np.linalg.norm(b_hat)
     if np.isclose(b_hat_norm, 0.0):
         raise ValueError(
             "Invalid direction vectors calculated: likely indicates degenerate trace or invalid geometry."
         )
     b_hat /= b_hat_norm
+
+    # The origin is the farthest endpoint at the back end of the nominal strike.
+    p_origin, p_end = trial_strike_vector(np.concatenate((trace_starts, trace_ends)))
+    if np.dot(p_end - p_origin, b_hat) < 0:
+        p_origin = p_end
 
     u_shift_origins = calculate_gc2_u_origins(
         segment_lengths,
@@ -470,6 +514,11 @@ def multi_trace_rx_ry(
     -------
     tuple[np.ndarray, np.ndarray]
         The (T, U) generalised coordinates for Rx and Ry calculations.
+
+    Notes
+    -----
+    The ``trace_points`` (and the rx and ry values calculated from them)
+    must have discordant traces reversed by `strike_corrected_traces`.
     """
     segment_lengths, u_shift_origins = multi_trace_u_origins(
         trace_points, trace_indices

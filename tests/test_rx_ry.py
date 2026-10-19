@@ -554,3 +554,61 @@ def test_ry0_vectorised(multi_fault: bool) -> None:
     assert ry0_single_row.shape == (1,)
     assert ry0 == pytest.approx(ry0_loop)
     assert np.any(ry0 == 0) and np.any(ry0 > 0)
+
+
+def _gc2_t_u(
+    trace_points: np.ndarray, points: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate GC2 (T, U) for two-point traces in NZTM (northing, easting)."""
+    trace_indices = np.arange(0, len(trace_points) + 1, 2)
+    trace_points = gc2_distances.strike_corrected_traces(trace_points, trace_indices)
+    rx, ry = gc2_distances.segment_rx_ry(trace_points, points)
+    return gc2_distances.multi_trace_rx_ry(trace_points, trace_indices, rx, ry)
+
+
+def test_strike_corrected_traces_reverses_discordant_trace() -> None:
+    """Test that discordant traces are reversed as a whole (page 6)."""
+    # Trace 1 strikes east with a short westward kink, so only a
+    # per-trace (not per-segment) check leaves it alone. Trace 2
+    # strikes west and is discordant.
+    trace_points = np.array(
+        [
+            [0.0, 0.0],
+            [0.0, 20.0],
+            [0.0, 20.0],
+            [1.0, 19.0],
+            [0.0, 40.0],
+            [0.0, 30.0],
+        ]
+    )
+    trace_indices = np.array([0, 4, 6])
+
+    corrected = gc2_distances.strike_corrected_traces(trace_points, trace_indices)
+
+    assert corrected[:4] == pytest.approx(trace_points[:4])
+    assert corrected[4:] == pytest.approx(trace_points[4:][::-1])
+
+
+def test_multi_trace_t_u_invariant_to_discordant_trace_order() -> None:
+    """Test that reversing a trace's point order does not change T and U."""
+    concordant = np.array([[0.0, 0.0], [0.0, 15.0], [0.0, 20.0], [5.0, 30.0]])
+    discordant = np.array([[0.0, 0.0], [0.0, 15.0], [5.0, 30.0], [0.0, 20.0]])
+    points = np.array([[3.0, -10.0], [-4.0, 5.0], [2.0, 15.0], [-6.0, 40.0]])
+
+    t_concordant, u_concordant = _gc2_t_u(concordant, points)
+    t_discordant, u_discordant = _gc2_t_u(discordant, points)
+
+    assert t_discordant == pytest.approx(t_concordant)
+    assert u_discordant == pytest.approx(u_concordant)
+    # U increases along strike across both traces.
+    assert np.all(np.diff(u_concordant) > 0)
+
+
+def test_multi_trace_u_origin_at_back_of_nominal_strike() -> None:
+    """Test that U = 0 at the start of a westward striking system."""
+    trace_points = np.array([[0.0, 30.0], [0.0, 20.0], [0.0, 10.0], [0.0, 0.0]])
+    points = np.array([[0.0, 30.0], [0.0, 25.0], [0.0, 5.0]])
+
+    _, u = _gc2_t_u(trace_points, points)
+
+    assert u == pytest.approx([0.0, 5.0, 25.0])

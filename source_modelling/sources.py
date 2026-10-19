@@ -1532,6 +1532,34 @@ class Fault:
         return self.rx_ry_distance(point)[1]
 
 
+def _multi_fault_traces(
+    faults: Sequence[Fault | Plane],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Combine the fault traces of a multi-fault rupture for GC2 calculations.
+
+    Parameters
+    ----------
+    faults : Sequence[Fault | Plane]
+        Faults to combine.
+
+    Returns
+    -------
+    trace_points : np.ndarray
+        The NZTM trace points of every fault, with discordant traces reversed.
+    trace_indices : np.ndarray
+        The index of the start of each trace in ``trace_points``, plus the total number of points.
+    """
+    traces = [fault.trace[:, :2] for fault in faults]
+    trace_points = np.concatenate(traces, axis=0)
+    trace_indices = np.cumulative_sum(
+        [len(trace) for trace in traces], include_initial=True
+    )
+    return (
+        gc2_distances.strike_corrected_traces(trace_points, trace_indices),
+        trace_indices,
+    )
+
+
 def multi_fault_rx_ry_distance(
     faults: list[Fault | Plane], point: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -1552,11 +1580,7 @@ def multi_fault_rx_ry_distance(
         The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
     """
     point = coordinates.wgs_depth_to_nztm(point[..., :2])
-    traces = [fault.trace[:, :2] for fault in faults]
-    trace_points = np.concatenate(traces, axis=0)
-    trace_indices = np.cumulative_sum(
-        [len(trace) for trace in traces], include_initial=True
-    )
+    trace_points, trace_indices = _multi_fault_traces(faults)
     rx, ry = gc2_distances.segment_rx_ry(trace_points, point)
     return gc2_distances.multi_trace_rx_ry(trace_points, trace_indices, rx, ry)
 
@@ -1594,10 +1618,9 @@ def ry0_distance(
         faults = [faults]
     faults = list(faults)
 
-    traces = [fault.trace[:, :2] for fault in faults]
     if len(faults) == 1:
         _, u = faults[0].rx_ry_distance(point)
-        segments = traces[0].reshape((-1, 2, 2))
+        segments = faults[0].trace[:, :2].reshape((-1, 2, 2))
         u_min = 0.0
         u_max = np.linalg.norm(segments[:, 1] - segments[:, 0], axis=-1).sum()
     else:
@@ -1607,10 +1630,7 @@ def ry0_distance(
             RuntimeWarning,
         )
         _, u = multi_fault_rx_ry_distance(faults, point)
-        trace_points = np.concatenate(traces, axis=0)
-        trace_indices = np.cumulative_sum(
-            [len(trace) for trace in traces], include_initial=True
-        )
+        trace_points, trace_indices = _multi_fault_traces(faults)
         segment_lengths, u_origins = gc2_distances.multi_trace_u_origins(
             trace_points, trace_indices
         )
