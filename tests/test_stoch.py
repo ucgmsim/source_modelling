@@ -327,6 +327,21 @@ def test_stoch_file_truncated_raises_instead_of_hanging(truncated_stoch_file: Pa
     assert "Unexpected end of file" in queue.get()
 
 
+def test_stoch_file_truncated_array_raises_parse_error(tmp_path: Path):
+    """A stoch file truncated inside a plane's arrays should raise ParseError
+    naming the array, rather than a bare reshape ValueError."""
+    stoch_filepath = tmp_path / "truncated_array_stoch_file"
+    stoch_filepath.write_text(
+        "1\n"
+        "174.5 -41.3 2 2 1.0 1.0 45 60 90 0.5 2.5 1.5\n"
+        "1.0 2.0 3.0 4.0\n"
+        "0.1 0.2 0.3 0.4\n"
+        "0.01 0.02 0.03\n"
+    )
+    with pytest.raises(parse_utils.ParseError, match="Expected 4 values for trup"):
+        StochFile.from_file(stoch_filepath)
+
+
 def dump_and_reload(stoch_file: StochFile, tmp_path: Path) -> StochFile:
     """Dump a StochFile and read the result back in."""
     dumped = tmp_path / "dumped.stoch"
