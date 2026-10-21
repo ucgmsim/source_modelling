@@ -1,6 +1,7 @@
 import functools
 import itertools
 import random
+import warnings
 from collections.abc import Callable
 from typing import Any, Protocol
 from unittest.mock import patch
@@ -620,3 +621,181 @@ def test_area_to_magnitude_calls_correct_function(
             mock_func.assert_called_once_with(area, rake=rake, random=random)
         else:
             mock_func.assert_called_once_with(area, random=random)
+
+
+@pytest.mark.parametrize(
+    "rake, expected_constant",
+    [
+        # Leonard's strike-slip region is |rake| <= 45 or |rake| >= 135, boundaries inclusive.
+        (-45.0, 3.99),
+        (45.0, 3.99),
+        (135.0, 3.99),
+        (-135.0, 3.99),
+        (-46.0, 4.0),
+        (46.0, 4.0),
+        (134.0, 4.0),
+        (-134.0, 4.0),
+    ],
+)
+def test_leonard_area_to_magnitude_rake_boundaries(
+    rake: float, expected_constant: float
+):
+    """The rake classification boundaries of Leonard's area to magnitude relation are inclusive at ±45 and ±135."""
+    area = 1000.0
+    assert magnitude_scaling.leonard_area_to_magnitude(area, rake) == pytest.approx(
+        np.log10(area) + expected_constant
+    )
+
+
+@pytest.mark.parametrize(
+    "rake, expected_mean, expected_std",
+    [(0.0, 3.99, 0.26), (180.0, 3.99, 0.26), (90.0, 4.03, 0.3), (-90.0, 4.03, 0.3)],
+)
+@seed(1)
+def test_leonard_area_to_magnitude_random_moments(
+    rake: float, expected_mean: float, expected_std: float
+):
+    """Random Leonard samples have the mean and standard deviation of the Table 4 coefficients."""
+    area = 1000.0
+    samples = np.array(
+        [
+            magnitude_scaling.leonard_area_to_magnitude(area, rake, random=True)
+            for _ in range(2000)
+        ]
+    ) - np.log10(area)
+    assert np.mean(samples) == pytest.approx(expected_mean, abs=0.03)
+    assert np.std(samples) == pytest.approx(expected_std, abs=0.03)
+
+
+@pytest.mark.parametrize("deviation", [-0.5, 0.73])
+def test_contreras_interface_random_inversion(deviation: float):
+    """For a fixed sampled deviation, the area to magnitude relation inverts the magnitude to area relation."""
+    with patch("scipy.stats.norm") as mock_norm:
+        mock_norm.return_value.rvs.return_value = deviation
+        area = magnitude_scaling.contreras_interface_magnitude_to_area(
+            BoldM(7.0), random=True
+        )
+        magnitude = magnitude_scaling.contreras_interface_area_to_magnitude(
+            area, random=True
+        )
+    assert area == pytest.approx(np.exp(-8.890 + np.log(10) * 7.0 + deviation))
+    assert magnitude == pytest.approx(7.0)
+
+
+@pytest.mark.parametrize("area", [137.76, 138.0, 10_000.0])
+def test_contreras_interface_area_in_range_does_not_warn(area: float):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        magnitude = magnitude_scaling.contreras_interface_area_to_magnitude(area)
+    assert magnitude == pytest.approx((np.log(area) + 8.890) / np.log(10))
+
+
+def test_contreras_interface_area_out_of_range_warns():
+    with pytest.warns(
+        UserWarning,
+        match=r"^Area out of range for Contreras model, minimum area is 137\.76 km\^2$",
+    ):
+        magnitude = magnitude_scaling.contreras_interface_area_to_magnitude(100.0)
+    # The value is still computed for out of range areas.
+    assert magnitude == pytest.approx((np.log(100.0) + 8.890) / np.log(10))
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        magnitude_scaling.contreras_interface_magnitude_to_area,
+        magnitude_scaling.contreras_interface_magnitude_to_aspect_ratio,
+    ],
+)
+def test_contreras_interface_magnitude_out_of_range_warns(
+    func: Callable[[BoldM], float],
+):
+    with pytest.warns(UserWarning, match="minimum magnitude is 6"):
+        func(BoldM(5.9))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        func(BoldM(6.0))
+
+
+def test_contreras_interface_aspect_ratio_values():
+    """The aspect ratio is 1 below magnitude 7.25 and grows exponentially above it."""
+    assert magnitude_scaling.contreras_interface_magnitude_to_aspect_ratio(
+        BoldM(7.0)
+    ) == pytest.approx(1.0)
+    assert magnitude_scaling.contreras_interface_magnitude_to_aspect_ratio(
+        BoldM(8.25)
+    ) == pytest.approx(np.exp(0.6248))
+
+
+@pytest.mark.parametrize("area", [130.0, 1000.0, 5212.0])
+def test_strasser_slab_area_in_range_does_not_warn(area: float):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        magnitude = magnitude_scaling.strasser_slab_area_to_magnitude(area)
+    assert magnitude == pytest.approx(4.054 + 0.981 * np.log10(area))
+
+
+@pytest.mark.parametrize("area", [129.9, 5212.5])
+def test_strasser_slab_area_out_of_range_warns(area: float):
+    with pytest.warns(UserWarning, match=r"area must be between 130 and 5212 km\^2"):
+        magnitude = magnitude_scaling.strasser_slab_area_to_magnitude(area)
+    assert magnitude == pytest.approx(4.054 + 0.981 * np.log10(area))
+
+
+@pytest.mark.parametrize("magnitude", [5.8, 7.9])
+def test_strasser_slab_magnitude_out_of_range_warns(magnitude: float):
+    with pytest.warns(UserWarning, match="magnitude must be between 5.9 and 7.8"):
+        area = magnitude_scaling.strasser_slab_magnitude_to_area(BoldM(magnitude))
+    assert area == pytest.approx(10 ** (-3.225 + 0.890 * magnitude))
+
+
+def test_contreras_slab_aspect_ratio():
+    with pytest.warns(UserWarning, match="minimum magnitude is 5"):
+        assert magnitude_scaling.contreras_slab_magnitude_to_aspect_ratio(
+            BoldM(4.9)
+        ) == pytest.approx(1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert magnitude_scaling.contreras_slab_magnitude_to_aspect_ratio(
+            BoldM(6.0)
+        ) == pytest.approx(1.0)
+        assert magnitude_scaling.contreras_slab_magnitude_to_aspect_ratio(
+            BoldM(7.5)
+        ) == pytest.approx(np.exp(0.216))
+
+
+@pytest.mark.parametrize(
+    "magnitude, rake, expected_width, warns",
+    [
+        # Strike-slip: width = 10 ** ((M - 3.88) / 2.5), valid for 3.4 <= width <= 19.
+        (6.0, 0.0, 10 ** ((6.0 - 3.88) / 2.5), False),
+        (5.0, 0.0, 10 ** ((5.0 - 3.88) / 2.5), True),
+        (7.5, 0.0, 10 ** ((7.5 - 3.88) / 2.5), True),
+        # Dip-slip: width = 10 ** ((M - 3.63) / 2.5), valid for width > 5.4.
+        (6.5, 90.0, 10 ** ((6.5 - 3.63) / 2.5), False),
+        (8.0, 90.0, 10 ** ((8.0 - 3.63) / 2.5), False),
+        (5.0, 90.0, 10 ** ((5.0 - 3.63) / 2.5), True),
+    ],
+)
+def test_leonard_magnitude_to_width(
+    magnitude: float, rake: float, expected_width: float, warns: bool
+):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        width = magnitude_scaling.leonard_magnitude_to_width(Mw(magnitude), rake)
+    messages = [str(w.message) for w in caught]
+    assert messages == (["Width out of range for Leonard model."] if warns else [])
+    assert width == pytest.approx(expected_width)
+
+
+@pytest.mark.parametrize(
+    "func, args",
+    [
+        (magnitude_scaling.magnitude_to_length_width, (BoldM(7.0),)),
+        (magnitude_scaling.magnitude_to_area, (BoldM(7.0),)),
+        (magnitude_scaling.area_to_magnitude, (1000.0,)),
+    ],
+)
+def test_leonard_requires_rake(func: Callable[..., Any], args: tuple[float, ...]):
+    with pytest.raises(ValueError, match="Rake must be specified for Leonard scaling."):
+        func(magnitude_scaling.ScalingRelation.LEONARD2014, *args)
