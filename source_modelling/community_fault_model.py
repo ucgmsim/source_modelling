@@ -1,7 +1,7 @@
 """This module provides classes and functions for the New Zealand Community Fault Model.
 
 The New Zealand Community Fault Model (CFM) is a collection of fault data for New
-Zealand. The CFM is stored in a GeoPackage file and can be accessed using the
+Zealand. The CFM is stored in a shapefile and can be accessed using the
 functions in this module. The function `most_likely_nodal_plane` can be used to
 find the most likely nodal plane for a given centroid and two nodal planes, by
 querying nearby faults in the CFM.
@@ -249,13 +249,13 @@ class CommunityFault:
     slip_rate_timeframe_unit: int | None
     """The unit of the slip rate timeframe."""
     down_dip_depth90: float
-    """Not sure!"""
+    """The D90 down-dip depth estimate of the fault (km)."""
     down_dip_depth_dfc: float
-    """Not sure!"""
+    """The Dfc down-dip depth estimate of the fault (km)."""
     down_dip_depth90_method: DipMethod
-    """Not sure!"""
+    """The method used to derive the D90 down-dip depth."""
     down_dip_dfc_method: DipMethod
-    """Not sure!"""
+    """The method used to derive the Dfc down-dip depth."""
     up_dip_depth: Range
     """The up dip depth range."""
     quality_code: int
@@ -405,7 +405,7 @@ def community_fault_model_as_geodataframe() -> "gpd.GeoDataFrame":
 
     model = get_community_fault_model()
 
-    # Transform the trace to WGS84
+    # Swap traces from (northing, easting) to (x=easting, y=northing) as required by EPSG:2193
     for fault in model:
         fault.trace = shapely.transform(fault.trace, lambda coord: coord[:, ::-1])
     return gpd.GeoDataFrame(

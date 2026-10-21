@@ -180,9 +180,9 @@ class FSPFile:
         Average speed of rupture front.
     slip_velocity_function : str
         Description of the slip velocity function used
-    nx : float or None
+    nx : int or None
         The number of subfaults along strike.
-    nz : float or None
+    nz : int or None
         The number of subfaults along dip.
     dx : float
         The length of each subfault.
@@ -193,13 +193,14 @@ class FSPFile:
     fmax : float or None
         The maximum frequency in the inversion.
     time_window_count : float or None
-        The slip (or rake) time windows for each subfault.
+        The number of slip (or rake) time windows for each subfault.
     time_window_length : float or None
         The time window length for each subfault.
     time_shift : float or None
         The time shift for each time window.
     segment_count : int
-        Number of segments (subfaults).
+        Number of fault segments. This is not the number of subfaults
+        (rows of `data`), which are counted across all segments.
     data : pd.DataFrame
         The data frame of info on each subfault. Columns vary for this
         dataframe, but each comes with 'segment', 'length', and 'width' which
@@ -251,7 +252,7 @@ class FSPFile:
     time_window_length: float | None
     time_shift: float | None
 
-    # Number of segments (== len(data))
+    # Number of fault segments (not subfaults, so != len(data))
     segment_count: int
     data: pd.DataFrame
 
