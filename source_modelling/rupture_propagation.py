@@ -31,7 +31,7 @@ Tree = dict[str, str | None]
 
 def spanning_tree_with_probabilities(
     graph: nx.Graph,
-) -> tuple[list[nx.DiGraph], list[float]]:
+) -> tuple[list[nx.Graph], list[float]]:
     r"""
     Compute all spanning trees of a graph and their unnormalised weights.
 
@@ -51,7 +51,7 @@ def spanning_tree_with_probabilities(
 
     Returns
     -------
-    list[nx.DiGraph]
+    list[nx.Graph]
         A list of spanning trees of the graph.
     list[float]
         The unnormalised weight P(T) of each spanning tree, in the same order
