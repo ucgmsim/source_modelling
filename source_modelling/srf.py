@@ -237,8 +237,10 @@ class SrfFile:
         the linked documentation on the SRF format for more details.
 
     slipt1_array : csr_array
-        A sparse array containing the slip for each point and at each timestep, where
-        slipt1_array[i, j] is the slip for the ith patch at time t = j * dt.
+        A sparse array containing the slip rate (cm/s) for each point and at each
+        timestep, where slipt1_array[i, j] is the slip rate for the ith patch at
+        absolute time t = j * dt. The non-zero entries of row i start at column
+        floor(tinit / dt), where tinit is the rupture initiation time of the ith patch.
 
     References
     ----------
@@ -578,8 +580,8 @@ class SrfFile:
                 attrs={
                     "sparse_format": "csr",
                     "original_shape": self.slipt1_array.shape,
-                    "units": "cm",
-                    "description": "Slip for each patch at each timestep",
+                    "units": "cm/s",
+                    "description": "Slip rate for each patch at each timestep",
                 },
             )
             datasets.append(slip_ds)
@@ -590,7 +592,7 @@ class SrfFile:
 
     @property
     def slip(self):
-        "csr_array: A sparse array containing slip-time functions for each point."
+        "csr_array: A sparse array containing slip-rate functions (cm/s) for each point."
         return self.slipt1_array
 
     @property
