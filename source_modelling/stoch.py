@@ -117,6 +117,38 @@ def _read_stoch_header(handle: TextIO) -> StochHeader:
     )
 
 
+def _read_array(handle: TextIO, header: StochHeader, label: str) -> FloatArray2D:
+    """
+    Read a single (ny, nx) data array of a stochastic plane.
+
+    Parameters
+    ----------
+    handle : TextIO
+        Text file handle positioned at the start of the array.
+    header : StochHeader
+        Header of the plane, giving the array dimensions.
+    label : str
+        Name of the array being read, used in error messages.
+
+    Returns
+    -------
+    FloatArray2D
+        The array, with shape (ny, nx).
+
+    Raises
+    ------
+    parse_utils.ParseError
+        If fewer than nx * ny values could be read.
+    """
+    n = header.nx * header.ny
+    array = np.fromfile(handle, dtype=np.float32, sep=" ", count=n)
+    if array.size != n:
+        raise parse_utils.ParseError(
+            f"Expected {n} values for {label}, got {array.size}"
+        )
+    return cast(FloatArray2D, array.reshape((header.ny, header.nx)))
+
+
 def _read_stoch_plane(handle: TextIO) -> StochPlane:
     """
     Read a complete stochastic plane from a file.
@@ -132,20 +164,9 @@ def _read_stoch_plane(handle: TextIO) -> StochPlane:
         Named tuple containing the plane's header and data arrays (slip, rise, trup).
     """
     header = _read_stoch_header(handle)
-    slip_array = np.fromfile(
-        handle, dtype=np.float32, sep=" ", count=header.nx * header.ny
-    ).reshape((header.ny, header.nx))
-    slip = cast(FloatArray2D, slip_array)
-
-    rise_array = np.fromfile(
-        handle, dtype=np.float32, sep=" ", count=header.nx * header.ny
-    ).reshape((header.ny, header.nx))
-    rise = cast(FloatArray2D, rise_array)
-
-    trup_array = np.fromfile(
-        handle, dtype=np.float32, sep=" ", count=header.nx * header.ny
-    ).reshape((header.ny, header.nx))
-    trup = cast(FloatArray2D, trup_array)
+    slip = _read_array(handle, header, "slip")
+    rise = _read_array(handle, header, "rise")
+    trup = _read_array(handle, header, "trup")
 
     return StochPlane(header, slip, rise, trup)
 
@@ -192,8 +213,9 @@ class StochFile:
 
         Raises
         ------
-        ValueError
-            If the number of planes specified in the file is not a positive integer.
+        parse_utils.ParseError
+            If the number of planes specified in the file is not a positive
+            integer, or if the file contains truncated or malformed data.
         """
         filename = Path(filename)
         with open(filename, "r") as handle:
