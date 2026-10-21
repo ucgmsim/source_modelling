@@ -12,6 +12,7 @@ To understand the purpose and implementation of the algorithms in the
 [0]: https://github.com/ucgmsim/source_modelling/wiki/Rupture-Propagation
 """
 
+import itertools
 import random
 import warnings
 from collections import defaultdict, namedtuple
@@ -459,18 +460,18 @@ def sample_rupture_propagation(
         raise ValueError(
             "Cannot specify an initial source and initial source distribution at the same time."
         )
-    distance_graph = {
-        source_a_name: {
-            source_b_name: distance_between(
-                source_a,
-                source_b,
-                *sources.closest_point_between_sources(source_a, source_b),
-            )
-            for source_b_name, source_b in sources_map.items()
-            if source_a_name != source_b_name
-        }
-        for source_a_name, source_a in sources_map.items()
-    }
+    # Distance is symmetric, so solve for the closest points once per pair.
+    distance_graph: DistanceGraph = {source_name: {} for source_name in sources_map}
+    for (source_a_name, source_a), (source_b_name, source_b) in itertools.combinations(
+        sources_map.items(), 2
+    ):
+        distance = distance_between(
+            source_a,
+            source_b,
+            *sources.closest_point_between_sources(source_a, source_b),
+        )
+        distance_graph[source_a_name][source_b_name] = distance
+        distance_graph[source_b_name][source_a_name] = distance
     # Prune the distance graph to remove physically impossible jumps.
     distance_graph = prune_distance_graph(
         distance_graph, jump_impossibility_limit_distance

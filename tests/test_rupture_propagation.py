@@ -501,6 +501,37 @@ def test_sample_rupture_propagation(
                 assert distance <= jump_impossibility_limit_distance
 
 
+def test_sample_rupture_propagation_solves_each_pair_once(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Closest points should be solved once per unordered pair of sources."""
+    sources_map = {
+        name: sources.Point(np.array([-41.2865, lon, 0]), 1000, 1000, 0, 0, 0)
+        for name, lon in zip("ABCD", [174.7762, 174.7862, 174.7962, 174.8062])
+    }
+    closest_point_between_sources = sources.closest_point_between_sources
+    calls = []
+
+    def counting_closest_point_between_sources(
+        source_a: sources.IsSource, source_b: sources.IsSource
+    ) -> tuple[np.ndarray, np.ndarray]:
+        calls.append((source_a, source_b))
+        return closest_point_between_sources(source_a, source_b)
+
+    monkeypatch.setattr(
+        sources,
+        "closest_point_between_sources",
+        counting_closest_point_between_sources,
+    )
+    tree = rupture_propagation.sample_rupture_propagation(
+        sources_map,  # ty: ignore[invalid-argument-type]
+        initial_source="A",
+    )
+    n = len(sources_map)
+    assert len(calls) == n * (n - 1) // 2
+    assert set(tree) == set(sources_map)
+
+
 @pytest.mark.parametrize(
     "source_map, rupture_causality_tree, min_depth, expected_jump_points",
     [
