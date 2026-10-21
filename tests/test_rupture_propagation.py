@@ -636,3 +636,55 @@ def test_jump_points_from_rupture_tree_min_depth(
     # shallow as the minimum depth allows.
     assert from_depth_m == pytest.approx(expected_jump_depth_m, abs=1)
     assert to_depth_m == pytest.approx(expected_jump_depth_m, abs=1)
+
+
+def test_shaw_dieterich_distance_model_at_delta():
+    assert rupture_propagation.shaw_dieterich_distance_model(1.0, 3, 1) == 1
+
+
+def test_shaw_dieterich_distance_model_decay():
+    assert rupture_propagation.shaw_dieterich_distance_model(
+        4.0, 3, 1
+    ) == pytest.approx(np.exp(-1))
+
+
+def test_shaw_dieterich_distance_model_clipped_below_delta():
+    assert rupture_propagation.shaw_dieterich_distance_model(0.0, 3, 1) == 1
+
+
+def test_prune_distance_graph_removes_edges_beyond_cutoff():
+    assert rupture_propagation.prune_distance_graph(
+        {"a": {"b": 10.0, "c": 20.0}}, cutoff=15.0
+    ) == {"a": {"b": 10.0}}
+
+
+def test_prune_distance_graph_cutoff_is_strict():
+    assert rupture_propagation.prune_distance_graph(
+        {"a": {"b": 15.0}}, cutoff=15.0
+    ) == {"a": {}}
+
+
+def test_prune_distance_graph_keeps_isolated_faults():
+    assert rupture_propagation.prune_distance_graph(
+        {"a": {"b": 20.0}, "b": {"a": 20.0}}, cutoff=15.0
+    ) == {"a": {}, "b": {}}
+
+
+def test_probability_graph_converts_metres_to_kilometres():
+    graph = rupture_propagation.probability_graph(
+        {"a": {"b": 4000.0}, "b": {"a": 4000.0}}
+    )
+    assert graph["a"]["b"]["weight"] == pytest.approx(np.exp(-1))
+
+
+def test_probability_graph_caps_weight():
+    graph = rupture_propagation.probability_graph({"a": {"b": 0.0}, "b": {"a": 0.0}})
+    assert graph["a"]["b"]["weight"] == pytest.approx(0.99)
+
+
+def test_probability_graph_keeps_isolated_nodes():
+    graph = rupture_propagation.probability_graph(
+        {"a": {"b": 4000.0}, "b": {"a": 4000.0}, "c": {}}
+    )
+    assert "c" in graph.nodes
+    assert graph.degree("c") == 0
