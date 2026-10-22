@@ -1532,6 +1532,34 @@ class Fault:
         return self.rx_ry_distance(point)[1]
 
 
+def _multi_fault_traces(
+    faults: Sequence[Fault | Plane],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Combine the fault traces of a multi-fault rupture for GC2 calculations.
+
+    Parameters
+    ----------
+    faults : Sequence[Fault | Plane]
+        Faults to combine.
+
+    Returns
+    -------
+    trace_points : np.ndarray
+        The NZTM trace points of every fault, with discordant traces reversed.
+    trace_indices : np.ndarray
+        The index of the start of each trace in ``trace_points``, plus the total number of points.
+    """
+    traces = [fault.trace[:, :2] for fault in faults]
+    trace_points = np.concatenate(traces, axis=0)
+    trace_indices = np.cumulative_sum(
+        [len(trace) for trace in traces], include_initial=True
+    )
+    return (
+        gc2_distances.strike_corrected_traces(trace_points, trace_indices),
+        trace_indices,
+    )
+
+
 def multi_fault_rx_ry_distance(
     faults: list[Fault | Plane], point: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -1552,13 +1580,65 @@ def multi_fault_rx_ry_distance(
         The generalised ry distance (in metres) between the faults and the points. Has shape (n,)
     """
     point = coordinates.wgs_depth_to_nztm(point[..., :2])
-    traces = [fault.trace[:, :2] for fault in faults]
-    trace_points = np.concatenate(traces, axis=0)
-    trace_indices = np.cumulative_sum(
-        [len(trace) for trace in traces], include_initial=True
-    )
+    trace_points, trace_indices = _multi_fault_traces(faults)
     rx, ry = gc2_distances.segment_rx_ry(trace_points, point)
     return gc2_distances.multi_trace_rx_ry(trace_points, trace_indices, rx, ry)
+
+
+def ry0_distance(
+    faults: Fault | Plane | Sequence[Fault | Plane], point: np.ndarray
+) -> np.ndarray:
+    """Calculate the Ry0 distance between a rupture and a set of points.
+
+    Ry0 is the distance from the point to the ends of the rupture
+    measured parallel to strike, i.e. Ry0 = max(0, -U, U - L) where U
+    is the generalised ry distance and L is the length of the rupture
+    in the U coordinate system. Points with a projection along strike
+    falling within the rupture have Ry0 = 0.
+
+    For multi-fault ruptures, the rupture is taken to span the
+    range of U values covered by the fault traces. The transformation
+    is not well-defined for these ruptures, so a RuntimeWarning is
+    raised.
+
+    Parameters
+    ----------
+    faults : Fault | Plane | Sequence[Fault | Plane]
+        The fault, or faults, of the rupture.
+    point : np.ndarray
+        Points to calculate distance to, has shape (n, 2) or (2,).
+
+    Returns
+    -------
+    np.ndarray
+        The Ry0 distance (in metres) between the rupture and the
+        points. Has shape (n,), or () for a single point of shape (2,).
+    """
+    if isinstance(faults, (Fault, Plane)):
+        faults = [faults]
+    faults = list(faults)
+
+    if len(faults) == 1:
+        _, u = faults[0].rx_ry_distance(point)
+        segments = faults[0].trace[:, :2].reshape((-1, 2, 2))
+        u_min = 0.0
+        u_max = np.linalg.norm(segments[:, 1] - segments[:, 0], axis=-1).sum()
+    else:
+        warnings.warn(
+            "Ry0 is not well-defined for multi-fault ruptures."
+            " Using the extent of the fault traces along the GC2 U axis as the rupture length.",
+            RuntimeWarning,
+        )
+        _, u = multi_fault_rx_ry_distance(faults, point)
+        trace_points, trace_indices = _multi_fault_traces(faults)
+        segment_lengths, u_origins = gc2_distances.multi_trace_u_origins(
+            trace_points, trace_indices
+        )
+        u_min = u_origins.min()
+        u_max = (u_origins + segment_lengths).max()
+
+    ry0 = np.maximum(0.0, np.maximum(u_min - u, u - u_max))
+    return ry0.reshape(np.shape(point)[:-1])
 
 
 IsSource = Plane | Fault | Point
