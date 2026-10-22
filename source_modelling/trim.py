@@ -207,10 +207,10 @@ def trim_array_to_target_length(
     while right < len(slip_function) and slip_function[right - 1] >= keep_threshold:
         right += 1
 
-    while slip_function[left] == 0 and left < right:
+    while left < right and slip_function[left] == 0:
         left += 1
 
-    while slip_function[right - 1] == 0 and left < right:
+    while left < right and slip_function[right - 1] == 0:
         right -= 1
 
     if not trim_left:
