@@ -18,7 +18,12 @@ geometry (Hayes et al. 2018), with probabilities from Gaussian uncertainty
 in the depth below the interface. Alternatively, the modified NGA-SUB
 (2020) rule used by the NZGMDB classifies from the location and depth
 alone, by the event's position relative to the up-dip, seismogenic and
-down-dip zones of the interface.
+down-dip zones of the interface. A third rule (Haynie et al. 2026) scores
+interface events by the product of Gaussian likelihoods in the vertical
+distance to the interface and the Kagan angle between the mechanism and
+interface slip (pure reverse, or along the relative plate motion),
+splitting the remainder into upper plate and intraslab by the side of the
+interface.
 
 Examples
 --------
@@ -34,6 +39,8 @@ NodalPlane(strike=20, dip=35, rake=79)
 <TectonicType.INTERFACE: 'interface'>
 >>> classifier.nga_sub_tectonic_type(centroid)
 <TectonicType.INTERFACE: 'interface'>
+>>> classifier.haynie_tectonic_type(centroid, nodal_plane_1)  # 9 km below Slab2
+<TectonicType.SLAB: 'slab'>
 """
 
 from __future__ import annotations
@@ -98,6 +105,18 @@ INTERFACE_MAX_DEPTH_KM = 60.0
 
 CENTROID_DEPTH_SIGMA_KM = 7.0
 """Standard deviation of the centroid depth for the NGA-SUB rule."""
+
+ON_INTERFACE_SIGMA_KM = 10.0
+"""Width of the Gaussian on-interface probability in the vertical distance to the interface (Haynie et al. 2026)."""
+
+SUBDUCTION_SLIP_SIGMA = 30.0
+"""Width in degrees of the Gaussian subduction slip probability in the Kagan angle (Haynie et al. 2026)."""
+
+SUBDUCTION_MAX_DEPTH_KM = 70.0
+"""Maximum centroid depth of subduction interface events (Haynie et al. 2026)."""
+
+PACIFIC_AUSTRALIA_EULER_POLE = (-60.1, -178.3, 1.0744)
+"""Latitude, longitude (degrees) and rate (degrees/Myr) of Pacific rotation relative to Australia (NUVEL-1A, DeMets et al. 1994)."""
 
 FAULT_NEIGHBOURS = 8
 """Number of nearest CFM fault segments used for the strike, dip and rake misfits."""
@@ -169,6 +188,91 @@ def _plane_normal(strike: float, dip: float) -> npt.NDArray[np.float64]:
     return np.array(
         [-np.sin(dip) * np.sin(strike), np.sin(dip) * np.cos(strike), -np.cos(dip)]
     )
+
+
+def _slip_vector(strike: float, dip: float, rake: float) -> npt.NDArray[np.float64]:
+    """Unit slip vector of the hanging wall in (north, east, down) coordinates (Aki & Richards eq. 4.88)."""
+    strike, dip, rake = np.radians(strike), np.radians(dip), np.radians(rake)
+    return np.array(
+        [
+            np.cos(rake) * np.cos(strike) + np.sin(rake) * np.cos(dip) * np.sin(strike),
+            np.cos(rake) * np.sin(strike) - np.sin(rake) * np.cos(dip) * np.cos(strike),
+            -np.sin(rake) * np.sin(dip),
+        ]
+    )
+
+
+def _principal_axes(plane: NodalPlane) -> npt.NDArray[np.float64]:
+    """Rows T, P and B = T x P of a double couple in (north, east, down) coordinates."""
+    normal = _plane_normal(plane.strike, plane.dip)
+    slip = _slip_vector(plane.strike, plane.dip, plane.rake)
+    t_axis = (normal + slip) / np.sqrt(2.0)
+    p_axis = (normal - slip) / np.sqrt(2.0)
+    return np.stack([t_axis, p_axis, np.cross(t_axis, p_axis)])
+
+
+def kagan_angle(plane_a: NodalPlane, plane_b: NodalPlane) -> float:
+    """Kagan angle between two double-couple focal mechanisms.
+
+    The Kagan angle (Kagan 1991) is the smallest rotation taking one
+    mechanism's principal axes onto the other's, allowing for the
+    symmetries of the double couple. Either nodal plane of a mechanism gives
+    the same angle.
+
+    Parameters
+    ----------
+    plane_a : NodalPlane
+        A nodal plane of the first mechanism.
+    plane_b : NodalPlane
+        A nodal plane of the second mechanism.
+
+    Returns
+    -------
+    float
+        The Kagan angle in degrees, between 0 and 120.
+    """
+    # Diagonal of the rotation between the two principal axis frames; the
+    # double-couple symmetries flip the signs of two axes at a time.
+    m = np.diag(_principal_axes(plane_a) @ _principal_axes(plane_b).T)
+    trace = max(
+        m[0] + m[1] + m[2], m[0] - m[1] - m[2], -m[0] + m[1] - m[2], -m[0] - m[1] + m[2]
+    )
+    return float(np.degrees(np.arccos(np.clip((trace - 1.0) / 2.0, -1.0, 1.0))))
+
+
+def plate_motion_azimuth(
+    lat: float,
+    lon: float,
+    euler_pole: tuple[float, float, float] = PACIFIC_AUSTRALIA_EULER_POLE,
+) -> float:
+    """Azimuth of relative plate motion at a location.
+
+    Parameters
+    ----------
+    lat : float
+        Latitude in degrees.
+    lon : float
+        Longitude in degrees.
+    euler_pole : tuple[float, float, float], optional
+        Latitude, longitude (degrees) and rate of rotation of one plate
+        relative to the other. Defaults to Pacific relative to Australia.
+
+    Returns
+    -------
+    float
+        Azimuth in degrees of the rotating plate's motion relative to the
+        fixed plate.
+    """
+    pole_lat, pole_lon, rate = euler_pole
+    velocity = np.cross(
+        rate * _unit_vectors(pole_lat, pole_lon), _unit_vectors(lat, lon)
+    )
+    lat, lon = np.radians(lat), np.radians(lon)
+    north = np.array(
+        [-np.sin(lat) * np.cos(lon), -np.sin(lat) * np.sin(lon), np.cos(lat)]
+    )
+    east = np.array([-np.sin(lon), np.cos(lon), 0.0])
+    return float(np.degrees(np.arctan2(velocity @ east, velocity @ north)) % 360.0)
 
 
 class SlabQuery(NamedTuple):
@@ -653,6 +757,119 @@ def nga_sub_tectonic_type_probabilities(
     return probabilities
 
 
+def subduction_slip_planes(
+    lat: float, lon: float, slab: SlabQuery
+) -> tuple[NodalPlane, NodalPlane]:
+    """Mechanisms of slip on the subduction interface at a location.
+
+    Parameters
+    ----------
+    lat : float
+        Latitude in degrees.
+    lon : float
+        Longitude in degrees.
+    slab : SlabQuery
+        Slab surface beneath the location.
+
+    Returns
+    -------
+    tuple[NodalPlane, NodalPlane]
+        Slip on the slab surface (a) in pure reverse (rake 90) and (b) in
+        oblique reverse with the horizontal slip parallel to the relative
+        Pacific-Australia plate motion.
+    """
+    # Components of the plate motion along strike and down the dip direction.
+    relative_azimuth = np.radians(plate_motion_azimuth(lat, lon) - slab.strike)
+    along_strike, down_dip = np.cos(relative_azimuth), np.sin(relative_azimuth)
+    # Take the sense of the motion that is reverse slip, whichever plate
+    # is subducting.
+    if down_dip > 0:
+        along_strike, down_dip = -along_strike, -down_dip
+    # The horizontal slip of a plane is cos(rake) along strike and
+    # -sin(rake) cos(dip) down the dip direction.
+    rake = np.degrees(
+        np.arctan2(-down_dip / np.cos(np.radians(slab.dip)), along_strike)
+    )
+    return (
+        NodalPlane(slab.strike, slab.dip, 90.0),
+        NodalPlane(slab.strike, slab.dip, float(rake)),
+    )
+
+
+def haynie_tectonic_type_probabilities(
+    depth_above_slab: float,
+    depth: float,
+    subduction_kagan_angle: float | None = None,
+    fixed_depth: bool = False,
+    on_interface_sigma: float = ON_INTERFACE_SIGMA_KM,
+    subduction_slip_sigma: float = SUBDUCTION_SLIP_SIGMA,
+) -> dict[TectonicType, float]:
+    """Tectonic type probabilities by the rule of Haynie et al. (2026).
+
+    Events outside the slab footprint are crustal (upper plate). Inside it,
+    the subduction interface probability is the product of
+
+    - the on-interface probability, ``exp(-dz**2 / (2 * on_interface_sigma**2))``
+      for vertical distance ``dz`` to the interface (1 for a fixed depth),
+    - the subduction slip probability,
+      ``exp(-kagan**2 / (2 * subduction_slip_sigma**2))`` for the Kagan
+      angle to interface slip (1 without a focal mechanism), and
+    - whether the event is no deeper than `SUBDUCTION_MAX_DEPTH_KM`.
+
+    The remaining probability is upper plate for events above the
+    interface and intraslab for events below it.
+
+    Parameters
+    ----------
+    depth_above_slab : float
+        Vertical distance in km from the centroid up to the slab surface
+        (negative below it), NaN outside the slab footprint.
+    depth : float
+        Centroid depth in km.
+    subduction_kagan_angle : float | None, optional
+        Minimum Kagan angle in degrees between the event's mechanism and
+        slip on the interface (see `subduction_slip_planes`), None without
+        a focal mechanism.
+    fixed_depth : bool, optional
+        Whether the centroid depth was fixed rather than solved for, so says
+        nothing about the distance to the interface.
+    on_interface_sigma : float, optional
+        Width in km of the on-interface probability.
+    subduction_slip_sigma : float, optional
+        Width in degrees of the subduction slip probability.
+
+    Returns
+    -------
+    dict[TectonicType, float]
+        Probability of each tectonic type.
+    """
+    if np.isnan(depth_above_slab):
+        return {
+            TectonicType.CRUSTAL: 1.0,
+            TectonicType.INTERFACE: 0.0,
+            TectonicType.SLAB: 0.0,
+        }
+    on_interface = (
+        1.0
+        if fixed_depth
+        else np.exp(-(depth_above_slab**2) / (2.0 * on_interface_sigma**2))
+    )
+    subduction_slip = (
+        1.0
+        if subduction_kagan_angle is None
+        else np.exp(-(subduction_kagan_angle**2) / (2.0 * subduction_slip_sigma**2))
+    )
+    interface = float(
+        on_interface * subduction_slip * (depth <= SUBDUCTION_MAX_DEPTH_KM)
+    )
+    above_slab = depth_above_slab >= 0
+    return {
+        TectonicType.CRUSTAL: (1.0 - interface) * above_slab,
+        TectonicType.INTERFACE: interface,
+        TectonicType.SLAB: (1.0 - interface) * (not above_slab),
+    }
+
+
 def depth_temperature(
     depth: npt.ArrayLike, scale: float, depth_rate: float
 ) -> npt.NDArray[np.float64]:
@@ -962,4 +1179,70 @@ class CMTClassifier:
             The tectonic type.
         """
         probabilities = self.nga_sub_tectonic_type_probabilities(centroid, sigma=0.0)
+        return max(probabilities, key=probabilities.__getitem__)
+
+    def haynie_tectonic_type_probabilities(
+        self,
+        centroid: npt.ArrayLike,
+        nodal_plane: NodalPlane | None = None,
+        fixed_depth: bool = False,
+    ) -> dict[TectonicType, float]:
+        """Tectonic type probabilities by the Haynie et al. (2026) rule (see the module-level `haynie_tectonic_type_probabilities`).
+
+        Parameters
+        ----------
+        centroid : npt.ArrayLike
+            Centroid as (lat, lon, depth_km). If depth is omitted a default
+            is assumed with a warning and treated as fixed.
+        nodal_plane : NodalPlane | None, optional
+            Either nodal plane of the event's focal mechanism, None if it
+            has none.
+        fixed_depth : bool, optional
+            Whether the centroid depth was fixed rather than solved for.
+
+        Returns
+        -------
+        dict[TectonicType, float]
+            Probability of each tectonic type.
+        """
+        fixed_depth = fixed_depth or np.size(centroid) == 2
+        lat, lon, depth = _parse_centroid(centroid)
+        slab = self.slab_model.query(lat, lon)
+        subduction_kagan_angle = None
+        if nodal_plane is not None and slab.present:
+            subduction_kagan_angle = min(
+                kagan_angle(nodal_plane, subduction_plane)
+                for subduction_plane in subduction_slip_planes(lat, lon, slab)
+            )
+        return haynie_tectonic_type_probabilities(
+            slab.depth - depth, depth, subduction_kagan_angle, fixed_depth
+        )
+
+    def haynie_tectonic_type(
+        self,
+        centroid: npt.ArrayLike,
+        nodal_plane: NodalPlane | None = None,
+        fixed_depth: bool = False,
+    ) -> TectonicType:
+        """Most probable tectonic type by the Haynie et al. (2026) rule (see `haynie_tectonic_type_probabilities`).
+
+        Parameters
+        ----------
+        centroid : npt.ArrayLike
+            Centroid as (lat, lon, depth_km). If depth is omitted a default
+            is assumed with a warning and treated as fixed.
+        nodal_plane : NodalPlane | None, optional
+            Either nodal plane of the event's focal mechanism, None if it
+            has none.
+        fixed_depth : bool, optional
+            Whether the centroid depth was fixed rather than solved for.
+
+        Returns
+        -------
+        TectonicType
+            The tectonic type.
+        """
+        probabilities = self.haynie_tectonic_type_probabilities(
+            centroid, nodal_plane, fixed_depth
+        )
         return max(probabilities, key=probabilities.__getitem__)
