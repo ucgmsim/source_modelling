@@ -3,7 +3,7 @@ import pytest
 
 from source_modelling import focal_mechanism
 from source_modelling.community_fault_model import NodalPlane
-from source_modelling.focal_mechanism import SlabZone, TectonicType
+from source_modelling.focal_mechanism import TectonicType
 
 # 2003 Fiordland earthquake (GeoNet 2103645), a Puysegur interface event.
 CENTROID = np.array([-45.1929, 166.83, 22.0])
@@ -70,99 +70,115 @@ def test_slab_query():
     assert not slab_model.query(-43.5, 172.6).present  # Christchurch
 
 
-def test_tectonic_type(classifier: focal_mechanism.CMTClassifier):
-    assert (
-        classifier.tectonic_type(CENTROID, PLANE_1, PLANE_2) == TectonicType.INTERFACE
+@pytest.mark.parametrize(
+    "plane_a, plane_b, expected",
+    [
+        (PLANE_1, PLANE_1, 0.0),
+        (NodalPlane(0, 45, 90), NodalPlane(180, 45, 90), 0.0),  # Auxiliary plane
+        (NodalPlane(0, 45, 90), NodalPlane(0, 45, -90), 90.0),  # Thrust vs normal
+        (NodalPlane(0, 45, 90), NodalPlane(0, 45, 60), 30.0),  # Rake rotation
+        (NodalPlane(0, 90, 0), NodalPlane(90, 90, 0), 90.0),  # Strike rotation
+    ],
+)
+def test_kagan_angle(plane_a: NodalPlane, plane_b: NodalPlane, expected: float):
+    assert focal_mechanism.kagan_angle(plane_a, plane_b) == pytest.approx(
+        expected, abs=1e-4
     )
-    # Same mechanism well above the interface is crustal.
-    shallow = np.array([-45.1929, 166.83, 2.0])
-    assert classifier.tectonic_type(shallow, PLANE_1, PLANE_2) == TectonicType.CRUSTAL
+    assert focal_mechanism.kagan_angle(plane_b, plane_a) == pytest.approx(
+        expected, abs=1e-4
+    )
+
+
+def test_kagan_angle_is_at_most_120():
+    rng = np.random.default_rng(0)
+    planes = [
+        NodalPlane(strike, dip, rake)
+        for strike, dip, rake in rng.uniform(
+            [0, 0, -180], [360, 90, 180], size=(500, 3)
+        ).tolist()
+    ]
+    angles = [
+        focal_mechanism.kagan_angle(a, b) for a, b in zip(planes[::2], planes[1::2])
+    ]
+    assert 0.0 <= min(angles) and max(angles) <= 120.0
 
 
 @pytest.mark.parametrize(
-    "depth_below_slab, interface_like, normal_like, expected",
+    "depth, slab_depth, kagan, moho_depth, expected",
     [
-        (float("nan"), True, False, TectonicType.CRUSTAL),
-        (-20.0, True, False, TectonicType.CRUSTAL),
-        (-5.0, True, False, TectonicType.INTERFACE),
-        (5.0, True, False, TectonicType.INTERFACE),
-        (-5.0, False, False, TectonicType.CRUSTAL),
-        (5.0, False, False, TectonicType.SLAB),
-        (-5.0, False, True, TectonicType.SLAB),
-        (20.0, True, False, TectonicType.SLAB),
+        # Outside the slab footprint.
+        (10.0, float("nan"), None, np.inf, (1.0, 0.0, 0.0)),
+        # On the interface, above the seismogenic limit.
+        (20.0, 20.0, None, np.inf, (0.0, 1.0, 0.0)),
+        (20.0, 20.0, 41.5, np.inf, (0.1875, 0.625, 0.1875)),
+        (20.0, 20.0, 90.0, np.inf, (0.375, 0.25, 0.375)),
+        # Halfway down the ramp below the seismogenic zone.
+        (37.5, 30.0, None, np.inf, (0.15625, 0.5, 0.34375)),
+        # Above and below the flex zone.
+        (5.0, 30.0, None, np.inf, (1.0, 0.0, 0.0)),
+        (60.0, 30.0, None, np.inf, (0.0, 0.0, 1.0)),
+        # In the mantle wedge, between the Moho and the top of the flex zone.
+        (10.0, 30.0, None, 5.0, (0.64, 0.2, 0.16)),
+        # Below the seismogenic zone and below a Moho that is below the slab.
+        (48.0, 40.0, None, np.inf, (0.3, 0.0, 0.7)),
+        (48.0, 40.0, None, 45.0, (0.0, 0.0, 1.0)),
     ],
 )
 def test_tectonic_type_probabilities(
-    depth_below_slab: float,
-    interface_like: bool,
-    normal_like: bool,
-    expected: TectonicType,
-):
-    rule = focal_mechanism.tectonic_type_probabilities(
-        depth_below_slab, interface_like, normal_like, sigma=0.0
-    )
-    assert rule[expected] == 1.0
-    probabilities = focal_mechanism.tectonic_type_probabilities(
-        depth_below_slab, interface_like, normal_like
-    )
-    assert sum(probabilities.values()) == pytest.approx(1.0)
-    assert max(probabilities, key=probabilities.__getitem__) == expected
-
-
-@pytest.mark.parametrize(
-    "lat, lon, expected",
-    [
-        (-41.3, 174.8, SlabZone.SEISMOGENIC),  # Wellington
-        (-38.7, 176.1, SlabZone.DOWNDIP),  # Taupo
-        (-41.5, 177.5, SlabZone.UPDIP),  # Near the Hikurangi trough
-        (-43.5, 172.6, None),  # Christchurch
-    ],
-)
-def test_slab_zone(lat: float, lon: float, expected: SlabZone | None):
-    slab_model = focal_mechanism.SlabModel.load()
-    query = slab_model.zone(lat, lon)
-    assert query.zone == expected
-    assert np.isfinite(query.depth) == (expected is not None)
-    wrapped = slab_model.zone(lat, lon - 360)
-    assert wrapped.zone == query.zone
-    np.testing.assert_equal(wrapped.depth, query.depth)
-
-
-def test_nga_sub_tectonic_type(classifier: focal_mechanism.CMTClassifier):
-    assert classifier.nga_sub_tectonic_type(CENTROID) == TectonicType.INTERFACE
-    shallow = np.array([-41.3, 174.8, 5.0])  # Above the slab beneath Wellington
-    assert classifier.nga_sub_tectonic_type(shallow) == TectonicType.CRUSTAL
-
-
-@pytest.mark.parametrize(
-    "depth, zone, slab_depth, expected",
-    [
-        (5.0, None, float("nan"), TectonicType.CRUSTAL),
-        (45.0, None, float("nan"), TectonicType.CRUSTAL),
-        (55.0, None, float("nan"), TectonicType.SLAB),
-        (5.0, SlabZone.UPDIP, 8.0, TectonicType.SLAB),
-        (5.0, SlabZone.SEISMOGENIC, 25.0, TectonicType.CRUSTAL),
-        (18.0, SlabZone.SEISMOGENIC, 25.0, TectonicType.INTERFACE),
-        (22.0, SlabZone.SEISMOGENIC, 40.0, TectonicType.INTERFACE),
-        (40.0, SlabZone.SEISMOGENIC, 25.0, TectonicType.SLAB),
-        (25.0, SlabZone.DOWNDIP, 100.0, TectonicType.CRUSTAL),
-        (45.0, SlabZone.DOWNDIP, 100.0, TectonicType.CRUSTAL),
-        (55.0, SlabZone.DOWNDIP, 100.0, TectonicType.SLAB),
-        (40.0, SlabZone.DOWNDIP, 48.0, TectonicType.SLAB),
-    ],
-)
-def test_nga_sub_tectonic_type_probabilities(
     depth: float,
-    zone: SlabZone | None,
     slab_depth: float,
-    expected: TectonicType,
+    kagan: float | None,
+    moho_depth: float,
+    expected: tuple[float, float, float],
 ):
-    rule = focal_mechanism.nga_sub_tectonic_type_probabilities(
-        depth, zone, slab_depth, sigma=0.0
+    probabilities = focal_mechanism.tectonic_type_probabilities(
+        depth, slab_depth, 30.0, kagan, moho_depth
     )
-    assert rule[expected] == 1.0
-    probabilities = focal_mechanism.nga_sub_tectonic_type_probabilities(
-        depth, zone, slab_depth
+    assert [
+        probabilities[TectonicType.CRUSTAL],
+        probabilities[TectonicType.INTERFACE],
+        probabilities[TectonicType.SLAB],
+    ] == pytest.approx(expected)
+
+
+def test_seismogenic_zone(classifier: focal_mechanism.CMTClassifier):
+    slab_model = classifier.slab_model
+    assert slab_model.query(-41.3, 174.8).seismogenic_zone.depth == 47.0  # Hikurangi
+    assert slab_model.query(*CENTROID[:2]).seismogenic_zone.depth == 30.0  # Puysegur
+
+
+def test_moho_model():
+    moho_model = focal_mechanism.MohoModel.load()
+    wellington = moho_model.depth(-41.3, 174.8)
+    assert 15 < wellington < 45
+    assert moho_model.depth(-37.0, 179.5 - 360) == moho_model.depth(-37.0, 179.5)
+    assert moho_model.depth(0.0, 0.0) == np.inf
+
+
+def test_tectonic_type(classifier: focal_mechanism.CMTClassifier):
+    # The 2003 Fiordland earthquake ruptured the Puysegur interface, and the
+    # result does not depend on the order of the planes.
+    assert classifier.tectonic_type(CENTROID, PLANE_1, PLANE_2) == (
+        TectonicType.INTERFACE
     )
-    assert sum(probabilities.values()) == pytest.approx(1.0)
-    assert max(probabilities, key=probabilities.__getitem__) == expected
+    assert classifier.tectonic_type_probabilities(
+        CENTROID, PLANE_1, PLANE_2
+    ) == classifier.tectonic_type_probabilities(CENTROID, PLANE_2, PLANE_1)
+
+    # Thrusting on the Hikurangi interface beneath Wellington.
+    slab = classifier.slab_model.query(-41.3, 174.8)
+    on_interface = np.array([-41.3, 174.8, slab.depth])
+    thrust = NodalPlane(slab.strike, slab.dip, 95.0)
+    assert classifier.tectonic_type(on_interface, thrust) == TectonicType.INTERFACE
+    # Strike-slip near the interface is crustal above it and intraslab below.
+    strike_slip = NodalPlane(40.0, 85.0, 175.0)
+    above = on_interface - [0, 0, 10.0]
+    below = on_interface + [0, 0, 10.0]
+    assert classifier.tectonic_type(above, strike_slip) == TectonicType.CRUSTAL
+    assert classifier.tectonic_type(below, strike_slip) == TectonicType.SLAB
+    # Without a mechanism, location alone decides.
+    assert classifier.tectonic_type(on_interface) == TectonicType.INTERFACE
+    # Outside the slab footprint (Christchurch).
+    assert (
+        classifier.tectonic_type([-43.5, 172.6, 10.0], thrust) == TectonicType.CRUSTAL
+    )

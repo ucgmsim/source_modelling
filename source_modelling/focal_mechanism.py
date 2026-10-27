@@ -13,12 +13,14 @@ events. The weights and temperature are fitted with
 ``scripts/train_cmt_classifiers.py``.
 
 The tectonic type (crustal, subduction interface or intraslab) follows the
-NZ NSHM 2022 rule (Rollins et al. 2022) against the Slab2 interface
-geometry (Hayes et al. 2018), with probabilities from Gaussian uncertainty
-in the depth below the interface. Alternatively, the modified NGA-SUB
-(2020) rule used by the NZGMDB classifies from the location and depth
-alone, by the event's position relative to the up-dip, seismogenic and
-down-dip zones of the interface.
+CatSep plausibility scores of Haynie et al. (2026) against the Slab2
+interface geometry and seismogenic zone depths (Hayes et al. 2018) and the
+CRUST1.0 Moho (Laske et al. 2013). The interface score is the product of
+ramp functions in the vertical distance to the interface, the depth below
+the seismogenic zone and the Kagan angle between the mechanism and
+interface slip. The crustal score ramps down from 20 km above to 20 km
+below the interface and from the Moho to the slab, and intraslab takes the
+remainder.
 
 Examples
 --------
@@ -31,8 +33,6 @@ Examples
 >>> classifier.most_likely_nodal_plane(centroid, nodal_plane_1, nodal_plane_2)
 NodalPlane(strike=20, dip=35, rake=79)
 >>> classifier.tectonic_type(centroid, nodal_plane_1, nodal_plane_2)
-<TectonicType.INTERFACE: 'interface'>
->>> classifier.nga_sub_tectonic_type(centroid)
 <TectonicType.INTERFACE: 'interface'>
 """
 
@@ -58,46 +58,39 @@ from source_modelling.community_fault_model import (
     NodalPlane,
     get_community_fault_model,
 )
-from source_modelling.magnitude_scaling import RakeType, rake_type
 
 DEFAULT_CENTROID_DEPTH_KM = 10.0
 """Depth assumed when a centroid is given without a depth."""
 
-INTERFACE_DEPTH_TOLERANCE_KM = 10.0
-"""Vertical distance from the interface within which events may be interface events (Rollins et al. 2022)."""
+FLEX_ZONE_KM = 15.0
+"""Half-width of the interface flex zone about the slab surface, and the buffer below the seismogenic zone (Haynie et al. 2026)."""
 
-INTERFACE_RAKE_TOLERANCE = 60.0
-"""Maximum deviation of rake from pure reverse (90 degrees) for an interface-like plane."""
 
-INTERFACE_MAX_DIP = 75.0
-"""Maximum dip of an interface-like plane."""
+KAGAN_RAMP = ((30.0, 53.0), (1.0, 0.25))
+"""Interface score ramp (`np.interp` points) in the Kagan angle in degrees to interface slip (Haynie et al. 2026, Table 1)."""
 
-INTERFACE_MAX_SLAB_ANGLE = 35.0
-"""Maximum angle between a plane and the local slab surface for an interface-like plane."""
+CRUSTAL_DEPTH_DIFFERENCE_RAMP = ((-20.0, 20.0), (1.0, 0.0))
+"""Crustal score ramp (`np.interp` points) in the depth in km below the slab surface (Haynie et al. 2026, Table 1)."""
 
-DEPTH_BELOW_SLAB_SIGMA_KM = 7.0
-"""Standard deviation of the depth below the interface (combined centroid and Slab2 depth uncertainty)."""
 
-SEISMOGENIC_ZONE_DEPTHS_KM = {"ker": (10.0, 47.0), "puy": (11.0, 30.0)}
-"""Interface depths bounding the seismogenic zone of each Slab2 region (Hayes et al. 2018)."""
+class SeismogenicZone(NamedTuple):
+    """Seismogenic zone of a Slab2 region."""
 
-SLAB_ZONE_SEARCH_RADIUS_KM = 10.0
-"""Horizontal distance from a slab zone within which an event is assigned to it."""
+    depth: float
+    """Depth in km of the deep limit of the seismogenic zone."""
 
-SEISMOGENIC_CRUSTAL_MAX_DEPTH_KM = 20.0
-"""Maximum depth of crustal events above the seismogenic zone (NGA-SUB rule)."""
+    rake: float
+    """Typical rake of interface slip in degrees."""
 
-DOWNDIP_CRUSTAL_MAX_DEPTH_KM = 30.0
-"""Depth above which events down-dip of the seismogenic zone are always crustal (NGA-SUB rule)."""
 
-UNDETERMINED_CRUSTAL_MAX_DEPTH_KM = 50.0
-"""Depth splitting NGA-SUB "undetermined" events into crustal and intraslab (as in the NZGMDB)."""
+SEISMOGENIC_ZONES = {
+    "ker": SeismogenicZone(47.0, 93.0),
+    "puy": SeismogenicZone(30.0, 90.0),
+}
+"""Seismogenic zone of each Slab2 region (Hayes et al. 2018). Puysegur has no published rake, so it takes CatSep's default."""
 
-INTERFACE_MAX_DEPTH_KM = 60.0
-"""Maximum depth of interface events (NGA-SUB rule)."""
-
-CENTROID_DEPTH_SIGMA_KM = 7.0
-"""Standard deviation of the centroid depth for the NGA-SUB rule."""
+DEFAULT_SEISMOGENIC_ZONE = SeismogenicZone(40.0, 90.0)
+"""Seismogenic zone of Slab2 regions without one in `SEISMOGENIC_ZONES` (CatSep's default)."""
 
 FAULT_NEIGHBOURS = 8
 """Number of nearest CFM fault segments used for the strike, dip and rake misfits."""
@@ -134,27 +127,6 @@ class TectonicType(Enum):
     """Intraslab (including outer-rise) earthquake."""
 
 
-class SlabZone(Enum):
-    """Part of a subduction interface in the NGA-SUB (2020) classification."""
-
-    UPDIP = "updip"
-    """Interface shallower than the seismogenic zone, near the trench (region A)."""
-
-    SEISMOGENIC = "seismogenic"
-    """Seismogenic zone of the interface (region B)."""
-
-    DOWNDIP = "downdip"
-    """Interface deeper than the seismogenic zone (region C)."""
-
-
-def _unit_vectors(lat: npt.ArrayLike, lon: npt.ArrayLike) -> npt.NDArray[np.float64]:
-    """Unit vectors from the Earth's centre to points on a sphere."""
-    lat, lon = np.radians(lat), np.radians(lon)
-    return np.stack(
-        [np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)], axis=-1
-    )
-
-
 def _angular_difference(
     a: npt.ArrayLike, b: npt.ArrayLike, period: float = 360.0
 ) -> npt.NDArray[np.float64]:
@@ -171,6 +143,55 @@ def _plane_normal(strike: float, dip: float) -> npt.NDArray[np.float64]:
     )
 
 
+def _slip_vector(strike: float, dip: float, rake: float) -> npt.NDArray[np.float64]:
+    """Unit slip vector of the hanging wall in (north, east, down) coordinates (Aki & Richards eq. 4.88)."""
+    strike, dip, rake = np.radians(strike), np.radians(dip), np.radians(rake)
+    return np.array(
+        [
+            np.cos(rake) * np.cos(strike) + np.sin(rake) * np.cos(dip) * np.sin(strike),
+            np.cos(rake) * np.sin(strike) - np.sin(rake) * np.cos(dip) * np.cos(strike),
+            -np.sin(rake) * np.sin(dip),
+        ]
+    )
+
+
+def _principal_axes(plane: NodalPlane) -> npt.NDArray[np.float64]:
+    """Rows T, P and B = T x P of a double couple in (north, east, down) coordinates."""
+    normal = _plane_normal(plane.strike, plane.dip)
+    slip = _slip_vector(plane.strike, plane.dip, plane.rake)
+    t_axis = (normal + slip) / np.sqrt(2.0)
+    p_axis = (normal - slip) / np.sqrt(2.0)
+    return np.stack([t_axis, p_axis, np.cross(t_axis, p_axis)])
+
+
+def kagan_angle(plane_a: NodalPlane, plane_b: NodalPlane) -> float:
+    """Kagan angle between two double-couple focal mechanisms.
+
+    The Kagan angle (Kagan 1991) is the smallest rotation taking one
+    mechanism's principal axes onto the other's, allowing for the
+    symmetries of the double couple. Either nodal plane of a mechanism gives
+    the same angle.
+
+    Parameters
+    ----------
+    plane_a : NodalPlane
+        A nodal plane of the first mechanism.
+    plane_b : NodalPlane
+        A nodal plane of the second mechanism.
+
+    Returns
+    -------
+    float
+        The Kagan angle in degrees, between 0 and 120.
+    """
+    rotation = sp.spatial.transform.Rotation.from_matrix(
+        _principal_axes(plane_a) @ _principal_axes(plane_b).T
+    )
+    # The double couple is symmetric under half turns about its principal axes.
+    symmetries = sp.spatial.transform.Rotation.create_group("D2")
+    return float(np.degrees((symmetries * rotation).magnitude().min()))
+
+
 class SlabQuery(NamedTuple):
     """Slab surface properties at a location."""
 
@@ -183,20 +204,13 @@ class SlabQuery(NamedTuple):
     strike: float
     """Strike of the slab surface in degrees, NaN outside the footprint."""
 
+    seismogenic_zone: SeismogenicZone = DEFAULT_SEISMOGENIC_ZONE
+    """Seismogenic zone of the slab region."""
+
     @property
     def present(self) -> bool:
         """Whether the location is inside a slab footprint."""
         return bool(np.isfinite(self.depth))
-
-
-class SlabZoneQuery(NamedTuple):
-    """Slab zone near a location."""
-
-    zone: SlabZone | None
-    """The slab zone, None away from all zones."""
-
-    depth: float
-    """Depth of the slab surface in km at the nearest point of the zone, NaN away from all zones."""
 
 
 class SlabModel:
@@ -204,9 +218,7 @@ class SlabModel:
 
     Contains the Kermadec-Hikurangi ("ker") and Puysegur ("puy") regions of
     Slab2 (Hayes et al. 2018), interpolated bilinearly. Strike is
-    interpolated as a unit vector to avoid wraparound. The grid nodes are
-    also split into the NGA-SUB slab zones by their depth relative to the
-    region's seismogenic zone.
+    interpolated as a unit vector to avoid wraparound.
 
     Parameters
     ----------
@@ -214,16 +226,15 @@ class SlabModel:
         Mapping with keys ``<region>_lat``, ``<region>_lon``,
         ``<region>_depth``, ``<region>_dip`` and ``<region>_strike``
         for each region.
-    seismogenic_zone_depths : dict[str, tuple[float, float]], optional
-        Interface depths in km bounding the seismogenic zone of each region.
+    seismogenic_zones : dict[str, SeismogenicZone], optional
+        Seismogenic zone of each region; others take
+        `DEFAULT_SEISMOGENIC_ZONE`.
     """
 
     def __init__(
         self,
         grids: dict[str, npt.NDArray],
-        seismogenic_zone_depths: dict[
-            str, tuple[float, float]
-        ] = SEISMOGENIC_ZONE_DEPTHS_KM,
+        seismogenic_zones: dict[str, SeismogenicZone] = SEISMOGENIC_ZONES,
     ):
         """Create a slab model from named grids.
 
@@ -233,12 +244,11 @@ class SlabModel:
             Mapping with keys ``<region>_lat``, ``<region>_lon``,
             ``<region>_depth``, ``<region>_dip`` and ``<region>_strike``
             for each region.
-        seismogenic_zone_depths : dict[str, tuple[float, float]], optional
-            Interface depths in km bounding the seismogenic zone of each region.
+        seismogenic_zones : dict[str, SeismogenicZone], optional
+            Seismogenic zone of each region; others take
+            `DEFAULT_SEISMOGENIC_ZONE`.
         """
         self._regions = []
-        zone_points = {zone: [] for zone in SlabZone}
-        zone_depths = {zone: [] for zone in SlabZone}
         for region in sorted({key.split("_")[0] for key in grids}):
             lats = grids[f"{region}_lat"]
             lons = grids[f"{region}_lon"]
@@ -251,25 +261,8 @@ class SlabModel:
             interpolator = sp.interpolate.RegularGridInterpolator(
                 (lats, lons), values, bounds_error=False, fill_value=np.nan
             )
-            self._regions.append((bool(lons[-1] > 180.0), interpolator))
-
-            points = _unit_vectors(*np.meshgrid(lats, lons, indexing="ij"))
-            top, bottom = seismogenic_zone_depths[region]
-            # NaN depths (outside the footprint) fall in no zone.
-            for zone, in_zone in [
-                (SlabZone.UPDIP, depth < top),
-                (SlabZone.SEISMOGENIC, (depth >= top) & (depth <= bottom)),
-                (SlabZone.DOWNDIP, depth > bottom),
-            ]:
-                zone_points[zone].append(points[in_zone])
-                zone_depths[zone].append(depth[in_zone])
-        self._zones = {
-            zone: (
-                sp.spatial.KDTree(np.concatenate(zone_points[zone])),
-                np.concatenate(zone_depths[zone]),
-            )
-            for zone in SlabZone
-        }
+            zone = seismogenic_zones.get(region, DEFAULT_SEISMOGENIC_ZONE)
+            self._regions.append((zone, bool(lons[-1] > 180.0), interpolator))
 
     @classmethod
     @functools.cache
@@ -302,20 +295,67 @@ class SlabModel:
         SlabQuery
             Slab properties, NaN-valued outside the slab footprints.
         """
-        for positive_lon, interpolator in self._regions:
+        for zone, positive_lon, interpolator in self._regions:
             query_lon = lon % 360.0 if positive_lon else ((lon + 180.0) % 360.0) - 180.0
             depth, dip, sin_strike, cos_strike = interpolator([lat, query_lon])[0]
             if np.isfinite(depth):
                 strike = np.degrees(np.arctan2(sin_strike, cos_strike)) % 360.0
-                return SlabQuery(float(depth), float(dip), float(strike))
+                return SlabQuery(float(depth), float(dip), float(strike), zone)
         return SlabQuery(float("nan"), float("nan"), float("nan"))
 
-    def zone(self, lat: float, lon: float) -> SlabZoneQuery:
-        """NGA-SUB slab zone near a location.
 
-        A location is in a zone if it is within `SLAB_ZONE_SEARCH_RADIUS_KM`
-        of one of its grid nodes. Near zone boundaries the seismogenic zone
-        takes precedence, then the down-dip zone.
+class MohoModel:
+    """Moho depth, interpolated bilinearly from a grid.
+
+    The packaged grid is the CRUST1.0 depth to Moho (Laske et al. 2013), as
+    shipped with CatSep, cropped to 1 degree cell centres from 54.5S to
+    24.5S and 156.5E to 189.5E.
+
+    Parameters
+    ----------
+    lat : npt.NDArray
+        Increasing grid latitudes in degrees.
+    lon : npt.NDArray
+        Increasing grid longitudes in degrees (0..360).
+    depth : npt.NDArray
+        Moho depth in km, shape ``(len(lat), len(lon))``.
+    """
+
+    def __init__(self, lat: npt.NDArray, lon: npt.NDArray, depth: npt.NDArray):
+        """Create a Moho model from a grid.
+
+        Parameters
+        ----------
+        lat : npt.NDArray
+            Increasing grid latitudes in degrees.
+        lon : npt.NDArray
+            Increasing grid longitudes in degrees (0..360).
+        depth : npt.NDArray
+            Moho depth in km, shape ``(len(lat), len(lon))``.
+        """
+        # Outside the grid there is no Moho above the slab.
+        self._interpolator = sp.interpolate.RegularGridInterpolator(
+            (lat, lon), depth, bounds_error=False, fill_value=np.inf
+        )
+
+    @classmethod
+    @functools.cache
+    def load(cls) -> MohoModel:
+        """Load the packaged CRUST1.0 Moho grid.
+
+        Returns
+        -------
+        MohoModel
+            The loaded Moho model (cached).
+        """
+        with (
+            (_DATA_DIR / "crust1_moho_nz.npz").open("rb") as handle,
+            np.load(handle) as data,
+        ):
+            return cls(data["lat"], data["lon"], data["depth"])
+
+    def depth(self, lat: float, lon: float) -> float:
+        """Moho depth beneath a location.
 
         Parameters
         ----------
@@ -326,18 +366,10 @@ class SlabModel:
 
         Returns
         -------
-        SlabZoneQuery
-            The zone and the slab depth at its nearest node.
+        float
+            Moho depth in km, infinite outside the grid.
         """
-        point = _unit_vectors(lat, lon)
-        # Chord length on the unit sphere, equal to arc length at this scale.
-        radius = SLAB_ZONE_SEARCH_RADIUS_KM / geo.R_EARTH
-        for zone in (SlabZone.SEISMOGENIC, SlabZone.DOWNDIP, SlabZone.UPDIP):
-            tree, depths = self._zones[zone]
-            distance, index = tree.query(point, distance_upper_bound=radius)
-            if np.isfinite(distance):
-                return SlabZoneQuery(zone, float(depths[index]))
-        return SlabZoneQuery(None, float("nan"))
+        return float(self._interpolator([lat, lon % 360.0])[0])
 
 
 class FaultSegmentIndex:
@@ -477,180 +509,84 @@ def _parse_centroid(centroid: npt.ArrayLike) -> tuple[float, float, float]:
     return float(centroid[0]), float(centroid[1]), float(centroid[2])
 
 
-def _is_interface_like(plane: NodalPlane, slab: SlabQuery) -> bool:
-    """Whether a plane is thrust-like, not too steep and near parallel to the slab surface."""
-    if not slab.present:
-        return False
-    # Angle between the plane and the slab surface (between their normals).
-    cosine = abs(
-        float(
-            _plane_normal(plane.strike, plane.dip)
-            @ _plane_normal(slab.strike, slab.dip)
-        )
-    )
-    slab_angle = np.degrees(np.arccos(min(cosine, 1.0)))
-    return bool(
-        _angular_difference(plane.rake, 90.0) <= INTERFACE_RAKE_TOLERANCE
-        and plane.dip <= INTERFACE_MAX_DIP
-        and slab_angle <= INTERFACE_MAX_SLAB_ANGLE
-    )
-
-
 def tectonic_type_probabilities(
-    depth_below_slab: float,
-    interface_like: bool,
-    normal_like: bool,
-    sigma: float = DEPTH_BELOW_SLAB_SIGMA_KM,
-) -> dict[TectonicType, float]:
-    """Tectonic type probabilities by the NZ NSHM 2022 rule (Rollins et al. 2022).
-
-    Events outside the slab footprint are crustal. Inside it, events within
-    `INTERFACE_DEPTH_TOLERANCE_KM` of the slab surface are interface if a
-    plane is interface-like and intraslab if the mechanism is normal
-    faulting (bending of the subducting plate, whose CMT centroids are often
-    too shallow). Other events are crustal above the slab surface and
-    intraslab below it. The rule is applied with the depth below the slab
-    normally distributed.
-
-    Parameters
-    ----------
-    depth_below_slab : float
-        Centroid depth below the slab surface in km (negative above it),
-        NaN outside the slab footprint.
-    interface_like : bool
-        Whether either nodal plane is interface-like.
-    normal_like : bool
-        Whether the mechanism is normal faulting.
-    sigma : float, optional
-        Standard deviation of the depth below the slab in km. With
-        ``sigma=0`` the deterministic rule is applied.
-
-    Returns
-    -------
-    dict[TectonicType, float]
-        Probability of each tectonic type.
-    """
-    if np.isnan(depth_below_slab):
-        return {
-            TectonicType.CRUSTAL: 1.0,
-            TectonicType.INTERFACE: 0.0,
-            TectonicType.SLAB: 0.0,
-        }
-    tolerance = INTERFACE_DEPTH_TOLERANCE_KM
-    # Probability that the depth below the slab is above the tolerance band,
-    # above the slab surface, and above the bottom of the band.
-    if sigma > 0:
-        above_band, above_slab, above_band_bottom = np.asarray(
-            sp.stats.norm.cdf([-tolerance, 0.0, tolerance], depth_below_slab, sigma)
-        ).tolist()
-    else:
-        above_band = float(depth_below_slab < -tolerance)
-        above_slab = float(depth_below_slab <= 0.0)
-        above_band_bottom = float(depth_below_slab <= tolerance)
-    band_crustal = above_slab - above_band
-    band_slab = above_band_bottom - above_slab
-    interface = 0.0
-    if interface_like:
-        interface, band_crustal, band_slab = band_crustal + band_slab, 0.0, 0.0
-    elif normal_like:
-        band_crustal, band_slab = 0.0, band_crustal + band_slab
-    return {
-        TectonicType.CRUSTAL: float(above_band + band_crustal),
-        TectonicType.INTERFACE: float(interface),
-        TectonicType.SLAB: float(1.0 - above_band_bottom + band_slab),
-    }
-
-
-def _nga_sub_depth_intervals(
-    zone: SlabZone | None, slab_depth: float
-) -> list[tuple[float, TectonicType]]:
-    """Maximum depth of each tectonic type under the NGA-SUB rule, shallowest first."""
-    tolerance = INTERFACE_DEPTH_TOLERANCE_KM
-    match zone:
-        case None:
-            return [
-                (UNDETERMINED_CRUSTAL_MAX_DEPTH_KM, TectonicType.CRUSTAL),
-                (np.inf, TectonicType.SLAB),
-            ]
-        case SlabZone.UPDIP:
-            # Outer-rise events above 60 km, intraslab below.
-            return [(np.inf, TectonicType.SLAB)]
-        case SlabZone.SEISMOGENIC:
-            return [
-                (
-                    min(slab_depth - tolerance, SEISMOGENIC_CRUSTAL_MAX_DEPTH_KM),
-                    TectonicType.CRUSTAL,
-                ),
-                (
-                    min(slab_depth + tolerance, INTERFACE_MAX_DEPTH_KM),
-                    TectonicType.INTERFACE,
-                ),
-                (np.inf, TectonicType.SLAB),
-            ]
-        case SlabZone.DOWNDIP:
-            # Undetermined events between the crustal and slab depths are
-            # split at UNDETERMINED_CRUSTAL_MAX_DEPTH_KM.
-            crustal_max_depth = max(
-                DOWNDIP_CRUSTAL_MAX_DEPTH_KM,
-                min(slab_depth - tolerance, UNDETERMINED_CRUSTAL_MAX_DEPTH_KM),
-            )
-            return [
-                (crustal_max_depth, TectonicType.CRUSTAL),
-                (np.inf, TectonicType.SLAB),
-            ]
-
-
-def nga_sub_tectonic_type_probabilities(
     depth: float,
-    zone: SlabZone | None,
     slab_depth: float,
-    sigma: float = CENTROID_DEPTH_SIGMA_KM,
+    seismogenic_depth: float = DEFAULT_SEISMOGENIC_ZONE.depth,
+    subduction_kagan_angle: float | None = None,
+    moho_depth: float = np.inf,
 ) -> dict[TectonicType, float]:
-    """Tectonic type probabilities by the modified NGA-SUB (2020) rule of the NZGMDB.
+    """Tectonic type plausibility scores by CatSep (Haynie et al. 2026, eqs. 3-5).
 
-    The rule depends only on the location and depth, not the mechanism:
-
-    - Up-dip zone: intraslab (outer-rise above 60 km).
-    - Seismogenic zone: crustal above both 20 km and 10 km above the slab;
-      otherwise interface above both 60 km and 10 km below the slab;
-      otherwise intraslab.
-    - Down-dip zone: crustal above 30 km, intraslab within 10 km above the
-      slab or deeper, and undetermined otherwise.
-    - Away from all zones: crustal above 30 km, intraslab below 60 km, and
-      undetermined otherwise.
-
-    Undetermined events are crustal above `UNDETERMINED_CRUSTAL_MAX_DEPTH_KM`
-    and intraslab below, as in the NZGMDB. The rule is applied with the
-    centroid depth normally distributed.
+    Events outside the slab footprint are crustal. Inside it, the interface
+    score is the product of a flex score (1 within `FLEX_ZONE_KM` of the
+    slab surface; in the mantle wedge, ramping from 0 at the Moho to 0.4 at
+    the top of the flex zone), a ramp from 1 at the seismogenic zone depth
+    to 0 `FLEX_ZONE_KM` below it, and `KAGAN_RAMP`. The crustal score is the
+    remainder scaled by `CRUSTAL_DEPTH_DIFFERENCE_RAMP` and a ramp from 1 at
+    the Moho to 0 at the slab surface. Intraslab takes what is left.
 
     Parameters
     ----------
     depth : float
         Centroid depth in km.
-    zone : SlabZone | None
-        Slab zone near the centroid, None away from all zones.
     slab_depth : float
-        Slab surface depth in km at the nearest point of the zone (unused
-        when `zone` is None).
-    sigma : float, optional
-        Standard deviation of the centroid depth in km. With ``sigma=0``
-        the deterministic rule is applied.
+        Depth of the slab surface in km beneath the centroid, NaN outside
+        the slab footprint.
+    seismogenic_depth : float, optional
+        Depth in km of the deep limit of the seismogenic zone.
+    subduction_kagan_angle : float | None, optional
+        Kagan angle in degrees between the event's mechanism and interface
+        slip, None without a focal mechanism.
+    moho_depth : float, optional
+        Moho depth in km. The default (no Moho) extends the crust down to
+        the slab surface, leaving no mantle wedge.
 
     Returns
     -------
     dict[TectonicType, float]
-        Probability of each tectonic type.
+        Score of each tectonic type, summing to 1.
     """
-    intervals = _nga_sub_depth_intervals(zone, slab_depth)
-    bounds = np.array([-np.inf] + [max_depth for max_depth, _ in intervals])
-    if sigma > 0:
-        cdf = sp.stats.norm.cdf(bounds, depth, sigma)
+    if np.isnan(slab_depth):
+        return {
+            TectonicType.CRUSTAL: 1.0,
+            TectonicType.INTERFACE: 0.0,
+            TectonicType.SLAB: 0.0,
+        }
+    flex_top = slab_depth - FLEX_ZONE_KM
+    # Below the seismogenic zone the seismogenic ramp is already zero, so
+    # CatSep's extra depth conditions on the flex zone change nothing.
+    if flex_top <= depth <= slab_depth + FLEX_ZONE_KM:
+        flex = 1.0
+    elif moho_depth <= depth < flex_top:
+        flex = np.interp(depth, [moho_depth, flex_top], [0.0, 0.4])
     else:
-        cdf = (depth <= bounds).astype(float)
-    probabilities = dict.fromkeys(TectonicType, 0.0)
-    for (_, tectonic_type), probability in zip(intervals, np.diff(cdf)):
-        probabilities[tectonic_type] += float(probability)
-    return probabilities
+        flex = 0.0
+    seismogenic = np.interp(
+        depth, [seismogenic_depth, seismogenic_depth + FLEX_ZONE_KM], [1.0, 0.0]
+    )
+    kagan = (
+        1.0
+        if subduction_kagan_angle is None
+        else np.interp(subduction_kagan_angle, *KAGAN_RAMP)
+    )
+    interface = float(flex * seismogenic * kagan)
+    # Below a Moho that is itself below the slab, the score is 0.
+    above_moho = (
+        1.0
+        if depth <= moho_depth
+        else np.interp(depth, [moho_depth, max(moho_depth, slab_depth)], [1.0, 0.0])
+    )
+    crustal = float(
+        (1.0 - interface)
+        * np.interp(depth - slab_depth, *CRUSTAL_DEPTH_DIFFERENCE_RAMP)
+        * above_moho
+    )
+    return {
+        TectonicType.CRUSTAL: crustal,
+        TectonicType.INTERFACE: interface,
+        TectonicType.SLAB: 1.0 - interface - crustal,
+    }
 
 
 def depth_temperature(
@@ -692,6 +628,8 @@ class CMTClassifier:
         Log-odds multiplier at the surface (see `depth_temperature`).
     temperature_depth_rate : float, optional
         Decay rate of the log-odds multiplier per km of centroid depth.
+    moho_model : MohoModel | None, optional
+        Moho depth for the tectonic type, None for no Moho.
     """
 
     def __init__(
@@ -701,6 +639,7 @@ class CMTClassifier:
         weights: npt.NDArray[np.float64],
         temperature_scale: float = 1.0,
         temperature_depth_rate: float = 0.0,
+        moho_model: MohoModel | None = None,
     ):
         """Create a classifier.
 
@@ -717,12 +656,15 @@ class CMTClassifier:
             Log-odds multiplier at the surface (see `depth_temperature`).
         temperature_depth_rate : float, optional
             Decay rate of the log-odds multiplier per km of centroid depth.
+        moho_model : MohoModel | None, optional
+            Moho depth for the tectonic type, None for no Moho.
         """
         self.segments = segments
         self.slab_model = slab_model
         self.weights = weights
         self.temperature_scale = temperature_scale
         self.temperature_depth_rate = temperature_depth_rate
+        self.moho_model = moho_model
 
     @classmethod
     def from_faults(cls, faults: list[CommunityFault]) -> CMTClassifier:
@@ -748,12 +690,13 @@ class CMTClassifier:
             np.asarray(model["weights"], dtype=float),
             model["temperature"]["scale"],
             model["temperature"]["depth_rate"],
+            MohoModel.load(),
         )
 
     @classmethod
     @functools.cache
     def load(cls) -> CMTClassifier:
-        """Load the classifier with the packaged CFM, slab grids and model.
+        """Load the classifier with the packaged CFM, slab and Moho grids and model.
 
         Returns
         -------
@@ -859,61 +802,67 @@ class CMTClassifier:
     def tectonic_type_probabilities(
         self,
         centroid: npt.ArrayLike,
-        nodal_plane_1: NodalPlane,
-        nodal_plane_2: NodalPlane,
-        sigma: float = DEPTH_BELOW_SLAB_SIGMA_KM,
+        nodal_plane_1: NodalPlane | None = None,
+        nodal_plane_2: NodalPlane | None = None,
     ) -> dict[TectonicType, float]:
-        """Tectonic type probabilities (see the module-level `tectonic_type_probabilities`).
+        """Tectonic type scores (see the module-level `tectonic_type_probabilities`).
 
         Parameters
         ----------
         centroid : npt.ArrayLike
             Centroid as (lat, lon, depth_km). If depth is omitted a default
             is assumed with a warning.
-        nodal_plane_1 : NodalPlane
-            First nodal plane.
-        nodal_plane_2 : NodalPlane
-            Second nodal plane.
-        sigma : float, optional
-            Standard deviation of the depth below the slab in km.
+        nodal_plane_1 : NodalPlane | None, optional
+            First nodal plane, None without a focal mechanism.
+        nodal_plane_2 : NodalPlane | None, optional
+            Second nodal plane, None without a focal mechanism.
 
         Returns
         -------
         dict[TectonicType, float]
-            Probability of each tectonic type.
+            Score of each tectonic type.
         """
         lat, lon, depth = _parse_centroid(centroid)
         slab = self.slab_model.query(lat, lon)
-        # The planes share the slip sense; the plane with more dip-slip
-        # decides whether the mechanism is normal or strike-slip.
-        dominant = max(
-            nodal_plane_1, nodal_plane_2, key=lambda p: abs(np.sin(np.radians(p.rake)))
+        # Both planes describe the same mechanism; using both keeps the
+        # result symmetric when catalogue rounding makes them disagree.
+        planes = [p for p in (nodal_plane_1, nodal_plane_2) if p is not None]
+        subduction_kagan_angle = None
+        if planes and slab.present:
+            interface_slip = NodalPlane(
+                slab.strike, slab.dip, slab.seismogenic_zone.rake
+            )
+            subduction_kagan_angle = min(
+                kagan_angle(plane, interface_slip) for plane in planes
+            )
+        moho_depth = (
+            np.inf if self.moho_model is None else self.moho_model.depth(lat, lon)
         )
         return tectonic_type_probabilities(
-            depth - slab.depth,
-            _is_interface_like(nodal_plane_1, slab)
-            or _is_interface_like(nodal_plane_2, slab),
-            rake_type(dominant.rake) in (RakeType.NORMAL, RakeType.NORMAL_OBLIQUE),
-            sigma,
+            depth,
+            slab.depth,
+            slab.seismogenic_zone.depth,
+            subduction_kagan_angle,
+            moho_depth,
         )
 
     def tectonic_type(
         self,
         centroid: npt.ArrayLike,
-        nodal_plane_1: NodalPlane,
-        nodal_plane_2: NodalPlane,
+        nodal_plane_1: NodalPlane | None = None,
+        nodal_plane_2: NodalPlane | None = None,
     ) -> TectonicType:
-        """Tectonic type by the NZ NSHM 2022 rule (see `tectonic_type_probabilities`).
+        """Most plausible tectonic type (see `tectonic_type_probabilities`).
 
         Parameters
         ----------
         centroid : npt.ArrayLike
             Centroid as (lat, lon, depth_km). If depth is omitted a default
             is assumed with a warning.
-        nodal_plane_1 : NodalPlane
-            First nodal plane.
-        nodal_plane_2 : NodalPlane
-            Second nodal plane.
+        nodal_plane_1 : NodalPlane | None, optional
+            First nodal plane, None without a focal mechanism.
+        nodal_plane_2 : NodalPlane | None, optional
+            Second nodal plane, None without a focal mechanism.
 
         Returns
         -------
@@ -921,45 +870,6 @@ class CMTClassifier:
             The tectonic type.
         """
         probabilities = self.tectonic_type_probabilities(
-            centroid, nodal_plane_1, nodal_plane_2, sigma=0.0
+            centroid, nodal_plane_1, nodal_plane_2
         )
-        return max(probabilities, key=probabilities.__getitem__)
-
-    def nga_sub_tectonic_type_probabilities(
-        self, centroid: npt.ArrayLike, sigma: float = CENTROID_DEPTH_SIGMA_KM
-    ) -> dict[TectonicType, float]:
-        """Tectonic type probabilities by the NGA-SUB rule (see the module-level `nga_sub_tectonic_type_probabilities`).
-
-        Parameters
-        ----------
-        centroid : npt.ArrayLike
-            Centroid as (lat, lon, depth_km). If depth is omitted a default
-            is assumed with a warning.
-        sigma : float, optional
-            Standard deviation of the centroid depth in km.
-
-        Returns
-        -------
-        dict[TectonicType, float]
-            Probability of each tectonic type.
-        """
-        lat, lon, depth = _parse_centroid(centroid)
-        zone, slab_depth = self.slab_model.zone(lat, lon)
-        return nga_sub_tectonic_type_probabilities(depth, zone, slab_depth, sigma)
-
-    def nga_sub_tectonic_type(self, centroid: npt.ArrayLike) -> TectonicType:
-        """Tectonic type by the NGA-SUB rule (see `nga_sub_tectonic_type_probabilities`).
-
-        Parameters
-        ----------
-        centroid : npt.ArrayLike
-            Centroid as (lat, lon, depth_km). If depth is omitted a default
-            is assumed with a warning.
-
-        Returns
-        -------
-        TectonicType
-            The tectonic type.
-        """
-        probabilities = self.nga_sub_tectonic_type_probabilities(centroid, sigma=0.0)
         return max(probabilities, key=probabilities.__getitem__)
