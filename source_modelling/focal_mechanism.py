@@ -82,7 +82,18 @@ class Ramp(NamedTuple):
     """Score at or above `x2`."""
 
     def __call__(self, x: float) -> float:
-        """Score at `x`."""
+        """Score at a value.
+
+        Parameters
+        ----------
+        x : float
+            The value to score.
+
+        Returns
+        -------
+        float
+            The score at `x`.
+        """
         if x <= self.x1:
             return self.p1
         if x >= self.x2:
