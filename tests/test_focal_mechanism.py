@@ -91,10 +91,14 @@ def test_kagan_angle(plane_a: NodalPlane, plane_b: NodalPlane, expected: float):
 
 def test_kagan_angle_is_at_most_120():
     rng = np.random.default_rng(0)
-    planes = rng.uniform([0, 0, -180], [360, 90, 180], size=(500, 3))
+    planes = [
+        NodalPlane(strike, dip, rake)
+        for strike, dip, rake in rng.uniform(
+            [0, 0, -180], [360, 90, 180], size=(500, 3)
+        ).tolist()
+    ]
     angles = [
-        focal_mechanism.kagan_angle(NodalPlane(*a), NodalPlane(*b))
-        for a, b in zip(planes[::2], planes[1::2])
+        focal_mechanism.kagan_angle(a, b) for a, b in zip(planes[::2], planes[1::2])
     ]
     assert 0.0 <= min(angles) and max(angles) <= 120.0
 
