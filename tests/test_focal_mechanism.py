@@ -103,17 +103,6 @@ def test_kagan_angle_is_at_most_120():
     assert 0.0 <= min(angles) and max(angles) <= 120.0
 
 
-def test_ramp():
-    decreasing = focal_mechanism.Ramp(30.0, 1.0, 53.0, 0.25)
-    assert decreasing(0.0) == 1.0
-    assert decreasing(30.0) == 1.0
-    assert decreasing(41.5) == pytest.approx(0.625)
-    assert decreasing(53.0) == 0.25
-    assert decreasing(120.0) == 0.25
-    increasing = focal_mechanism.Ramp(5.0, 0.0, 15.0, 0.4)
-    assert increasing(10.0) == pytest.approx(0.2)
-
-
 @pytest.mark.parametrize(
     "depth, slab_depth, kagan, moho_depth, expected",
     [
@@ -130,6 +119,9 @@ def test_ramp():
         (60.0, 30.0, None, np.inf, (0.0, 0.0, 1.0)),
         # In the mantle wedge, between the Moho and the top of the flex zone.
         (10.0, 30.0, None, 5.0, (0.64, 0.2, 0.16)),
+        # Below the seismogenic zone and below a Moho that is below the slab.
+        (48.0, 40.0, None, np.inf, (0.3, 0.0, 0.7)),
+        (48.0, 40.0, None, 45.0, (0.0, 0.0, 1.0)),
     ],
 )
 def test_tectonic_type_probabilities(
@@ -149,14 +141,18 @@ def test_tectonic_type_probabilities(
     ] == pytest.approx(expected)
 
 
-def test_seismogenic_zone():
-    slab_model = focal_mechanism.SlabModel.load()
-    assert slab_model.query(-41.3, 174.8).region == "ker"  # Wellington
-    assert slab_model.query(*CENTROID[:2]).region == "puy"
-    assert slab_model.query(-41.3, 174.8).seismogenic_zone.depth == 47.0
-    assert slab_model.query(*CENTROID[:2]).seismogenic_zone.depth == 30.0
-    outside = slab_model.query(-43.5, 172.6)  # Christchurch
-    assert outside.seismogenic_zone == focal_mechanism.DEFAULT_SEISMOGENIC_ZONE
+def test_seismogenic_zone(classifier: focal_mechanism.CMTClassifier):
+    slab_model = classifier.slab_model
+    assert slab_model.query(-41.3, 174.8).seismogenic_zone.depth == 47.0  # Hikurangi
+    assert slab_model.query(*CENTROID[:2]).seismogenic_zone.depth == 30.0  # Puysegur
+
+
+def test_moho_model():
+    moho_model = focal_mechanism.MohoModel.load()
+    wellington = moho_model.depth(-41.3, 174.8)
+    assert 15 < wellington < 45
+    assert moho_model.depth(-37.0, 179.5 - 360) == moho_model.depth(-37.0, 179.5)
+    assert moho_model.depth(0.0, 0.0) == np.inf
 
 
 def test_tectonic_type(classifier: focal_mechanism.CMTClassifier):

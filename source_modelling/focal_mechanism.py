@@ -14,13 +14,13 @@ events. The weights and temperature are fitted with
 
 The tectonic type (crustal, subduction interface or intraslab) follows the
 CatSep plausibility scores of Haynie et al. (2026) against the Slab2
-interface geometry and seismogenic zone depths (Hayes et al. 2018). The
-interface score is the product of ramp functions in the vertical distance
-to the interface, the depth below the seismogenic zone and the Kagan angle
-between the mechanism and interface slip. The crustal score ramps down
-from 20 km above to 20 km below the interface, and intraslab takes the
-remainder. CatSep's CRUST1.0 Moho is not used: the crust is taken to
-extend down to the slab.
+interface geometry and seismogenic zone depths (Hayes et al. 2018) and the
+CRUST1.0 Moho (Laske et al. 2013). The interface score is the product of
+ramp functions in the vertical distance to the interface, the depth below
+the seismogenic zone and the Kagan angle between the mechanism and
+interface slip. The crustal score ramps down from 20 km above to 20 km
+below the interface and from the Moho to the slab, and intraslab takes the
+remainder.
 
 Examples
 --------
@@ -66,49 +66,11 @@ FLEX_ZONE_KM = 15.0
 """Half-width of the interface flex zone about the slab surface, and the buffer below the seismogenic zone (Haynie et al. 2026)."""
 
 
-class Ramp(NamedTuple):
-    """Ramp function: `p1` at or below `x1`, `p2` at or above `x2`, linear between (Haynie et al. 2026, eq. 1)."""
+KAGAN_RAMP = ((30.0, 53.0), (1.0, 0.25))
+"""Interface score ramp (`np.interp` points) in the Kagan angle in degrees to interface slip (Haynie et al. 2026, Table 1)."""
 
-    x1: float
-    """Start of the ramp."""
-
-    p1: float
-    """Score at or below `x1`."""
-
-    x2: float
-    """End of the ramp."""
-
-    p2: float
-    """Score at or above `x2`."""
-
-    def __call__(self, x: float) -> float:
-        """Score at a value.
-
-        Parameters
-        ----------
-        x : float
-            The value to score.
-
-        Returns
-        -------
-        float
-            The score at `x`.
-        """
-        if x <= self.x1:
-            return self.p1
-        if x >= self.x2:
-            return self.p2
-        return self.p1 + (self.p2 - self.p1) * (x - self.x1) / (self.x2 - self.x1)
-
-
-KAGAN_RAMP = Ramp(30.0, 1.0, 53.0, 0.25)
-"""Interface score in the Kagan angle (degrees) to interface slip (Haynie et al. 2026, Table 1)."""
-
-CRUSTAL_DEPTH_DIFFERENCE_RAMP = Ramp(-20.0, 1.0, 20.0, 0.0)
-"""Crustal score in the depth (km) below the slab surface (Haynie et al. 2026, Table 1)."""
-
-MANTLE_WEDGE_FLEX_SCORES = (0.0, 0.4)
-"""Interface flex scores at the Moho and the top of the flex zone for events in the mantle wedge (Haynie et al. 2026, Table 1)."""
+CRUSTAL_DEPTH_DIFFERENCE_RAMP = ((-20.0, 20.0), (1.0, 0.0))
+"""Crustal score ramp (`np.interp` points) in the depth in km below the slab surface (Haynie et al. 2026, Table 1)."""
 
 
 class SeismogenicZone(NamedTuple):
@@ -222,13 +184,12 @@ def kagan_angle(plane_a: NodalPlane, plane_b: NodalPlane) -> float:
     float
         The Kagan angle in degrees, between 0 and 120.
     """
-    # Diagonal of the rotation between the two principal axis frames; the
-    # double-couple symmetries flip the signs of two axes at a time.
-    m = np.diag(_principal_axes(plane_a) @ _principal_axes(plane_b).T)
-    trace = max(
-        m[0] + m[1] + m[2], m[0] - m[1] - m[2], -m[0] + m[1] - m[2], -m[0] - m[1] + m[2]
+    rotation = sp.spatial.transform.Rotation.from_matrix(
+        _principal_axes(plane_a) @ _principal_axes(plane_b).T
     )
-    return float(np.degrees(np.arccos(np.clip((trace - 1.0) / 2.0, -1.0, 1.0))))
+    # The double couple is symmetric under half turns about its principal axes.
+    symmetries = sp.spatial.transform.Rotation.create_group("D2")
+    return float(np.degrees((symmetries * rotation).magnitude().min()))
 
 
 class SlabQuery(NamedTuple):
@@ -243,13 +204,8 @@ class SlabQuery(NamedTuple):
     strike: float
     """Strike of the slab surface in degrees, NaN outside the footprint."""
 
-    region: str | None = None
-    """Slab2 region code ("ker" or "puy"), None outside the footprint."""
-
-    @property
-    def seismogenic_zone(self) -> SeismogenicZone:
-        """Seismogenic zone of the slab region."""
-        return SEISMOGENIC_ZONES.get(self.region or "", DEFAULT_SEISMOGENIC_ZONE)
+    seismogenic_zone: SeismogenicZone = DEFAULT_SEISMOGENIC_ZONE
+    """Seismogenic zone of the slab region."""
 
     @property
     def present(self) -> bool:
@@ -270,9 +226,16 @@ class SlabModel:
         Mapping with keys ``<region>_lat``, ``<region>_lon``,
         ``<region>_depth``, ``<region>_dip`` and ``<region>_strike``
         for each region.
+    seismogenic_zones : dict[str, SeismogenicZone], optional
+        Seismogenic zone of each region; others take
+        `DEFAULT_SEISMOGENIC_ZONE`.
     """
 
-    def __init__(self, grids: dict[str, npt.NDArray]):
+    def __init__(
+        self,
+        grids: dict[str, npt.NDArray],
+        seismogenic_zones: dict[str, SeismogenicZone] = SEISMOGENIC_ZONES,
+    ):
         """Create a slab model from named grids.
 
         Parameters
@@ -281,6 +244,9 @@ class SlabModel:
             Mapping with keys ``<region>_lat``, ``<region>_lon``,
             ``<region>_depth``, ``<region>_dip`` and ``<region>_strike``
             for each region.
+        seismogenic_zones : dict[str, SeismogenicZone], optional
+            Seismogenic zone of each region; others take
+            `DEFAULT_SEISMOGENIC_ZONE`.
         """
         self._regions = []
         for region in sorted({key.split("_")[0] for key in grids}):
@@ -295,7 +261,8 @@ class SlabModel:
             interpolator = sp.interpolate.RegularGridInterpolator(
                 (lats, lons), values, bounds_error=False, fill_value=np.nan
             )
-            self._regions.append((region, bool(lons[-1] > 180.0), interpolator))
+            zone = seismogenic_zones.get(region, DEFAULT_SEISMOGENIC_ZONE)
+            self._regions.append((zone, bool(lons[-1] > 180.0), interpolator))
 
     @classmethod
     @functools.cache
@@ -328,13 +295,81 @@ class SlabModel:
         SlabQuery
             Slab properties, NaN-valued outside the slab footprints.
         """
-        for region, positive_lon, interpolator in self._regions:
+        for zone, positive_lon, interpolator in self._regions:
             query_lon = lon % 360.0 if positive_lon else ((lon + 180.0) % 360.0) - 180.0
             depth, dip, sin_strike, cos_strike = interpolator([lat, query_lon])[0]
             if np.isfinite(depth):
                 strike = np.degrees(np.arctan2(sin_strike, cos_strike)) % 360.0
-                return SlabQuery(float(depth), float(dip), float(strike), region)
+                return SlabQuery(float(depth), float(dip), float(strike), zone)
         return SlabQuery(float("nan"), float("nan"), float("nan"))
+
+
+class MohoModel:
+    """Moho depth, interpolated bilinearly from a grid.
+
+    The packaged grid is the CRUST1.0 depth to Moho (Laske et al. 2013), as
+    shipped with CatSep, cropped to 1 degree cell centres from 54.5S to
+    24.5S and 156.5E to 189.5E.
+
+    Parameters
+    ----------
+    lat : npt.NDArray
+        Increasing grid latitudes in degrees.
+    lon : npt.NDArray
+        Increasing grid longitudes in degrees (0..360).
+    depth : npt.NDArray
+        Moho depth in km, shape ``(len(lat), len(lon))``.
+    """
+
+    def __init__(self, lat: npt.NDArray, lon: npt.NDArray, depth: npt.NDArray):
+        """Create a Moho model from a grid.
+
+        Parameters
+        ----------
+        lat : npt.NDArray
+            Increasing grid latitudes in degrees.
+        lon : npt.NDArray
+            Increasing grid longitudes in degrees (0..360).
+        depth : npt.NDArray
+            Moho depth in km, shape ``(len(lat), len(lon))``.
+        """
+        # Outside the grid there is no Moho above the slab.
+        self._interpolator = sp.interpolate.RegularGridInterpolator(
+            (lat, lon), depth, bounds_error=False, fill_value=np.inf
+        )
+
+    @classmethod
+    @functools.cache
+    def load(cls) -> MohoModel:
+        """Load the packaged CRUST1.0 Moho grid.
+
+        Returns
+        -------
+        MohoModel
+            The loaded Moho model (cached).
+        """
+        with (
+            (_DATA_DIR / "crust1_moho_nz.npz").open("rb") as handle,
+            np.load(handle) as data,
+        ):
+            return cls(data["lat"], data["lon"], data["depth"])
+
+    def depth(self, lat: float, lon: float) -> float:
+        """Moho depth beneath a location.
+
+        Parameters
+        ----------
+        lat : float
+            Latitude in degrees.
+        lon : float
+            Longitude in degrees (either -180..180 or 0..360).
+
+        Returns
+        -------
+        float
+            Moho depth in km, infinite outside the grid.
+        """
+        return float(self._interpolator([lat, lon % 360.0])[0])
 
 
 class FaultSegmentIndex:
@@ -481,22 +516,15 @@ def tectonic_type_probabilities(
     subduction_kagan_angle: float | None = None,
     moho_depth: float = np.inf,
 ) -> dict[TectonicType, float]:
-    """Tectonic type plausibility scores by CatSep (Haynie et al. 2026).
+    """Tectonic type plausibility scores by CatSep (Haynie et al. 2026, eqs. 3-5).
 
     Events outside the slab footprint are crustal. Inside it, the interface
-    score is the product (eq. 3) of
-
-    - the flex score: 1 within `FLEX_ZONE_KM` of the slab surface, if no
-      deeper than `FLEX_ZONE_KM` below the seismogenic zone or above the
-      Moho; ramping from 0 at the Moho to 0.4 at the top of the flex zone
-      in the mantle wedge; 0 otherwise,
-    - the seismogenic score, ramping from 1 at the seismogenic zone depth
-      to 0 at `FLEX_ZONE_KM` below it, and
-    - the Kagan score (`KAGAN_RAMP`), when the mechanism is known.
-
-    The crustal score (eq. 4) is the remainder scaled by
-    `CRUSTAL_DEPTH_DIFFERENCE_RAMP` and by a ramp from 1 at the Moho to 0
-    at the slab surface. Intraslab takes what is left (eq. 5).
+    score is the product of a flex score (1 within `FLEX_ZONE_KM` of the
+    slab surface; in the mantle wedge, ramping from 0 at the Moho to 0.4 at
+    the top of the flex zone), a ramp from 1 at the seismogenic zone depth
+    to 0 `FLEX_ZONE_KM` below it, and `KAGAN_RAMP`. The crustal score is the
+    remainder scaled by `CRUSTAL_DEPTH_DIFFERENCE_RAMP` and a ramp from 1 at
+    the Moho to 0 at the slab surface. Intraslab takes what is left.
 
     Parameters
     ----------
@@ -511,8 +539,8 @@ def tectonic_type_probabilities(
         Kagan angle in degrees between the event's mechanism and interface
         slip, None without a focal mechanism.
     moho_depth : float, optional
-        Moho depth in km. The default puts the Moho below the slab, so the
-        crust extends down to the slab surface and there is no mantle wedge.
+        Moho depth in km. The default (no Moho) extends the crust down to
+        the slab surface, leaving no mantle wedge.
 
     Returns
     -------
@@ -526,31 +554,33 @@ def tectonic_type_probabilities(
             TectonicType.SLAB: 0.0,
         }
     flex_top = slab_depth - FLEX_ZONE_KM
-    in_flex_zone = flex_top <= depth <= slab_depth + FLEX_ZONE_KM
-    if in_flex_zone and (
-        depth <= seismogenic_depth + FLEX_ZONE_KM or depth <= moho_depth
-    ):
+    # Below the seismogenic zone the seismogenic ramp is already zero, so
+    # CatSep's extra depth conditions on the flex zone change nothing.
+    if flex_top <= depth <= slab_depth + FLEX_ZONE_KM:
         flex = 1.0
     elif moho_depth <= depth < flex_top:
-        flex = Ramp(
-            moho_depth,
-            MANTLE_WEDGE_FLEX_SCORES[0],
-            flex_top,
-            MANTLE_WEDGE_FLEX_SCORES[1],
-        )(depth)
+        flex = np.interp(depth, [moho_depth, flex_top], [0.0, 0.4])
     else:
         flex = 0.0
-    seismogenic = Ramp(seismogenic_depth, 1.0, seismogenic_depth + FLEX_ZONE_KM, 0.0)(
-        depth
+    seismogenic = np.interp(
+        depth, [seismogenic_depth, seismogenic_depth + FLEX_ZONE_KM], [1.0, 0.0]
     )
     kagan = (
-        1.0 if subduction_kagan_angle is None else KAGAN_RAMP(subduction_kagan_angle)
+        1.0
+        if subduction_kagan_angle is None
+        else np.interp(subduction_kagan_angle, *KAGAN_RAMP)
     )
-    interface = flex * seismogenic * kagan
-    crustal = (
+    interface = float(flex * seismogenic * kagan)
+    # Below a Moho that is itself below the slab, the score is 0.
+    above_moho = (
+        1.0
+        if depth <= moho_depth
+        else np.interp(depth, [moho_depth, max(moho_depth, slab_depth)], [1.0, 0.0])
+    )
+    crustal = float(
         (1.0 - interface)
-        * CRUSTAL_DEPTH_DIFFERENCE_RAMP(depth - slab_depth)
-        * Ramp(moho_depth, 1.0, slab_depth, 0.0)(depth)
+        * np.interp(depth - slab_depth, *CRUSTAL_DEPTH_DIFFERENCE_RAMP)
+        * above_moho
     )
     return {
         TectonicType.CRUSTAL: crustal,
@@ -598,6 +628,8 @@ class CMTClassifier:
         Log-odds multiplier at the surface (see `depth_temperature`).
     temperature_depth_rate : float, optional
         Decay rate of the log-odds multiplier per km of centroid depth.
+    moho_model : MohoModel | None, optional
+        Moho depth for the tectonic type, None for no Moho.
     """
 
     def __init__(
@@ -607,6 +639,7 @@ class CMTClassifier:
         weights: npt.NDArray[np.float64],
         temperature_scale: float = 1.0,
         temperature_depth_rate: float = 0.0,
+        moho_model: MohoModel | None = None,
     ):
         """Create a classifier.
 
@@ -623,12 +656,15 @@ class CMTClassifier:
             Log-odds multiplier at the surface (see `depth_temperature`).
         temperature_depth_rate : float, optional
             Decay rate of the log-odds multiplier per km of centroid depth.
+        moho_model : MohoModel | None, optional
+            Moho depth for the tectonic type, None for no Moho.
         """
         self.segments = segments
         self.slab_model = slab_model
         self.weights = weights
         self.temperature_scale = temperature_scale
         self.temperature_depth_rate = temperature_depth_rate
+        self.moho_model = moho_model
 
     @classmethod
     def from_faults(cls, faults: list[CommunityFault]) -> CMTClassifier:
@@ -654,12 +690,13 @@ class CMTClassifier:
             np.asarray(model["weights"], dtype=float),
             model["temperature"]["scale"],
             model["temperature"]["depth_rate"],
+            MohoModel.load(),
         )
 
     @classmethod
     @functools.cache
     def load(cls) -> CMTClassifier:
-        """Load the classifier with the packaged CFM, slab grids and model.
+        """Load the classifier with the packaged CFM, slab and Moho grids and model.
 
         Returns
         -------
@@ -787,18 +824,26 @@ class CMTClassifier:
         """
         lat, lon, depth = _parse_centroid(centroid)
         slab = self.slab_model.query(lat, lon)
-        zone = slab.seismogenic_zone
         # Both planes describe the same mechanism; using both keeps the
         # result symmetric when catalogue rounding makes them disagree.
         planes = [p for p in (nodal_plane_1, nodal_plane_2) if p is not None]
         subduction_kagan_angle = None
         if planes and slab.present:
-            interface_slip = NodalPlane(slab.strike, slab.dip, zone.rake)
+            interface_slip = NodalPlane(
+                slab.strike, slab.dip, slab.seismogenic_zone.rake
+            )
             subduction_kagan_angle = min(
                 kagan_angle(plane, interface_slip) for plane in planes
             )
+        moho_depth = (
+            np.inf if self.moho_model is None else self.moho_model.depth(lat, lon)
+        )
         return tectonic_type_probabilities(
-            depth, slab.depth, zone.depth, subduction_kagan_angle
+            depth,
+            slab.depth,
+            slab.seismogenic_zone.depth,
+            subduction_kagan_angle,
+            moho_depth,
         )
 
     def tectonic_type(
