@@ -103,120 +103,86 @@ def test_kagan_angle_is_at_most_120():
     assert 0.0 <= min(angles) and max(angles) <= 120.0
 
 
-def test_plate_motion_azimuth():
-    # Pacific moves west relative to Australia at the Hikurangi margin.
-    assert 250 < focal_mechanism.plate_motion_azimuth(-38.7, 178.5) < 280
-    assert 230 < focal_mechanism.plate_motion_azimuth(-47.0, 165.5) < 250
-
-
-def test_subduction_slip_planes():
-    slab_model = focal_mechanism.SlabModel.load()
-    for lat, lon in [(-41.3, 174.8), (-38.7, 177.5), (-46.0, 166.0)]:
-        slab = slab_model.query(lat, lon)
-        pure, oblique = focal_mechanism.subduction_slip_planes(lat, lon, slab)
-        assert pure == NodalPlane(slab.strike, slab.dip, 90.0)
-        assert (oblique.strike, oblique.dip) == (slab.strike, slab.dip)
-        assert 0 < oblique.rake < 180  # Reverse sense
-        # The horizontal slip is parallel to the plate motion.
-        slip = focal_mechanism._slip_vector(*oblique)
-        slip_azimuth = np.degrees(np.arctan2(slip[1], slip[0]))
-        difference = focal_mechanism._angular_difference(
-            slip_azimuth, focal_mechanism.plate_motion_azimuth(lat, lon), 180.0
-        )
-        assert difference == pytest.approx(0.0, abs=1e-6)
+def test_ramp():
+    decreasing = focal_mechanism.Ramp(30.0, 1.0, 53.0, 0.25)
+    assert decreasing(0.0) == 1.0
+    assert decreasing(30.0) == 1.0
+    assert decreasing(41.5) == pytest.approx(0.625)
+    assert decreasing(53.0) == 0.25
+    assert decreasing(120.0) == 0.25
+    increasing = focal_mechanism.Ramp(5.0, 0.0, 15.0, 0.4)
+    assert increasing(10.0) == pytest.approx(0.2)
 
 
 @pytest.mark.parametrize(
-    "depth_above_slab, depth, kagan, fixed_depth, expected",
+    "depth, slab_depth, kagan, moho_depth, expected",
     [
-        (float("nan"), 10.0, 0.0, False, {TectonicType.CRUSTAL: 1.0}),
-        (0.0, 20.0, 0.0, False, {TectonicType.INTERFACE: 1.0}),
-        (0.0, 20.0, None, False, {TectonicType.INTERFACE: 1.0}),
-        (-1.0, 80.0, 0.0, False, {TectonicType.SLAB: 1.0}),  # Too deep
-        (
-            10.0,
-            20.0,
-            30.0,
-            False,
-            {
-                TectonicType.CRUSTAL: 1.0 - np.exp(-1.0),
-                TectonicType.INTERFACE: np.exp(-1.0),
-            },
-        ),
-        (
-            -10.0,
-            40.0,
-            None,
-            False,
-            {
-                TectonicType.SLAB: 1.0 - np.exp(-0.5),
-                TectonicType.INTERFACE: np.exp(-0.5),
-            },
-        ),
-        # A fixed depth says nothing about the distance to the interface.
-        (-30.0, 50.0, 0.0, True, {TectonicType.INTERFACE: 1.0}),
-        (-30.0, 50.0, 90.0, True, {TectonicType.SLAB: 1.0 - np.exp(-4.5)}),
+        # Outside the slab footprint.
+        (10.0, float("nan"), None, np.inf, (1.0, 0.0, 0.0)),
+        # On the interface, above the seismogenic limit.
+        (20.0, 20.0, None, np.inf, (0.0, 1.0, 0.0)),
+        (20.0, 20.0, 41.5, np.inf, (0.1875, 0.625, 0.1875)),
+        (20.0, 20.0, 90.0, np.inf, (0.375, 0.25, 0.375)),
+        # Halfway down the ramp below the seismogenic zone.
+        (37.5, 30.0, None, np.inf, (0.15625, 0.5, 0.34375)),
+        # Above and below the flex zone.
+        (5.0, 30.0, None, np.inf, (1.0, 0.0, 0.0)),
+        (60.0, 30.0, None, np.inf, (0.0, 0.0, 1.0)),
+        # In the mantle wedge, between the Moho and the top of the flex zone.
+        (10.0, 30.0, None, 5.0, (0.64, 0.2, 0.16)),
     ],
 )
 def test_tectonic_type_probabilities(
-    depth_above_slab: float,
     depth: float,
+    slab_depth: float,
     kagan: float | None,
-    fixed_depth: bool,
-    expected: dict[TectonicType, float],
+    moho_depth: float,
+    expected: tuple[float, float, float],
 ):
     probabilities = focal_mechanism.tectonic_type_probabilities(
-        depth_above_slab, depth, kagan, fixed_depth
+        depth, slab_depth, 30.0, kagan, moho_depth
     )
-    assert sum(probabilities.values()) == pytest.approx(1.0)
-    for tectonic_type, probability in expected.items():
-        assert probabilities[tectonic_type] == pytest.approx(probability)
+    assert [
+        probabilities[TectonicType.CRUSTAL],
+        probabilities[TectonicType.INTERFACE],
+        probabilities[TectonicType.SLAB],
+    ] == pytest.approx(expected)
+
+
+def test_seismogenic_zone():
+    slab_model = focal_mechanism.SlabModel.load()
+    assert slab_model.query(-41.3, 174.8).region == "ker"  # Wellington
+    assert slab_model.query(*CENTROID[:2]).region == "puy"
+    assert slab_model.query(-41.3, 174.8).seismogenic_zone.depth == 47.0
+    assert slab_model.query(*CENTROID[:2]).seismogenic_zone.depth == 30.0
+    outside = slab_model.query(-43.5, 172.6)  # Christchurch
+    assert outside.seismogenic_zone == focal_mechanism.DEFAULT_SEISMOGENIC_ZONE
 
 
 def test_tectonic_type(classifier: focal_mechanism.CMTClassifier):
-    # Thrust on the Hikurangi interface beneath Wellington.
+    # The 2003 Fiordland earthquake ruptured the Puysegur interface, and the
+    # result does not depend on the order of the planes.
+    assert classifier.tectonic_type(CENTROID, PLANE_1, PLANE_2) == (
+        TectonicType.INTERFACE
+    )
+    assert classifier.tectonic_type_probabilities(
+        CENTROID, PLANE_1, PLANE_2
+    ) == classifier.tectonic_type_probabilities(CENTROID, PLANE_2, PLANE_1)
+
+    # Thrusting on the Hikurangi interface beneath Wellington.
     slab = classifier.slab_model.query(-41.3, 174.8)
     on_interface = np.array([-41.3, 174.8, slab.depth])
-    thrust = NodalPlane(slab.strike, slab.dip, 100.0)
-    assert classifier.tectonic_type(on_interface, thrust) == (TectonicType.INTERFACE)
-    # Either nodal plane gives the same probabilities.
-    np.testing.assert_allclose(
-        list(classifier.tectonic_type_probabilities(on_interface, PLANE_1).values()),
-        list(classifier.tectonic_type_probabilities(on_interface, PLANE_2).values()),
-        atol=0.01,
-    )
-    # Strike-slip near the interface is not interface slip.
+    thrust = NodalPlane(slab.strike, slab.dip, 95.0)
+    assert classifier.tectonic_type(on_interface, thrust) == TectonicType.INTERFACE
+    # Strike-slip near the interface is crustal above it and intraslab below.
     strike_slip = NodalPlane(40.0, 85.0, 175.0)
-    shallower = on_interface - [0, 0, 2.0]
-    assert classifier.tectonic_type(shallower, strike_slip) == (TectonicType.CRUSTAL)
-    deeper = on_interface + [0, 0, 2.0]
-    assert classifier.tectonic_type(deeper, strike_slip) == TectonicType.SLAB
+    above = on_interface - [0, 0, 10.0]
+    below = on_interface + [0, 0, 10.0]
+    assert classifier.tectonic_type(above, strike_slip) == TectonicType.CRUSTAL
+    assert classifier.tectonic_type(below, strike_slip) == TectonicType.SLAB
+    # Without a mechanism, location alone decides.
+    assert classifier.tectonic_type(on_interface) == TectonicType.INTERFACE
     # Outside the slab footprint (Christchurch).
     assert (
         classifier.tectonic_type([-43.5, 172.6, 10.0], thrust) == TectonicType.CRUSTAL
     )
-
-
-def test_tectonic_type_with_both_planes(classifier: focal_mechanism.CMTClassifier):
-    # The call gcmt-to-realisation makes, which must not depend on plane order.
-    forward = classifier.tectonic_type_probabilities(CENTROID, PLANE_1, PLANE_2)
-    backward = classifier.tectonic_type_probabilities(CENTROID, PLANE_2, PLANE_1)
-    assert forward == backward
-    assert sum(forward.values()) == pytest.approx(1.0)
-    # 9 km below the Slab2 surface, so mostly intraslab.
-    assert classifier.tectonic_type(CENTROID, PLANE_1, PLANE_2) == TectonicType.SLAB
-
-
-def test_tectonic_type_without_mechanism_or_depth(
-    classifier: focal_mechanism.CMTClassifier,
-):
-    slab = classifier.slab_model.query(-41.3, 174.8)
-    on_interface = np.array([-41.3, 174.8, slab.depth])
-    assert classifier.tectonic_type(on_interface) == TectonicType.INTERFACE
-    # A fixed depth leaves the interface probability to the mechanism.
-    deep = on_interface + [0, 0, 30.0]
-    assert classifier.tectonic_type(deep) == TectonicType.SLAB
-    assert classifier.tectonic_type(deep, fixed_depth=True) == TectonicType.INTERFACE
-    with pytest.warns(UserWarning, match="without depth"):
-        probabilities = classifier.tectonic_type_probabilities(on_interface[:2])
-    assert probabilities[TectonicType.INTERFACE] == 1.0
