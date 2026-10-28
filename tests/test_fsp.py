@@ -304,3 +304,131 @@ def test_bad_fsp(fsp_path: Path):
     """Test malformed FSP files that would throw an FSPParseError."""
     with pytest.raises(fsp.FSPParseError):
         fsp.FSPFile.read_from_file(fsp_path)
+
+
+DARFIELD_FSP = FSP_PATH / "s2010DARFIE01ATZO.fsp"
+KANTO_FSP = FSP_PATH / "s1923KANTOJkoba.fsp"
+NANKAIDO_FSP = FSP_PATH / "s1946NANKAItani.fsp"
+
+
+def _write_modified_fsp(tmp_path: Path, source: Path, old: str, new: str) -> Path:
+    """Copy an FSP file to tmp_path, replacing the first `old` with `new`."""
+    contents = source.read_text()
+    assert old in contents
+    modified_path = tmp_path / source.name
+    modified_path.write_text(contents.replace(old, new, 1))
+    return modified_path
+
+
+@pytest.mark.parametrize(
+    "missing_attribute, value",
+    [
+        ("strike", None),
+        ("dip", None),
+        ("dip", 0.0),
+        ("length", None),
+        ("width", None),
+        ("dtop", None),
+        ("top_centre", None),
+    ],
+)
+def test_segment_as_plane_missing_attributes(
+    missing_attribute: str, value: float | None
+):
+    """Check that a segment missing any required attribute cannot become a plane."""
+    segment = fsp.FSPFile.read_from_file(DARFIELD_FSP).segments[0]
+    setattr(segment, missing_attribute, value)
+    with pytest.raises(
+        ValueError,
+        match=r"^Cannot convert segment to Plane: missing required attributes\.$",
+    ):
+        segment.as_plane()
+
+
+def test_segment_as_plane_geometry():
+    """Check segment planes dip perpendicular to strike from the segment top centre."""
+    fsp_file = fsp.FSPFile.read_from_file(DARFIELD_FSP)
+    for segment in fsp_file.segments:
+        assert segment.top_centre is not None and segment.dtop is not None
+        plane = segment.as_plane()
+        assert (plane.dip_dir_nztm - plane.strike_nztm) % 360 == pytest.approx(
+            90, abs=1e-3
+        )
+        assert plane.dip == pytest.approx(segment.dip)
+        assert plane.length == pytest.approx(segment.length)
+        assert plane.width == pytest.approx(segment.width)
+        assert plane.wgs_depth_coordinates_to_fault_coordinates(
+            np.array([*segment.top_centre, segment.dtop * 1000])
+        ) == pytest.approx(np.array([0.5, 0.0]), abs=1e-3)
+
+
+def test_bad_header_error_message():
+    """Check that an unparseable header raises a descriptive error."""
+    with pytest.raises(fsp.FSPParseError, match=r"^Failed to parse FSP file header$"):
+        fsp.FSPFile.read_from_file(FSP_PATH / "bad" / "bad_header.fsp")
+
+
+def test_out_of_order_segment(tmp_path: Path):
+    """Check that a segment numbered out of sequence is rejected."""
+    fsp_path = _write_modified_fsp(
+        tmp_path, DARFIELD_FSP, "% SEGMENT #  2:", "% SEGMENT #  3:"
+    )
+    with pytest.raises(
+        fsp.FSPParseError, match=r"^Expected segment 2 but found segment 3$"
+    ):
+        fsp.FSPFile.read_from_file(fsp_path)
+
+
+def test_missing_columns_on_last_segment(tmp_path: Path):
+    """Check that a missing column header names the segment it is missing from."""
+    column_header = "%    LAT     LON     X==EW     Y==NS     Z     SLIP    \n"
+    contents = DARFIELD_FSP.read_text()
+    last_header = contents.rindex(column_header)
+    fsp_path = tmp_path / DARFIELD_FSP.name
+    fsp_path.write_text(
+        contents[:last_header] + contents[last_header + len(column_header) :]
+    )
+    with pytest.raises(
+        fsp.FSPParseError,
+        match=r"^Cannot find columns for FSP file on segment 8\.$",
+    ):
+        fsp.FSPFile.read_from_file(fsp_path)
+
+
+def test_missing_subfault_count(tmp_path: Path):
+    """Check that a segment without a subfault count is rejected."""
+    fsp_path = _write_modified_fsp(
+        tmp_path, KANTO_FSP, "%   Nsbfs =     70 subfaults\n", ""
+    )
+    with pytest.raises(
+        fsp.FSPParseError,
+        match=r"^Cannot find number of subfaults for FSP file on segment 1\.$",
+    ):
+        fsp.FSPFile.read_from_file(fsp_path)
+
+
+@pytest.mark.parametrize(
+    "old, new",
+    [
+        # The layer count line is missing.
+        ("% No. of layers =   1", "% Layer count unknown"),
+        # Crustal model unknown, with no assumed shear modulus given.
+        (
+            "% Crustal Model unknown for this model; assumed shear modulus:",
+            "% Crustal Model unknown for this model",
+        ),
+        # Shear modulus scale is not in the expected [a**b N/m^2] format.
+        ("%   [10**10 N/m^2]", "%   [unknown]"),
+        # Shear modulus significand is not a number.
+        ("%  3.30", "%  n/a"),
+    ],
+    ids=["no-layer-count", "crustal-model-unknown", "bad-scale", "bad-significand"],
+)
+def test_unknown_velocity_model(tmp_path: Path, old: str, new: str):
+    """Check that an unparseable velocity structure is read as None."""
+    fsp_path = _write_modified_fsp(tmp_path, NANKAIDO_FSP, old, new)
+    fsp_file = fsp.FSPFile.read_from_file(fsp_path)
+    assert fsp_file.velocity_model is None
+    # The rest of the file is still parsed.
+    assert len(fsp_file.data) == 32
+    assert fsp_file.segments[0].subfaults == 32
