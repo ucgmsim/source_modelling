@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pytest
 import scipy as sp
@@ -426,3 +428,187 @@ def test_multi_trace_rx_ry_local_shift_accumulation() -> None:
     # Seg 1 Global U: 10 + 0 = 10
     # Seg 2 Global U: 5 + 5 = 10
     assert u.item() == pytest.approx(10.0)
+
+
+def test_ry0_plane() -> None:
+    """Test that Ry0 = max(0, -U, U - L) for a single plane."""
+    plane = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.538, 172.6474, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    points = np.array(
+        [
+            [-43.538, 172.6174],  # beside the plane
+            [-43.60, 172.6574],  # south of the plane
+            [-43.48, 172.6574],  # north of the plane
+        ]
+    )
+    _, ry = plane.rx_ry_distance(points)
+    length = plane.length_m
+
+    ry0 = sources.ry0_distance(plane, points)
+
+    assert ry0 == pytest.approx(np.maximum(0.0, np.maximum(-ry, ry - length)), abs=1e-3)
+    assert ry0[0] == pytest.approx(0.0, abs=1e-3)
+    assert ry0[1] > 0
+    assert ry0[2] > 0
+
+
+def test_ry0_fault() -> None:
+    """Test that Ry0 = max(0, -U, U - L) for a multi-plane fault."""
+    fault = sources.Fault.from_trace_points(
+        np.array(
+            [
+                [-43.58302058, 172.64739978],
+                [-43.49297907, 172.6474],
+                [-43.44832311516278, 172.7160675056574],
+            ]
+        ),
+        dtop=0.0,
+        dbottom=10.0,
+        dip=90.0,
+        dip_dir=90.0,
+    )
+    points = np.array(
+        [
+            [-43.538, 172.6174],
+            [-43.60, 172.6574],
+            [-43.40, 172.75],
+        ]
+    )
+    _, ry = fault.rx_ry_distance(points)
+    trace = fault.trace[:, :2]
+    length = np.linalg.norm(trace[1::2] - trace[::2], axis=1).sum()
+
+    ry0 = sources.ry0_distance(fault, points)
+
+    assert ry0 == pytest.approx(np.maximum(0.0, np.maximum(-ry, ry - length)), abs=1e-3)
+    assert ry0[0] == pytest.approx(0.0, abs=1e-3)
+    assert ry0[1] > 0
+    assert ry0[2] > 0
+
+
+def test_ry0_single_fault_does_not_warn() -> None:
+    """Test that Ry0 does not warn for single-fault ruptures."""
+    plane = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.538, 172.6474, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sources.ry0_distance([plane], np.array([[-43.538, 172.6174]]))
+
+
+def test_ry0_multi_fault_warns() -> None:
+    """Test that Ry0 raises a RuntimeWarning for multi-fault ruptures."""
+    plane_a = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.538, 172.6474, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    plane_b = sources.Plane.from_centroid_strike_dip(
+        np.array([-43.40, 172.70, 5.0]), 90.0, 10.0, width=5.0, strike=0.0
+    )
+    points = np.array([[-43.538, 172.6174], [-43.70, 172.65], [-43.20, 172.70]])
+
+    with pytest.warns(RuntimeWarning, match="multi-fault"):
+        ry0 = sources.ry0_distance([plane_a, plane_b], points)
+
+    assert ry0.shape == (3,)
+    assert ry0[0] == pytest.approx(0.0, abs=1e-3)
+    assert np.all(ry0[1:] > 0)
+
+
+@pytest.mark.parametrize("multi_fault", [False, True])
+def test_ry0_vectorised(multi_fault: bool) -> None:
+    """Test that Ry0 over many points matches a per-point calculation."""
+    fault = sources.Fault.from_trace_points(
+        np.array(
+            [
+                [-43.58302058, 172.64739978],
+                [-43.49297907, 172.6474],
+                [-43.44832311516278, 172.7160675056574],
+            ]
+        ),
+        dtop=0.0,
+        dbottom=10.0,
+        dip=90.0,
+        dip_dir=90.0,
+    )
+    faults: list[sources.Fault | sources.Plane] = [fault]
+    if multi_fault:
+        faults.append(
+            sources.Plane.from_centroid_strike_dip(
+                np.array([-43.30, 172.80, 5.0]), 90.0, 10.0, width=5.0, strike=20.0
+            )
+        )
+    rng = np.random.default_rng(0)
+    points = np.column_stack(
+        [rng.uniform(-43.8, -43.2, 200), rng.uniform(172.4, 173.0, 200)]
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        ry0 = sources.ry0_distance(faults, points)
+        ry0_loop = np.array([sources.ry0_distance(faults, p) for p in points])
+        ry0_single_row = sources.ry0_distance(faults, points[:1])
+
+    assert ry0.shape == (200,)
+    assert ry0_loop.shape == (200,)
+    assert ry0_single_row.shape == (1,)
+    assert ry0 == pytest.approx(ry0_loop)
+    assert np.any(ry0 == 0) and np.any(ry0 > 0)
+
+
+def _gc2_t_u(
+    trace_points: np.ndarray, points: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate GC2 (T, U) for two-point traces in NZTM (northing, easting)."""
+    trace_indices = np.arange(0, len(trace_points) + 1, 2)
+    trace_points = gc2_distances.strike_corrected_traces(trace_points, trace_indices)
+    rx, ry = gc2_distances.segment_rx_ry(trace_points, points)
+    return gc2_distances.multi_trace_rx_ry(trace_points, trace_indices, rx, ry)
+
+
+def test_strike_corrected_traces_reverses_discordant_trace() -> None:
+    """Test that discordant traces are reversed as a whole (page 6)."""
+    # Trace 1 strikes east with a short westward kink, so only a
+    # per-trace (not per-segment) check leaves it alone. Trace 2
+    # strikes west and is discordant.
+    trace_points = np.array(
+        [
+            [0.0, 0.0],
+            [0.0, 20.0],
+            [0.0, 20.0],
+            [1.0, 19.0],
+            [0.0, 40.0],
+            [0.0, 30.0],
+        ]
+    )
+    trace_indices = np.array([0, 4, 6])
+
+    corrected = gc2_distances.strike_corrected_traces(trace_points, trace_indices)
+
+    assert corrected[:4] == pytest.approx(trace_points[:4])
+    assert corrected[4:] == pytest.approx(trace_points[4:][::-1])
+
+
+def test_multi_trace_t_u_invariant_to_discordant_trace_order() -> None:
+    """Test that reversing a trace's point order does not change T and U."""
+    concordant = np.array([[0.0, 0.0], [0.0, 15.0], [0.0, 20.0], [5.0, 30.0]])
+    discordant = np.array([[0.0, 0.0], [0.0, 15.0], [5.0, 30.0], [0.0, 20.0]])
+    points = np.array([[3.0, -10.0], [-4.0, 5.0], [2.0, 15.0], [-6.0, 40.0]])
+
+    t_concordant, u_concordant = _gc2_t_u(concordant, points)
+    t_discordant, u_discordant = _gc2_t_u(discordant, points)
+
+    assert t_discordant == pytest.approx(t_concordant)
+    assert u_discordant == pytest.approx(u_concordant)
+    # U increases along strike across both traces.
+    assert np.all(np.diff(u_concordant) > 0)
+
+
+def test_multi_trace_u_origin_at_back_of_nominal_strike() -> None:
+    """Test that U = 0 at the start of a westward striking system."""
+    trace_points = np.array([[0.0, 30.0], [0.0, 20.0], [0.0, 10.0], [0.0, 0.0]])
+    points = np.array([[0.0, 30.0], [0.0, 25.0], [0.0, 5.0]])
+
+    _, u = _gc2_t_u(trace_points, points)
+
+    assert u == pytest.approx([0.0, 5.0, 25.0])
