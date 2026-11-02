@@ -918,6 +918,32 @@ def test_sw4_hdf5_v2(tmp_path: Path):
         assert points["DEN"] == pytest.approx(srf_v2.points["den"].to_numpy())
 
 
+@requires_hdf5
+def test_sw4_hdf5_fills_gaps_in_slip_rate(tmp_path: Path):
+    """Test that write_sw4_hdf5 writes zeros for unstored samples inside each row's span."""
+    import h5py
+
+    christchurch_srf = srf.read_srf(SRF_DIR / "3468575.srf")
+    n = len(christchurch_srf.points)
+    dense = np.zeros((n, christchurch_srf.nt), dtype=np.float32)
+    dense[:, 10] = 1.0
+    dense[:, 20] = 2.0
+    dense[0, :] = 0.0  # an empty row
+    christchurch_srf.slipt1_array = sp.sparse.csr_array(dense)
+    out = tmp_path / "sw4.h5"
+    christchurch_srf.write_sw4_hdf5(out)
+    with h5py.File(out, "r") as h5file:
+        nt1 = h5file["POINTS"]["NT1"][:]
+        sr1 = h5file["SR1"][:]
+
+    expected_row = np.zeros(11, dtype=np.float32)
+    expected_row[0] = 1.0
+    expected_row[10] = 2.0
+    assert nt1[0] == 0
+    assert np.all(nt1[1:] == 11)
+    assert sr1 == pytest.approx(np.tile(expected_row, n - 1))
+
+
 @pytest.mark.parametrize("missing", ["h5py", "h5netcdf"])
 def test_hdf5_io_without_extra(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str

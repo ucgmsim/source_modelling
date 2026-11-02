@@ -434,7 +434,22 @@ class SrfFile:
                 "slip" if field == "SLIP1" else field.lower()
             ].values.astype(SW4_POINTS_DTYPE[field].type)
 
-        points_data["NT1"] = np.diff(self.slipt1_array.indptr).astype(np.int32)
+        # SW4 reads NT1 contiguous samples per point, so write each row from
+        # its first stored column to its last, filling unstored entries with 0.
+        slipt1 = self.slipt1_array.copy()
+        slipt1.sum_duplicates()  # sorts indices and merges duplicate entries
+        row_nnz = np.diff(slipt1.indptr)
+        non_empty = row_nnz > 0
+        first_col = np.zeros(len(row_nnz), dtype=np.int64)
+        last_col = np.full(len(row_nnz), -1, dtype=np.int64)
+        first_col[non_empty] = slipt1.indices[slipt1.indptr[:-1][non_empty]]
+        last_col[non_empty] = slipt1.indices[slipt1.indptr[1:][non_empty] - 1]
+        nt1 = last_col - first_col + 1
+        row_offset = np.concatenate(([0], np.cumsum(nt1)))
+        sr1 = np.zeros(row_offset[-1], dtype=np.float32)
+        rows = np.repeat(np.arange(len(row_nnz)), row_nnz)
+        sr1[row_offset[rows] + slipt1.indices - first_col[rows]] = slipt1.data
+        points_data["NT1"] = nt1.astype(np.int32)
         if (
             self.version == "2.0"
         ):  # vs/den are mandatory in 2.0; missing columns will fail loudly
@@ -445,7 +460,7 @@ class SrfFile:
             h5file.attrs.create("VERSION", np.float32(self.version))
             h5file.attrs.create("PLANE", plane_data)
             h5file.create_dataset("POINTS", data=points_data)
-            h5file.create_dataset("SR1", data=self.slipt1_array.data.astype(np.float32))
+            h5file.create_dataset("SR1", data=sr1)
 
     def write_hdf5(
         self, hdf5_ffp: Path, include_slip_time_function: bool = True
