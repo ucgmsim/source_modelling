@@ -65,8 +65,8 @@ def find_connected_faults(
     """
     fault_names = list(faults)
     fault_components: DisjointSet[str] = DisjointSet(fault_names)
-    for fault_a_name, fault_b_name in itertools.product(fault_names, repeat=2):
-        if not fault_b_name or fault_components.connected(fault_a_name, fault_b_name):
+    for fault_a_name, fault_b_name in itertools.combinations(fault_names, 2):
+        if fault_components.connected(fault_a_name, fault_b_name):
             continue
         fault_a = faults[fault_a_name]
         fault_b = faults[fault_b_name]
@@ -101,15 +101,18 @@ MU = 3.3e10
 def moment_rate_over_time_from_slip(
     area: npt.ArrayLike, slip: csr_array, dt: float, nt: int
 ) -> pd.DataFrame:
-    """Compute a moment rate dataframe from subfaults given with area and slip.
+    """Compute a moment rate dataframe from subfaults given with area and slip rate.
+
+    Despite the parameter name, `slip` must be a slip *rate* (for example the
+    SRF `slipt1` values), not the slip accumulated in each time window.
 
     Parameters
     ----------
     area : array like
         The area of each subfault (in cm^2).
     slip : csr_array
-        A sparse containing the slip for each subfault and each time
-        window. Has shape (number of points, number of time windows).
+        A sparse array containing the slip rate (cm/s) for each subfault and
+        each time window. Has shape (number of points, number of time windows).
     dt : float
         Length of each time window (s).
     nt : int
@@ -272,16 +275,14 @@ def moment_over_time_from_moment_rate(moment_rate_df: pd.DataFrame) -> pd.DataFr
     pd.DataFrame
         A dataframe the same index and a 'moment' column with cumulative rupture moment.
     """
-    integrate_f = np.vectorize(
-        lambda i: sp.integrate.trapezoid(
-            moment_rate_df["moment_rate"].iloc[: i + 1].to_numpy(),
-            moment_rate_df.index.values[: i + 1],
-        )
-    )
     return pd.DataFrame(
         {
             "t": moment_rate_df.index.values,
-            "moment": integrate_f(np.arange(len(moment_rate_df))),
+            "moment": sp.integrate.cumulative_trapezoid(
+                moment_rate_df["moment_rate"].to_numpy(),
+                moment_rate_df.index.values,
+                initial=0,
+            ),
         }
     ).set_index("t")
 
