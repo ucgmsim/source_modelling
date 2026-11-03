@@ -127,6 +127,54 @@ def test_find_connected_faults(
         assert ds.connected("A", "B") == expected_connected
 
 
+def test_find_connected_faults_checks_each_pair_once():
+    """Each unordered pair of faults should be measured at most once."""
+    faults = {}
+    for name in "ABC":
+        fault = create_autospec(Fault, instance=True)
+        fault.dip = 30.0
+        fault.bottom_m = 10000.0
+        faults[name] = fault
+
+    with (
+        patch(
+            "source_modelling.rupture_propagation.distance_between",
+            return_value=10_000.0,
+        ),
+        patch(
+            "source_modelling.sources.closest_points_beneath", return_value=("a", "b")
+        ) as closest_points_beneath,
+    ):
+        ds = moment.find_connected_faults(faults)
+
+    assert closest_points_beneath.call_count == 3
+    assert not any(ds.connected(a, b) for a, b in ["AB", "AC", "BC"])
+
+
+@given(
+    moment_rate=nst.arrays(
+        float,
+        st.integers(min_value=1, max_value=200),
+        elements=st.floats(0, 1e20, allow_nan=False, allow_infinity=False),
+    ),
+    dt=st.floats(min_value=1e-3, max_value=1, allow_nan=False, allow_infinity=False),
+)
+def test_moment_over_time_from_moment_rate_is_cumulative_trapezoid(
+    moment_rate: np.ndarray, dt: float
+):
+    """Cumulative moment equals the trapezoid integral of every prefix."""
+    t = np.arange(len(moment_rate)) * dt
+    moment_rate_df = pd.DataFrame({"t": t, "moment_rate": moment_rate}).set_index("t")
+    cumulative_moment = moment.moment_over_time_from_moment_rate(moment_rate_df)
+    expected = [
+        sp.integrate.trapezoid(moment_rate[: i + 1], t[: i + 1]) for i in range(len(t))
+    ]
+    np.testing.assert_array_equal(cumulative_moment.index.values, t)
+    np.testing.assert_allclose(
+        cumulative_moment["moment"].to_numpy(), expected, rtol=1e-12, atol=1e-6
+    )
+
+
 def test_point_source_slip_top_depth():
     bad_vm = pd.DataFrame(
         {
