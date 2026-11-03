@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.typing as npt
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -94,3 +95,38 @@ def test_trim_array_to_target_length_bounds(
         assert 0 <= left < right <= arr.shape[1]
     except ValueError:
         pass
+
+
+@pytest.mark.parametrize(
+    ("slip_function", "target_length", "expected"),
+    [
+        ([1.0, 1.0, 9.0, 1.0, 1.0], 1.0, (0, 3)),
+        ([1.0, 1.0, 1.0, 9.0, 1.0, 1.0, 1.0], 1.0, (1, 4)),
+        ([0.0, 0.0, 9.0, 0.0, 0.0], 1.0, (2, 3)),
+    ],
+)
+def test_trim_expansion_does_not_absorb_sub_threshold_cells(
+    slip_function: list[float], target_length: float, expected: tuple[int, int]
+):
+    """The expansion loops must not absorb a neighbour below the keep threshold.
+
+    Regression test: the loops tested ``slip_function[left]`` and
+    ``slip_function[right - 1]`` -- cells already inside the window -- instead
+    of the candidate cells ``left - 1`` and ``right``. A boundary cell above
+    the threshold therefore pulled in its neighbour without that neighbour ever
+    being checked, widening the window past the documented
+    ``target_length +/- 2 * dx`` tolerance.
+    """
+    slip_array = np.array(slip_function).reshape(-1, 1)
+
+    left, right = trim.trim_array_to_target_length(
+        slip_array, dx=1.0, target_length=target_length
+    )
+
+    assert (left, right) == expected
+    # the documented tolerance from the docstring
+    assert abs((right - left) * 1.0 - target_length) <= 2.0
+    # no cell inside the window may be below the keep threshold unless the
+    # window is pinned by the tolerance
+    keep_threshold = slip_array.max() / 3
+    assert slip_array[left:right].max() >= keep_threshold
