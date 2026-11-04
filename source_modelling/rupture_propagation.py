@@ -244,16 +244,23 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
     """
     Generate the most likely spanning tree for a probability graph G.
 
+    Edges of equal probability are taken in order of increasing
+    ``distance`` where the edges have that attribute (as those built
+    by :func:`probability_graph` do).
+
     Parameters
     ----------
     graph : nx.Graph
         The input graph from which to generate spanning trees. Edge
         weights are probabilities of inclusion in the range [0, 1).
+        An optional ``distance`` edge attribute breaks ties between
+        edges of equal weight.
 
     Returns
     -------
     nx.Graph
-        The most likely maximum spanning tree for this graph.
+        The most likely maximum spanning tree for this graph. Edge
+        weights are the log-odds, log(w / (1 - w)), of the input weights.
 
     Raises
     ------
@@ -273,7 +280,21 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
             1 - edge_weight
         )
 
-    return nx.maximum_spanning_tree(weighted_graph)
+    # Kruskal's algorithm, with the sort key extended by distance. The
+    # sort is stable, so edges that tie on both keys keep insertion order,
+    # which is what nx.maximum_spanning_tree would do for every tie.
+    edges = sorted(
+        weighted_graph.edges(data=True),
+        key=lambda edge: (-edge[2]["weight"], edge[2].get("distance", 0.0)),
+    )
+    tree = nx.Graph()
+    tree.add_nodes_from(weighted_graph.nodes(data=True))
+    components = nx.utils.UnionFind(weighted_graph.nodes)
+    for node_u, node_v, data in edges:
+        if components[node_u] != components[node_v]:
+            components.union(node_u, node_v)
+            tree.add_edge(node_u, node_v, **data)
+    return tree
 
 
 JumpPair = namedtuple("JumpPair", ["from_point", "to_point"])
@@ -308,7 +329,9 @@ def shaw_dieterich_distance_model(distance: float, d0: float, delta: float) -> f
     return min(1, np.exp(-(distance - delta) / d0))
 
 
-def prune_distance_graph(distances: DistanceGraph, cutoff: float) -> DistanceGraph:
+def prune_distance_graph(
+    distances: DistanceGraph, cutoff: float, tolerance: float = 100.0
+) -> DistanceGraph:
     """
     Remove edges from a distance graph that exceed a cutoff.
 
@@ -318,18 +341,29 @@ def prune_distance_graph(distances: DistanceGraph, cutoff: float) -> DistanceGra
         A dictionary representing the graph of distances between faults.
     cutoff : float
         The maximum allowed distance (in metres) for edges in the graph.
+        A pair at exactly the cutoff is kept: the cutoff is a maximum
+        separation, as in the rupture-set construction that it mirrors.
+    tolerance : float, optional
+        Allowance (in metres) added to the cutoff. Default is 100 m. The
+        separations here are measured on the continuous fault surfaces,
+        whereas a rupture set (e.g. the NZ NSHM 2022, built with a 15 km
+        jump limit) measured them on its own discretised subsections, so a
+        pair that the rupture set admitted at the limit can be measured a
+        few tens of metres beyond it. Without the allowance such ruptures
+        would be reported as disconnected.
 
     Returns
     -------
     DistanceGraph
         A pruned copy of the input distance graph, containing only edges with
-        distances less than the cutoff.
+        distances less than or equal to the cutoff plus the tolerance.
     """
+    limit = cutoff + tolerance
     return {
         fault_u: {
             fault_v: distance
             for fault_v, distance in neighbours_fault_u.items()
-            if distance < cutoff
+            if distance <= limit
         }
         for fault_u, neighbours_fault_u in distances.items()
     }
@@ -358,7 +392,10 @@ def probability_graph(
     -------
     nx.Graph
         An undirected graph where edges are weighted by probabilities of rupture
-        propagation between faults.
+        propagation between faults. Each edge also carries its separation, in
+        the units of `distances`, as ``distance``, which
+        :func:`most_likely_spanning_tree` uses to break ties between edges
+        at the probability cap.
     """
 
     return nx.from_dict_of_dicts(
@@ -367,7 +404,8 @@ def probability_graph(
                 fault_v: {
                     "weight": min(
                         shaw_dieterich_distance_model(distance / 1000, d0, delta), 0.99
-                    )
+                    ),
+                    "distance": distance,
                 }
                 for fault_v, distance in neighbours_fault_u.items()
             }

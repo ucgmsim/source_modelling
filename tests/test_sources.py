@@ -1807,3 +1807,37 @@ def test_absorb_planes():
     )
     assert merged.length == pytest.approx(7)
     assert merged.dip == pytest.approx(45)
+
+
+def test_closest_point_between_sources_escapes_local_minimum():
+    """A bent fault traps an optimiser started from the midpoints.
+
+    Fault A zigzags between y = 0 and y = 30 km; fault B lies beyond A's
+    first vertex. The closest approach is from B's far end, (-7, -5) km,
+    to A's first vertex, (0, 0) km: sqrt(7**2 + 5**2) = 8.60 km. Started
+    from the midpoints, the optimiser stopped at 41.9 km.
+    """
+    origin = coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.0]))
+
+    def vertical_fault(trace: list[tuple[float, float]]) -> Fault:
+        depth = np.array([0.0, 0.0, 10e3])
+        corners = [np.append(origin + np.array(point), 0.0) for point in trace]
+        return Fault(
+            [
+                Plane(np.array([top, bottom, bottom + depth, top + depth]))
+                for top, bottom in itertools.pairwise(corners)
+            ]
+        )
+
+    fault_a = vertical_fault([(0, 0), (20e3, 30e3), (40e3, 0), (60e3, 30e3), (80e3, 0)])
+    fault_b = vertical_fault([(-10e3, -10e3), (-7e3, -5e3)])
+    point_a, point_b = sources.closest_point_between_sources(fault_a, fault_b)
+    distance = np.linalg.norm(
+        coordinates.wgs_depth_to_nztm(
+            fault_a.fault_coordinates_to_wgs_depth_coordinates(point_a)
+        )
+        - coordinates.wgs_depth_to_nztm(
+            fault_b.fault_coordinates_to_wgs_depth_coordinates(point_b)
+        )
+    )
+    assert distance == pytest.approx(np.hypot(7e3, 5e3), rel=1e-3)
