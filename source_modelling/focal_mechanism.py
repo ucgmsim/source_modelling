@@ -494,9 +494,16 @@ class FaultSegmentIndex:
 
 
 def _parse_centroid(centroid: npt.ArrayLike) -> tuple[float, float, float]:
-    """Split a (lat, lon[, depth_km]) centroid, warning if the depth is missing."""
+    """Split a (lat, lon[, depth_km]) centroid, warning if the depth is missing.
+
+    A non-finite depth (e.g. NaN from a catalogue) counts as missing.
+    """
     centroid = np.asarray(centroid, dtype=float).ravel()
-    if centroid.size == 2:
+    if centroid.size not in (2, 3):
+        raise ValueError("Centroid must be (lat, lon) or (lat, lon, depth_km).")
+    if not np.all(np.isfinite(centroid[:2])):
+        raise ValueError("Centroid latitude and longitude must be finite.")
+    if centroid.size == 2 or not np.isfinite(centroid[2]):
         warnings.warn(
             "Centroid given without depth; assuming "
             f"{DEFAULT_CENTROID_DEPTH_KM} km. Pass (lat, lon, depth_km) for "
@@ -504,8 +511,6 @@ def _parse_centroid(centroid: npt.ArrayLike) -> tuple[float, float, float]:
             stacklevel=3,
         )
         return float(centroid[0]), float(centroid[1]), DEFAULT_CENTROID_DEPTH_KM
-    if centroid.size != 3:
-        raise ValueError("Centroid must be (lat, lon) or (lat, lon, depth_km).")
     return float(centroid[0]), float(centroid[1]), float(centroid[2])
 
 
@@ -716,8 +721,8 @@ class CMTClassifier:
         Parameters
         ----------
         centroid : npt.ArrayLike
-            Centroid as (lat, lon, depth_km). If depth is omitted a default
-            is assumed with a warning.
+            Centroid as (lat, lon, depth_km). If depth is omitted or NaN a
+            default is assumed with a warning.
         nodal_plane_1 : NodalPlane
             First nodal plane.
         nodal_plane_2 : NodalPlane
@@ -754,8 +759,8 @@ class CMTClassifier:
         Parameters
         ----------
         centroid : npt.ArrayLike
-            Centroid as (lat, lon, depth_km). If depth is omitted a default
-            is assumed with a warning.
+            Centroid as (lat, lon, depth_km). If depth is omitted or NaN a
+            default is assumed with a warning.
         nodal_plane_1 : NodalPlane
             First nodal plane.
         nodal_plane_2 : NodalPlane
@@ -782,8 +787,8 @@ class CMTClassifier:
         Parameters
         ----------
         centroid : npt.ArrayLike
-            Centroid as (lat, lon, depth_km). If depth is omitted a default
-            is assumed with a warning.
+            Centroid as (lat, lon, depth_km). If depth is omitted or NaN a
+            default is assumed with a warning.
         nodal_plane_1 : NodalPlane
             First nodal plane.
         nodal_plane_2 : NodalPlane
@@ -810,8 +815,8 @@ class CMTClassifier:
         Parameters
         ----------
         centroid : npt.ArrayLike
-            Centroid as (lat, lon, depth_km). If depth is omitted a default
-            is assumed with a warning.
+            Centroid as (lat, lon, depth_km). If depth is omitted or NaN a
+            default is assumed with a warning.
         nodal_plane_1 : NodalPlane | None, optional
             First nodal plane, None without a focal mechanism.
         nodal_plane_2 : NodalPlane | None, optional
@@ -857,8 +862,8 @@ class CMTClassifier:
         Parameters
         ----------
         centroid : npt.ArrayLike
-            Centroid as (lat, lon, depth_km). If depth is omitted a default
-            is assumed with a warning.
+            Centroid as (lat, lon, depth_km). If depth is omitted or NaN a
+            default is assumed with a warning.
         nodal_plane_1 : NodalPlane | None, optional
             First nodal plane, None without a focal mechanism.
         nodal_plane_2 : NodalPlane | None, optional

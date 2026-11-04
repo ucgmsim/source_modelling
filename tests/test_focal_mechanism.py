@@ -60,6 +60,39 @@ def test_centroid_without_depth_warns(classifier: focal_mechanism.CMTClassifier)
         classifier.most_likely_nodal_plane(CENTROID[:2], PLANE_1, PLANE_2)
 
 
+def test_centroid_with_nan_depth_uses_default_depth(
+    classifier: focal_mechanism.CMTClassifier,
+):
+    nan_centroid = [*CENTROID[:2], np.nan]
+    default_centroid = [*CENTROID[:2], focal_mechanism.DEFAULT_CENTROID_DEPTH_KM]
+    with pytest.warns(UserWarning, match="without depth"):
+        probabilities = classifier.tectonic_type_probabilities(
+            nan_centroid, PLANE_1, PLANE_2
+        )
+    assert probabilities == classifier.tectonic_type_probabilities(
+        default_centroid, PLANE_1, PLANE_2
+    )
+    with pytest.warns(UserWarning, match="without depth"):
+        tectonic_type = classifier.tectonic_type(nan_centroid, PLANE_1, PLANE_2)
+    assert tectonic_type == classifier.tectonic_type(default_centroid, PLANE_1, PLANE_2)
+    with pytest.warns(UserWarning, match="without depth"):
+        plane = classifier.most_likely_nodal_plane(nan_centroid, PLANE_1, PLANE_2)
+    assert plane == classifier.most_likely_nodal_plane(
+        default_centroid, PLANE_1, PLANE_2
+    )
+
+
+@pytest.mark.parametrize(
+    "centroid",
+    [[np.nan, 166.83, 22.0], [-45.1929, np.inf, 22.0], [np.nan, 166.83]],
+)
+def test_centroid_with_non_finite_lat_lon_raises(
+    classifier: focal_mechanism.CMTClassifier, centroid: list[float]
+):
+    with pytest.raises(ValueError, match="latitude and longitude must be finite"):
+        classifier.tectonic_type(centroid, PLANE_1, PLANE_2)
+
+
 def test_slab_query():
     slab_model = focal_mechanism.SlabModel.load()
     # Hikurangi interface beneath Wellington, in either longitude convention.
