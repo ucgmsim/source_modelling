@@ -719,3 +719,67 @@ def test_probability_graph_keeps_isolated_nodes():
     )
     assert "c" in graph.nodes
     assert graph.degree("c") == 0
+
+
+def test_probability_graph_records_distance():
+    graph = rupture_propagation.probability_graph(
+        {"a": {"b": 4000.0}, "b": {"a": 4000.0}}
+    )
+    assert graph["a"]["b"]["distance"] == pytest.approx(4000.0)
+
+
+def test_most_likely_spanning_tree_breaks_cap_ties_by_distance():
+    # AB, AC and BC are all at the cap. Inserted in the order AB, AC, BC,
+    # an insertion-order tie-break keeps AC and drops BC, although BC is
+    # the shorter jump. With the distance tie-break, BC is kept.
+    distances = {
+        "a": {"b": 500.0, "c": 1030.0},
+        "b": {"a": 500.0, "c": 800.0},
+        "c": {"a": 1030.0, "b": 800.0},
+    }
+    graph = rupture_propagation.probability_graph(distances, d0=5, delta=1)
+    assert all(
+        data["weight"] == pytest.approx(0.99) for *_, data in graph.edges(data=True)
+    )
+    tree = rupture_propagation.most_likely_spanning_tree(graph)
+    assert {frozenset(edge) for edge in tree.edges} == {
+        frozenset(("a", "b")),
+        frozenset(("b", "c")),
+    }
+
+
+@pytest.mark.parametrize("d0", [2.0, 3.0, 5.0, 20.0])
+def test_most_likely_spanning_tree_is_independent_of_d0(d0: float):
+    # The same distances under every length scale give the same tree: the
+    # distance model preserves the ordering of the separations, and the
+    # cap ties are broken by separation.
+    distances = {
+        "a": {"b": 500.0, "c": 1030.0, "d": 6000.0},
+        "b": {"a": 500.0, "c": 800.0, "d": 4000.0},
+        "c": {"a": 1030.0, "b": 800.0, "d": 1045.0},
+        "d": {"a": 6000.0, "b": 4000.0, "c": 1045.0},
+    }
+    reference = rupture_propagation.most_likely_spanning_tree(
+        rupture_propagation.probability_graph(distances, d0=2.0, delta=1)
+    )
+    tree = rupture_propagation.most_likely_spanning_tree(
+        rupture_propagation.probability_graph(distances, d0=d0, delta=1)
+    )
+    assert {frozenset(edge) for edge in tree.edges} == {
+        frozenset(edge) for edge in reference.edges
+    }
+
+
+def test_most_likely_spanning_tree_without_distance_keeps_insertion_order():
+    graph = nx.Graph(
+        [
+            ("a", "b", {"weight": 0.99}),
+            ("a", "c", {"weight": 0.99}),
+            ("b", "c", {"weight": 0.99}),
+        ]
+    )
+    tree = rupture_propagation.most_likely_spanning_tree(graph)
+    assert {frozenset(edge) for edge in tree.edges} == {
+        frozenset(("a", "b")),
+        frozenset(("a", "c")),
+    }

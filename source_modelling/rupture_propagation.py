@@ -244,16 +244,28 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
     """
     Generate the most likely spanning tree for a probability graph G.
 
+    Edges of equal probability are taken in order of increasing
+    ``distance`` where the edges carry that attribute (as those built
+    by :func:`probability_graph` do). Edge probabilities are capped, so
+    every edge at the cap ties, and without this rule the tie would be
+    broken by the order in which the edges were inserted into the
+    graph. Breaking it by distance makes the tree depend only on the
+    ordering of the separations, so that it is the same for every
+    value of the length scale of the distance model.
+
     Parameters
     ----------
     graph : nx.Graph
         The input graph from which to generate spanning trees. Edge
         weights are probabilities of inclusion in the range [0, 1).
+        An optional ``distance`` edge attribute breaks ties between
+        edges of equal weight.
 
     Returns
     -------
     nx.Graph
-        The most likely maximum spanning tree for this graph.
+        The most likely maximum spanning tree for this graph. Edge
+        weights are the log-odds, log(w / (1 - w)), of the input weights.
 
     Raises
     ------
@@ -273,7 +285,21 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
             1 - edge_weight
         )
 
-    return nx.maximum_spanning_tree(weighted_graph)
+    # Kruskal's algorithm, with the sort key extended by distance. The
+    # sort is stable, so edges that tie on both keys keep insertion order,
+    # which is what nx.maximum_spanning_tree would do for every tie.
+    edges = sorted(
+        weighted_graph.edges(data=True),
+        key=lambda edge: (-edge[2]["weight"], edge[2].get("distance", 0.0)),
+    )
+    tree = nx.Graph()
+    tree.add_nodes_from(weighted_graph.nodes(data=True))
+    components = nx.utils.UnionFind(weighted_graph.nodes)
+    for node_u, node_v, data in edges:
+        if components[node_u] != components[node_v]:
+            components.union(node_u, node_v)
+            tree.add_edge(node_u, node_v, **data)
+    return tree
 
 
 JumpPair = namedtuple("JumpPair", ["from_point", "to_point"])
@@ -358,7 +384,10 @@ def probability_graph(
     -------
     nx.Graph
         An undirected graph where edges are weighted by probabilities of rupture
-        propagation between faults.
+        propagation between faults. Each edge also carries its separation, in
+        the units of `distances`, as ``distance``, which
+        :func:`most_likely_spanning_tree` uses to break ties between edges
+        at the probability cap.
     """
 
     return nx.from_dict_of_dicts(
@@ -367,7 +396,8 @@ def probability_graph(
                 fault_v: {
                     "weight": min(
                         shaw_dieterich_distance_model(distance / 1000, d0, delta), 0.99
-                    )
+                    ),
+                    "distance": distance,
                 }
                 for fault_v, distance in neighbours_fault_u.items()
             }
