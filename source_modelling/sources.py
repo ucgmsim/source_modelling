@@ -1712,6 +1712,7 @@ def closest_point_between_sources(
     seed_points : int, optional
         Number of grid points along strike and along dip on each source
         from which the starting point is chosen.
+
     Raises
     ------
     ValueError
