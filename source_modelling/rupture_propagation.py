@@ -245,13 +245,8 @@ def most_likely_spanning_tree(graph: nx.Graph) -> nx.Graph:
     Generate the most likely spanning tree for a probability graph G.
 
     Edges of equal probability are taken in order of increasing
-    ``distance`` where the edges carry that attribute (as those built
-    by :func:`probability_graph` do). Edge probabilities are capped, so
-    every edge at the cap ties, and without this rule the tie would be
-    broken by the order in which the edges were inserted into the
-    graph. Breaking it by distance makes the tree depend only on the
-    ordering of the separations, so that it is the same for every
-    value of the length scale of the distance model.
+    ``distance`` where the edges have that attribute (as those built
+    by :func:`probability_graph` do).
 
     Parameters
     ----------
