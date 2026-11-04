@@ -1698,10 +1698,6 @@ def closest_point_between_sources(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
 
-    The distance between two multi-plane faults is not convex in their
-    fault coordinates, so a local optimiser started from the midpoints
-    can stop at a local minimum. The optimiser is therefore started from
-    the closest pair on a coarse grid of points on each source.
 
     Parameters
     ----------
@@ -1715,9 +1711,7 @@ def closest_point_between_sources(
         The coordinate bounds of the second source. Default is unconstrained.
     seed_points : int, optional
         Number of grid points along strike and along dip on each source
-        from which the starting point is chosen. Default is 5. A value of
-        1 starts from the midpoints, as earlier versions did.
-
+        from which the starting point is chosen.
     Raises
     ------
     ValueError
