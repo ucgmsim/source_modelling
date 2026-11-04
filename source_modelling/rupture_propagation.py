@@ -334,7 +334,9 @@ def shaw_dieterich_distance_model(distance: float, d0: float, delta: float) -> f
     return min(1, np.exp(-(distance - delta) / d0))
 
 
-def prune_distance_graph(distances: DistanceGraph, cutoff: float) -> DistanceGraph:
+def prune_distance_graph(
+    distances: DistanceGraph, cutoff: float, tolerance: float = 100.0
+) -> DistanceGraph:
     """
     Remove edges from a distance graph that exceed a cutoff.
 
@@ -344,18 +346,29 @@ def prune_distance_graph(distances: DistanceGraph, cutoff: float) -> DistanceGra
         A dictionary representing the graph of distances between faults.
     cutoff : float
         The maximum allowed distance (in metres) for edges in the graph.
+        A pair at exactly the cutoff is kept: the cutoff is a maximum
+        separation, as in the rupture-set construction that it mirrors.
+    tolerance : float, optional
+        Allowance (in metres) added to the cutoff. Default is 100 m. The
+        separations here are measured on the continuous fault surfaces,
+        whereas a rupture set (e.g. the NZ NSHM 2022, built with a 15 km
+        jump limit) measured them on its own discretised subsections, so a
+        pair that the rupture set admitted at the limit can be measured a
+        few tens of metres beyond it. Without the allowance such ruptures
+        would be reported as disconnected.
 
     Returns
     -------
     DistanceGraph
         A pruned copy of the input distance graph, containing only edges with
-        distances less than the cutoff.
+        distances less than or equal to the cutoff plus the tolerance.
     """
+    limit = cutoff + tolerance
     return {
         fault_u: {
             fault_v: distance
             for fault_v, distance in neighbours_fault_u.items()
-            if distance < cutoff
+            if distance <= limit
         }
         for fault_u, neighbours_fault_u in distances.items()
     }

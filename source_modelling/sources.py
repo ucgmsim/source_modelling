@@ -1694,8 +1694,14 @@ def closest_point_between_sources(
     source_b: IsSource,
     source_a_coordinate_bounds: CoordinateBounds = DEFAULT_BOUNDS,
     source_b_coordinate_bounds: CoordinateBounds = DEFAULT_BOUNDS,
+    seed_points: int = 5,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Find the closest point between two sources that have local coordinates.
+
+    The distance between two multi-plane faults is not convex in their
+    fault coordinates, so a local optimiser started from the midpoints
+    can stop at a local minimum. The optimiser is therefore started from
+    the closest pair on a coarse grid of points on each source.
 
     Parameters
     ----------
@@ -1707,6 +1713,10 @@ def closest_point_between_sources(
         The coordinate bounds of the first source. Default is unconstrained.
     source_b_coordinate_bounds : CoordinateBounds, optional
         The coordinate bounds of the second source. Default is unconstrained.
+    seed_points : int, optional
+        Number of grid points along strike and along dip on each source
+        from which the starting point is chosen. Default is 5. A value of
+        1 starts from the midpoints, as earlier versions did.
 
     Raises
     ------
@@ -1744,20 +1754,38 @@ def closest_point_between_sources(
         source_b_coordinate_bounds[2:]
     )
 
-    initial_point_a = (
-        (source_a_coordinate_bounds.min_strike + source_a_coordinate_bounds.max_strike)
-        / 2,
-        (source_a_coordinate_bounds.min_dip + source_a_coordinate_bounds.max_dip) / 2,
+    def seed_grid(bounds: CoordinateBounds) -> np.ndarray:  # numpydoc ignore=GL08
+        # The midpoint comes first, so that where several seeds are equally
+        # close (e.g. coincident sources) the start is the midpoint, as in
+        # earlier versions.
+        midpoint = [
+            (bounds.min_strike + bounds.max_strike) / 2,
+            (bounds.min_dip + bounds.max_dip) / 2,
+        ]
+        if seed_points <= 1:
+            return np.array([midpoint])
+        strike = np.linspace(bounds.min_strike, bounds.max_strike, seed_points)
+        dip = np.linspace(bounds.min_dip, bounds.max_dip, seed_points)
+        return np.array([midpoint, *([s, d] for s in strike for d in dip)])
+
+    seeds_a = seed_grid(CoordinateBounds(*source_a_coordinate_bounds))
+    seeds_b = seed_grid(CoordinateBounds(*source_b_coordinate_bounds))
+    nztm_a = coordinates.wgs_depth_to_nztm(
+        np.array(
+            [source_a.fault_coordinates_to_wgs_depth_coordinates(p) for p in seeds_a]
+        )
     )
-    initial_point_b = (
-        (source_b_coordinate_bounds.min_strike + source_b_coordinate_bounds.max_strike)
-        / 2,
-        (source_b_coordinate_bounds.min_dip + source_b_coordinate_bounds.max_dip) / 2,
+    nztm_b = coordinates.wgs_depth_to_nztm(
+        np.array(
+            [source_b.fault_coordinates_to_wgs_depth_coordinates(p) for p in seeds_b]
+        )
     )
+    separation = np.linalg.norm(nztm_a[:, None, :] - nztm_b[None, :, :], axis=-1)
+    seed_a, seed_b = np.unravel_index(np.argmin(separation), separation.shape)
 
     res = sp.optimize.least_squares(
         fault_coordinate_distance,
-        np.array([*initial_point_a, *initial_point_b]),
+        np.array([*seeds_a[seed_a], *seeds_b[seed_b]]),
         bounds=(min_bounds, max_bounds),
         gtol=1e-5,
         ftol=1e-5,

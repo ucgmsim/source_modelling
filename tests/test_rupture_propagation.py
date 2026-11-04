@@ -685,19 +685,20 @@ def test_shaw_dieterich_distance_model_clipped_below_delta():
 
 def test_prune_distance_graph_removes_edges_beyond_cutoff():
     assert rupture_propagation.prune_distance_graph(
-        {"a": {"b": 10.0, "c": 20.0}}, cutoff=15.0
+        {"a": {"b": 10.0, "c": 20.0}}, cutoff=15.0, tolerance=0.0
     ) == {"a": {"b": 10.0}}
 
 
-def test_prune_distance_graph_cutoff_is_strict():
+def test_prune_distance_graph_cutoff_is_inclusive():
+    # The cutoff is a maximum separation, so a pair exactly at it is kept.
     assert rupture_propagation.prune_distance_graph(
-        {"a": {"b": 15.0}}, cutoff=15.0
-    ) == {"a": {}}
+        {"a": {"b": 15.0}}, cutoff=15.0, tolerance=0.0
+    ) == {"a": {"b": 15.0}}
 
 
 def test_prune_distance_graph_keeps_isolated_faults():
     assert rupture_propagation.prune_distance_graph(
-        {"a": {"b": 20.0}, "b": {"a": 20.0}}, cutoff=15.0
+        {"a": {"b": 20.0}, "b": {"a": 20.0}}, cutoff=15.0, tolerance=0.0
     ) == {"a": {}, "b": {}}
 
 
@@ -783,3 +784,16 @@ def test_most_likely_spanning_tree_without_distance_keeps_insertion_order():
         frozenset(("a", "b")),
         frozenset(("a", "c")),
     }
+
+
+def test_prune_distance_graph_tolerance():
+    # The default allowance of 100 m keeps a pair 57 m beyond the cutoff
+    # (Alpine: Jacksons to Kaniere to Hunter Valley in the NZ NSHM 2022,
+    # 15.057 km against a 15 km limit) and drops one 101 m beyond it.
+    distances = {"a": {"b": 15_057.0, "c": 15_101.0}}
+    assert rupture_propagation.prune_distance_graph(distances, cutoff=15_000.0) == {
+        "a": {"b": 15_057.0}
+    }
+    assert rupture_propagation.prune_distance_graph(
+        distances, cutoff=15_000.0, tolerance=0.0
+    ) == {"a": {}}
