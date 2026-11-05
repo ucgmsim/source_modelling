@@ -1841,3 +1841,36 @@ def test_closest_point_between_sources_escapes_local_minimum():
         )
     )
     assert distance == pytest.approx(np.hypot(7e3, 5e3), rel=1e-3)
+
+
+def test_closest_point_between_sources_does_not_stall_on_an_edge_seed():
+    """The closest grid seed can lie on a fault edge, where the optimiser stalls.
+
+    Cape Foulwind 1 and Hohonu: South (NZ NSHM 2022 rupture 114572) are
+    14.49 km apart. Started only from the closest grid seed, on the end of
+    Hohonu: South, the optimiser stopped at 15.44 km, beyond the 15 km jump
+    limit, which disconnected 13 ruptures.
+    """
+    with open(DATA_PATH / "closest_point_faults.json") as f:
+        fault_json = json.load(f)
+
+    def load(name: str) -> Fault:
+        corners = np.array(
+            [
+                [corner["latitude"], corner["longitude"], corner["depth"]]
+                for corner in fault_json[name]["corners"]
+            ]
+        ).reshape((-1, 4, 3))
+        return Fault(planes=[Plane.from_corners(c) for c in corners])
+
+    fault_a, fault_b = load("Cape Foulwind 1"), load("Hohonu: South")
+    point_a, point_b = sources.closest_point_between_sources(fault_a, fault_b)
+    distance = np.linalg.norm(
+        coordinates.wgs_depth_to_nztm(
+            fault_a.fault_coordinates_to_wgs_depth_coordinates(point_a)
+        )
+        - coordinates.wgs_depth_to_nztm(
+            fault_b.fault_coordinates_to_wgs_depth_coordinates(point_b)
+        )
+    )
+    assert distance < 14.6e3
