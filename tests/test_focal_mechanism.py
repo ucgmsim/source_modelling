@@ -215,3 +215,123 @@ def test_tectonic_type(classifier: focal_mechanism.CMTClassifier):
     assert (
         classifier.tectonic_type([-43.5, 172.6, 10.0], thrust) == TectonicType.CRUSTAL
     )
+
+
+@pytest.mark.parametrize(
+    "a, b, period, expected",
+    [
+        (350.0, 10.0, 360.0, 20.0),
+        (10.0, 350.0, 360.0, 20.0),
+        (0.0, 180.0, 360.0, 180.0),
+        (720.0, 0.0, 360.0, 0.0),
+        (170.0, 10.0, 180.0, 20.0),
+        (90.0, 270.0, 180.0, 0.0),
+    ],
+)
+def test_angular_difference(a: float, b: float, period: float, expected: float):
+    assert focal_mechanism._angular_difference(a, b, period) == pytest.approx(expected)
+
+
+def test_angular_difference_default_period_is_360():
+    assert focal_mechanism._angular_difference(350.0, 10.0) == pytest.approx(20.0)
+    assert focal_mechanism._angular_difference(
+        [0.0, 359.0, 180.0], 1.0
+    ) == pytest.approx([1.0, 2.0, 179.0])
+
+
+@pytest.mark.parametrize(
+    "strike, dip, rake",
+    [(30.0, 40.0, 60.0), (120.0, 70.0, -45.0), (250.0, 20.0, 135.0)],
+)
+def test_slip_vector_lies_in_plane_along_rake(strike: float, dip: float, rake: float):
+    phi, delta, lam = np.radians([strike, dip, rake])
+    along_strike = np.array([np.cos(phi), np.sin(phi), 0.0])
+    up_dip = np.array(
+        [np.sin(phi) * np.cos(delta), -np.cos(phi) * np.cos(delta), -np.sin(delta)]
+    )
+    slip = focal_mechanism._slip_vector(strike, dip, rake)
+    assert slip == pytest.approx(np.cos(lam) * along_strike + np.sin(lam) * up_dip)
+    assert np.linalg.norm(slip) == pytest.approx(1.0)
+    assert slip @ focal_mechanism._plane_normal(strike, dip) == pytest.approx(
+        0.0, abs=1e-12
+    )
+
+
+def test_kagan_angle_is_invariant_to_strike_rotation():
+    # Rotating both mechanisms about the vertical leaves the Kagan angle unchanged.
+    plane_a = NodalPlane(0.0, 40.0, 60.0)
+    plane_b = NodalPlane(0.0, 40.0, 100.0)
+    expected = focal_mechanism.kagan_angle(plane_a, plane_b)
+    assert expected == pytest.approx(40.0, abs=1e-4)
+    for rotation in [37.0, 123.0, 211.0]:
+        rotated_a = NodalPlane(rotation, plane_a.dip, plane_a.rake)
+        rotated_b = NodalPlane(rotation, plane_b.dip, plane_b.rake)
+        assert focal_mechanism.kagan_angle(rotated_a, rotated_b) == pytest.approx(
+            expected, abs=1e-4
+        )
+
+
+def _synthetic_slab_grids() -> dict[str, np.ndarray]:
+    lats = np.array([-42.0, -41.0])
+    return {
+        # A region in 0..360 longitudes whose strike wraps through north.
+        "aaa_lat": lats,
+        "aaa_lon": np.array([181.0, 182.0]),
+        "aaa_depth": np.array([[10.0, 20.0], [30.0, 40.0]]),
+        "aaa_dip": np.array([[10.0, 10.0], [30.0, 30.0]]),
+        "aaa_strike": np.array([[350.0, 10.0], [350.0, 10.0]]),
+        # A region in -180..180 longitudes.
+        "bbb_lat": lats,
+        "bbb_lon": np.array([170.0, 171.0]),
+        "bbb_depth": np.full((2, 2), 50.0),
+        "bbb_dip": np.full((2, 2), 45.0),
+        "bbb_strike": np.full((2, 2), 90.0),
+    }
+
+
+def test_slab_model_from_grids():
+    zone = focal_mechanism.SeismogenicZone(25.0, 80.0)
+    slab_model = focal_mechanism.SlabModel(_synthetic_slab_grids(), {"aaa": zone})
+
+    # Bilinear interpolation at the cell centre; strike averages through north.
+    centre = slab_model.query(-41.5, 181.5)
+    assert centre.present
+    assert centre.depth == pytest.approx(25.0)
+    assert centre.dip == pytest.approx(20.0)
+    assert min(centre.strike, 360.0 - centre.strike) == pytest.approx(0.0, abs=1e-9)
+    assert centre.seismogenic_zone == zone
+    # Corners reproduce the grid values, in either longitude convention.
+    corner = slab_model.query(-42.0, 182.0)
+    assert (corner.depth, corner.dip, corner.strike) == pytest.approx(
+        (20.0, 10.0, 10.0)
+    )
+    assert slab_model.query(-42.0, 182.0 - 360.0) == corner
+
+    # A region without a seismogenic zone takes the default.
+    other = slab_model.query(-41.5, 170.5)
+    assert (other.depth, other.dip, other.strike) == pytest.approx((50.0, 45.0, 90.0))
+    assert other.seismogenic_zone == focal_mechanism.DEFAULT_SEISMOGENIC_ZONE
+    assert slab_model.query(-41.5, 170.5 + 360.0) == other
+
+    # Outside both regions.
+    outside = slab_model.query(-30.0, 175.0)
+    assert not outside.present
+    assert np.isnan(outside.dip) and np.isnan(outside.strike)
+
+
+@pytest.mark.parametrize("centroid", [[-45.0], [-45.0, 166.0, 10.0, 1.0], []])
+def test_centroid_with_wrong_size_raises(
+    classifier: focal_mechanism.CMTClassifier, centroid: list[float]
+):
+    with pytest.raises(ValueError, match=r"\(lat, lon\) or \(lat, lon, depth_km\)"):
+        classifier.tectonic_type(centroid, PLANE_1, PLANE_2)
+
+
+def test_from_faults_rejects_mismatched_features(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        focal_mechanism,
+        "NODAL_PLANE_FEATURE_NAMES",
+        focal_mechanism.NODAL_PLANE_FEATURE_NAMES[::-1],
+    )
+    with pytest.raises(ValueError, match="does not match the features"):
+        focal_mechanism.CMTClassifier.from_faults([])
