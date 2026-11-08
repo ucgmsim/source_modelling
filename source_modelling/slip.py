@@ -4,6 +4,17 @@ import numpy as np
 import numpy.typing as npt
 
 
+def _safe_duration(start: np.ndarray, end: np.ndarray) -> np.ndarray:
+    """Return ``end - start``, replacing non-positive durations with 1.
+
+    The replacement value never reaches a returned result; it only
+    prevents division by zero in ``np.where`` branches that are masked
+    out.
+    """
+    duration = end - start
+    return np.where(duration > 0, duration, 1.0)
+
+
 def rise_time_from_moment(moment: npt.ArrayLike) -> npt.NDArray[np.floating]:
     """Compute approximate rise time from rupture moment.
 
@@ -48,12 +59,14 @@ def box_car_slip(
 
         f(t) = slip / (t1 - t0) if t0 <= t <= t1
         f(t) = 0                otherwise
+
+        If t1 == t0 (zero duration), f(t) = 0 everywhere.
     """
     t0 = np.asarray(t0)
     t1 = np.asarray(t1)
     t = np.asarray(t)
     slip = np.asarray(slip)
-    return np.where((t >= t0) & (t <= t1), slip / (t1 - t0), 0)
+    return np.where((t >= t0) & (t <= t1) & (t1 > t0), slip / _safe_duration(t0, t1), 0)
 
 
 def triangular_slip(
@@ -86,21 +99,21 @@ def triangular_slip(
         f(t) = 2 * slip / (t1 - t0) * (t - t0) / (peak - t0), if t0 <= t <= peak
         f(t) = 2 * slip / (t1 - t0) * (1 - (t - peak) / (t1 - peak))
         f(t) = 0 otherwise
+
+        The peak may coincide with t0 or t1, giving a right-angled
+        triangle. If t1 == t0 (zero duration), f(t) = 0 everywhere.
     """
     t = np.asarray(t)
     t0 = np.asarray(t0)
     t1 = np.asarray(t1)
     peak = np.asarray(peak)
     slip = np.asarray(slip)
-    return (
-        np.where(
-            (t >= t0) & (t <= t1),
-            np.minimum((t - t0) / (peak - t0), 1 - (t - peak) / (t1 - peak)),
-            0,
-        )
-        * 2
-        * slip
-        / (t1 - t0)
+    rising = np.where(peak > t0, (t - t0) / _safe_duration(t0, peak), 1)
+    falling = np.where(t1 > peak, 1 - (t - peak) / _safe_duration(peak, t1), 1)
+    return np.where(
+        (t >= t0) & (t <= t1) & (t1 > t0),
+        np.minimum(rising, falling) * 2 * slip / _safe_duration(t0, t1),
+        0,
     )
 
 
@@ -154,10 +167,16 @@ def cosine_slip(
 
         f(t) = cos(((t - t0) / (t1 - t0) - 1 / 2) * pi)  for t0 <= t <= t1
         f(t) = 0 otherwise
+
+        If t1 == t0 (zero duration), f(t) = 0 everywhere.
     """
     t0 = np.asarray(t0)
     t1 = np.asarray(t1)
     slip = np.asarray(slip)
-    return (np.pi * slip / (2 * (t1 - t0))) * np.where(
-        (t >= t0) & (t <= t1), np.cos((t - t0) / (t1 - t0) * np.pi - np.pi / 2), 0
+    duration = _safe_duration(t0, t1)
+    return np.where(
+        (t >= t0) & (t <= t1) & (t1 > t0),
+        (np.pi * slip / (2 * duration))
+        * np.cos((t - t0) / duration * np.pi - np.pi / 2),
+        0,
     )
