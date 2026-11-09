@@ -1164,6 +1164,18 @@ def test_fault_construction_failures(planes: list[Plane], expected_message: str)
     assert expected_message in str(excinfo.value)
 
 
+def test_fault_cyclic_planes_raises_value_error():
+    """Planes whose strike edges form a cycle raise a ValueError (issue #151)."""
+    origin = coordinates.wgs_depth_to_nztm(np.array([-43.5, 172.6]))
+    trace = np.array([origin, origin + [10000.0, 0.0]])
+    # Same trace, dipping in opposite directions: each plane's right edge
+    # meets the other's left edge, so the connectivity graph is a 2-cycle.
+    a = Plane.from_nztm_trace(trace, 0, 10, 45, dip_dir_nztm=90)
+    b = Plane.from_nztm_trace(trace, 0, 10, 45, dip_dir_nztm=270)
+    with pytest.raises(ValueError, match="Fault planes must be connected in a line"):
+        Fault([a, b])
+
+
 @pytest.mark.parametrize(
     ("fault_name"),
     [

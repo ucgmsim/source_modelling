@@ -1125,6 +1125,10 @@ class Fault:
         try:
             self._validate_fault_plane_connectivity(points_into_graph)
         except ValueError:
+            # A cyclic graph cannot be reduced (transitive reduction
+            # requires a DAG), so it can never be a line.
+            if not nx.is_directed_acyclic_graph(points_into_graph):
+                raise
             # Sometimes, faults with small segments can confuse the
             # connectivity check, so we can apply a transitive
             # reduction and then do the check again (with a warning).
