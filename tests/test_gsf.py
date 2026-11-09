@@ -395,3 +395,151 @@ def test_write_gsf_does_not_mutate_input(tmp_path: Path):
     with pytest.raises(ValueError, match="loc_rake"):
         gsf.write_gsf(missing_rake, tmp_path / "out2.gsf")
     assert list(missing_rake.columns) == expected_columns
+
+
+def _expected_patch_centres(bounds: np.ndarray, nx: int, ny: int) -> np.ndarray:
+    """Patch centres of a plane in NZTM, as an (ny, nx, 3) array.
+
+    Computed independently of ``qcore.grid``: the centre of patch (j, i) is
+    the top-left corner plus ``(i + 1/2) / nx`` of the strike edge and
+    ``(j + 1/2) / ny`` of the dip edge.
+    """
+    strike_edge = bounds[1] - bounds[0]
+    dip_edge = bounds[-1] - bounds[0]
+    alpha = (np.arange(nx) + 0.5) / nx
+    beta = (np.arange(ny) + 0.5) / ny
+    return (
+        bounds[0]
+        + alpha[np.newaxis, :, np.newaxis] * strike_edge
+        + beta[:, np.newaxis, np.newaxis] * dip_edge
+    )
+
+
+def test_fault_gsf_exact_patch_centres():
+    """Every row of the GSF frame is the centre of a patch, in a fixed order.
+
+    The frame is ordered by dip row, then by segment, then along strike, and
+    depths are reported in kilometres.
+    """
+    north, east = 5_200_000.0, 1_570_000.0
+    # Two adjoining planes striking north and dipping east: widths are
+    # 5 km (3 km east, 4 km down), lengths 4 km and 2 km.
+    plane_a_bounds = np.array(
+        [
+            [north, east, 0.0],
+            [north + 4000.0, east, 0.0],
+            [north + 4000.0, east + 3000.0, 4000.0],
+            [north, east + 3000.0, 4000.0],
+        ]
+    )
+    plane_b_bounds = np.array(
+        [
+            [north + 4000.0, east, 0.0],
+            [north + 6000.0, east, 0.0],
+            [north + 6000.0, east + 3000.0, 4000.0],
+            [north + 4000.0, east + 3000.0, 4000.0],
+        ]
+    )
+    fault = Fault(planes=[Plane(bounds=plane_a_bounds), Plane(bounds=plane_b_bounds)])
+
+    gsf_df = gsf.source_to_gsf_dataframe(fault, 1.0)
+
+    centres_a = _expected_patch_centres(plane_a_bounds, nx=4, ny=5)
+    centres_b = _expected_patch_centres(plane_b_bounds, nx=2, ny=5)
+    expected_nztm = np.vstack(
+        [np.vstack([centres_a[j], centres_b[j]]) for j in range(5)]
+    )
+    expected_seg_no = np.tile([0] * 4 + [1] * 2, 5)
+    expected_wgs = coordinates.nztm_to_wgs_depth(expected_nztm)
+
+    assert len(gsf_df) == 30
+    np.testing.assert_allclose(gsf_df["lat"].to_numpy(), expected_wgs[:, 0], atol=1e-6)
+    np.testing.assert_allclose(gsf_df["lon"].to_numpy(), expected_wgs[:, 1], atol=1e-6)
+    # Depths go from metres to kilometres: 0.4 km for the top row of patches
+    # down to 3.6 km for the bottom row.
+    np.testing.assert_allclose(
+        gsf_df["dep"].to_numpy(), expected_nztm[:, 2] / 1000, atol=1e-6
+    )
+    assert sorted(gsf_df["dep"].unique()) == pytest.approx([0.4, 1.2, 2.0, 2.8, 3.6])
+    np.testing.assert_array_equal(gsf_df["seg_no"].to_numpy(), expected_seg_no)
+    np.testing.assert_allclose(gsf_df["sub_dx"].to_numpy(), 1.0)
+    np.testing.assert_allclose(gsf_df["sub_dy"].to_numpy(), 1.0)
+
+
+def test_bad_gsf_type_message():
+    """The TypeError names the type that was rejected."""
+    with pytest.raises(TypeError, match=r"^Unsupported source type: <class 'str'>$"):
+        gsf.source_to_gsf_dataframe("not a source", 1.0)  # ty: ignore[invalid-argument-type]
+
+
+def test_write_bad_df_exact_message(tmp_path: Path):
+    """The missing loc_rake error message is exactly as documented."""
+    df = pd.DataFrame({"lon": [1.0], "lat": [2.0], "dep": [3.0]})
+    with pytest.raises(
+        ValueError, match=r"^The DataFrame must have a 'loc_rake' column\.$"
+    ):
+        gsf.write_gsf(df, tmp_path / "out.gsf")
+
+
+def _base_gsf_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "lon": [172.5, 172.25],
+            "lat": [-43.5, -43.75],
+            "dep": [1.5, 2.5],
+            "sub_dx": [0.5, 0.25],
+            "sub_dy": [0.75, 0.125],
+            "loc_stk": [10.0, 20.0],
+            "loc_dip": [30.0, 40.0],
+            "loc_rake": [90.0, 180.0],
+            "seg_no": [0, 1],
+        }
+    )
+
+
+def test_write_gsf_exact_file_contents(tmp_path: Path):
+    """write_gsf writes the point count, then one line per row without header
+    or index, in the fixed GSF column order regardless of the frame's column
+    order or any extra columns. Missing slip and init_time default to -1."""
+    df = _base_gsf_frame()
+    # Shuffle the columns and add one that GSF does not know about.
+    df = df[list(reversed(df.columns))].assign(extra=[99, 98])
+    filepath = tmp_path / "out.gsf"
+
+    gsf.write_gsf(df, filepath)
+
+    assert filepath.read_text().splitlines() == [
+        "2",
+        "172.5 -43.5 1.5 0.5 0.75 10.0 30.0 90.0 -1 -1 0",
+        "172.25 -43.75 2.5 0.25 0.125 20.0 40.0 180.0 -1 -1 1",
+    ]
+
+
+def test_write_gsf_keeps_given_slip_and_init_time(tmp_path: Path):
+    """Existing slip and init_time columns are written, not replaced by -1."""
+    df = _base_gsf_frame().assign(slip=[2.5, 3.5], init_time=[0.0, 1.25])
+    filepath = tmp_path / "out.gsf"
+
+    gsf.write_gsf(df, filepath)
+
+    read_df = gsf.read_gsf(filepath)
+    np.testing.assert_array_equal(read_df["slip"].to_numpy(), [2.5, 3.5])
+    np.testing.assert_array_equal(read_df["init_time"].to_numpy(), [0.0, 1.25])
+    # The input frame is left untouched.
+    assert list(df["slip"]) == [2.5, 3.5]
+    assert list(df["init_time"]) == [0.0, 1.25]
+
+
+@pytest.mark.parametrize("missing", ["slip", "init_time"])
+def test_write_gsf_defaults_single_missing_column(tmp_path: Path, missing: str):
+    """Only the missing column is defaulted to -1; the other is preserved."""
+    df = _base_gsf_frame().assign(slip=[2.5, 3.5], init_time=[0.5, 1.25])
+    df = df.drop(columns=[missing])
+    present = "init_time" if missing == "slip" else "slip"
+    filepath = tmp_path / "out.gsf"
+
+    gsf.write_gsf(df, filepath)
+
+    read_df = gsf.read_gsf(filepath)
+    np.testing.assert_array_equal(read_df[missing].to_numpy(), [-1, -1])
+    np.testing.assert_array_equal(read_df[present].to_numpy(), df[present].to_numpy())
