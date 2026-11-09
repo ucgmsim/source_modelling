@@ -538,7 +538,7 @@ def _parse_segment_slip(
         data["segment"] = i
         segment_data.append(data)
 
-    return pd.concat(segment_data), segments
+    return pd.concat(segment_data, ignore_index=True), segments
 
 
 def _parse_velocity_density_structure(

@@ -432,3 +432,12 @@ def test_unknown_velocity_model(tmp_path: Path, old: str, new: str):
     # The rest of the file is still parsed.
     assert len(fsp_file.data) == 32
     assert fsp_file.segments[0].subfaults == 32
+
+
+def test_multi_segment_data_index_unique():
+    """Check that multi-segment FSP data has a unique, contiguous index."""
+    fsp_file = fsp.FSPFile.read_from_file(FSP_PATH / "s1992LANDERcohe.fsp")
+    data = fsp_file.data
+    assert len(fsp_file.segments) > 1
+    assert data.index.is_unique
+    pd.testing.assert_index_equal(data.index, pd.RangeIndex(len(data)))
