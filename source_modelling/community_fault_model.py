@@ -1,7 +1,8 @@
 """This module provides classes and functions for the New Zealand Community Fault Model.
 
 The New Zealand Community Fault Model (CFM) is a collection of fault data for New
-Zealand. The CFM is stored in a shapefile and can be accessed using the
+Zealand. The CFM ships with this package as a GeoJSON file (NZTM, EPSG:2193)
+converted from the GNS shapefile release, and can be accessed using the
 functions in this module. The function `most_likely_nodal_plane` can be used to
 find the most likely nodal plane for a given centroid and two nodal planes, by
 querying nearby faults in the CFM.
@@ -18,6 +19,7 @@ Examples
 NodalPlane(strike=20, dip=35, rake=79)
 """
 
+import json
 import re
 from dataclasses import dataclass
 from enum import Enum, Flag, auto
@@ -267,36 +269,29 @@ class CommunityFault:
 
 
 def load_community_fault_model(
-    community_fault_model_shp_ffp: Path | Traversable,
+    community_fault_model_ffp: Path | Traversable,
 ) -> list[CommunityFault]:
-    """Load the community fault model from a shapefile.
+    """Load the community fault model from a GeoJSON file.
 
     Parameters
     ----------
-    community_fault_model_shp_ffp : Path | Traversable
-        The file path to the shapefile.
+    community_fault_model_ffp : Path | Traversable
+        The file path to a GeoJSON FeatureCollection of fault traces in NZTM
+        (EPSG:2193) coordinates, with the attribute columns of the CFM
+        shapefile release as feature properties.
 
     Returns
     -------
     list[CommunityFault]
         A list of CommunityFault objects.
     """
-    faults = []
-    # fiona is imported here so that the other functions of the cfm module may
-    # be used without requiring it be imported.
-    try:
-        import fiona
-    except ImportError as e:
-        e.add_note(
-            "Fiona can be installed using the optional dependency group fiona, pip install source-modelling[fiona]."
-        )
-        raise
 
-    def feature_trace(feature: fiona.Feature) -> shapely.LineString:
-        points = np.array(feature.geometry.coordinates)[:, ::-1]
+    def feature_trace(feature: dict) -> shapely.LineString:
+        # GeoJSON stores (x=easting, y=northing); traces are (northing, easting).
+        points = np.array(feature["geometry"]["coordinates"], dtype=float)[:, ::-1]
         strike = line_segment_strike(points[0], points[-1])
         try:
-            compass_direction = CompassDirection[feature.properties["Dip_dir"]]
+            compass_direction = CompassDirection[feature["properties"]["Dip_dir"]]
             # Orient the trace so the fault dips to the right (dip
             # direction = strike + 90, the Aki-Richards convention).
             misfit = (strike + 90 - compass_direction.value + 180) % 360 - 180
@@ -306,65 +301,62 @@ def load_community_fault_model(
             pass
         return shapely.LineString(points)
 
-    with fiona.open(community_fault_model_shp_ffp) as fault_model_reader:
-        fault_status_map = {
-            "A-LS": FaultStatus.ACTIVE_SEISOGENIC,
-            "A-US": FaultStatus.ACTIVE_NON_SEISOGENIC,
-            "N-PS": FaultStatus.INACTIVE,
-        }
+    with community_fault_model_ffp.open("r", encoding="utf-8") as fault_model_file:
+        fault_model = json.load(fault_model_file)
 
-        for feature in fault_model_reader:
-            faults.append(
-                CommunityFault(
-                    trace=feature_trace(feature),
-                    fault_status=fault_status_map[feature["properties"]["Fault_stat"]],
-                    name=feature["properties"]["Name"],
-                    domain=NeotectonicDomain(feature["properties"]["Domain_No"]),
-                    dip_range=Range(
-                        feature["properties"]["Dip_min"],
-                        feature["properties"]["Dip_pref"],
-                        feature["properties"]["Dip_max"],
-                    ),
-                    dip_dir=CompassDirection[feature["properties"]["Dip_dir"]]
-                    if feature["properties"]["Dip_dir"].lower()
-                    != "subvertical and variable"
-                    else None,
-                    sense=fault_sense_parse(feature["properties"]["Dom_sense"]),
-                    secondary_sense=fault_sense_parse(
-                        feature["properties"]["Sub_sense"]
-                    )
-                    if feature["properties"]["Sub_sense"]
-                    else None,
-                    rake_range=Range(
-                        feature["properties"]["Rake_minus"],
-                        feature["properties"]["Rake_pref"],
-                        feature["properties"]["Rake_plus"],
-                    ),
-                    slip_rate=Range(
-                        feature["properties"]["SR_min"],
-                        feature["properties"]["SR_pref"],
-                        feature["properties"]["SR_max"],
-                    ),
-                    slip_rate_timeframe_pref=feature["properties"]["SRT_pref"],
-                    slip_rate_timeframe_unit=parse_timeframe_unit(
-                        feature["properties"]["SRT_gen"]
-                    ),
-                    up_dip_depth=Range(
-                        feature["properties"]["UpdDth_min"],
-                        feature["properties"]["UpdDth_prf"],
-                        feature["properties"]["UpdDth_max"],
-                    ),
-                    down_dip_depth90=feature["properties"]["Depth_D90"],
-                    down_dip_depth90_method=DipMethod(
-                        feature["properties"]["Method_D90"]
-                    ),
-                    down_dip_depth_dfc=feature["properties"]["Depth_Dfc"],
-                    down_dip_dfc_method=DipMethod(feature["properties"]["Method_Dfc"]),
-                    quality_code=feature["properties"]["QualCode"],
-                    reference=feature["properties"]["References"],
-                    comments=feature["properties"]["Comments"],
-                )
+    fault_status_map = {
+        "A-LS": FaultStatus.ACTIVE_SEISOGENIC,
+        "A-US": FaultStatus.ACTIVE_NON_SEISOGENIC,
+        "N-PS": FaultStatus.INACTIVE,
+    }
+
+    faults = []
+    for feature in fault_model["features"]:
+        properties = feature["properties"]
+        faults.append(
+            CommunityFault(
+                trace=feature_trace(feature),
+                fault_status=fault_status_map[properties["Fault_stat"]],
+                name=properties["Name"],
+                domain=NeotectonicDomain(properties["Domain_No"]),
+                dip_range=Range(
+                    properties["Dip_min"],
+                    properties["Dip_pref"],
+                    properties["Dip_max"],
+                ),
+                dip_dir=CompassDirection[properties["Dip_dir"]]
+                if properties["Dip_dir"].lower() != "subvertical and variable"
+                else None,
+                sense=fault_sense_parse(properties["Dom_sense"]),
+                secondary_sense=fault_sense_parse(properties["Sub_sense"])
+                if properties["Sub_sense"]
+                else None,
+                rake_range=Range(
+                    properties["Rake_minus"],
+                    properties["Rake_pref"],
+                    properties["Rake_plus"],
+                ),
+                slip_rate=Range(
+                    properties["SR_min"],
+                    properties["SR_pref"],
+                    properties["SR_max"],
+                ),
+                slip_rate_timeframe_pref=properties["SRT_pref"],
+                slip_rate_timeframe_unit=parse_timeframe_unit(properties["SRT_gen"]),
+                up_dip_depth=Range(
+                    properties["UpdDth_min"],
+                    properties["UpdDth_prf"],
+                    properties["UpdDth_max"],
+                ),
+                down_dip_depth90=properties["Depth_D90"],
+                down_dip_depth90_method=DipMethod(properties["Method_D90"]),
+                down_dip_depth_dfc=properties["Depth_Dfc"],
+                down_dip_dfc_method=DipMethod(properties["Method_Dfc"]),
+                quality_code=properties["QualCode"],
+                reference=properties["References"],
+                comments=properties["Comments"],
             )
+        )
 
     return faults
 
@@ -378,7 +370,7 @@ def get_community_fault_model() -> list[CommunityFault]:
         A list of CommunityFault objects.
     """
     return load_community_fault_model(
-        resources.files(source_modelling) / "NZ_CFM" / "NZ_CFM_v1_0.shp"
+        resources.files(source_modelling) / "NZ_CFM" / "NZ_CFM_v1_0.geojson"
     )
 
 
@@ -399,7 +391,7 @@ def community_fault_model_as_geodataframe() -> "gpd.GeoDataFrame":
         import geopandas as gpd
     except ImportError as e:
         e.add_note(
-            "GeoPandas can be installed using the optional dependency group fiona, pip install source-modelling[fiona]."
+            "GeoPandas can be installed using the optional dependency group geopandas, pip install source-modelling[geopandas]."
         )
         raise
 

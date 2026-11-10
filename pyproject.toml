@@ -37,7 +37,7 @@ types = [
   "pandas-stubs",
   "types-networkx",
 ]
-fiona = ["fiona", "geopandas"]
+geopandas = ["geopandas"]
 # HDF5 SRF I/O (SrfFile.write_hdf5, from_hdf5 and write_sw4_hdf5). Optional so
 # the rest of the package installs where h5py has no wheels (e.g. CPython 3.15).
 hdf5 = ["h5netcdf", "h5py"]
