@@ -4,7 +4,7 @@ import random
 import warnings
 from collections.abc import Callable
 from typing import Any, Protocol
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import hypothesis.strategies as st
 import numpy as np
@@ -797,5 +797,100 @@ def test_leonard_magnitude_to_width(
     ],
 )
 def test_leonard_requires_rake(func: Callable[..., Any], args: tuple[float, ...]):
-    with pytest.raises(ValueError, match="Rake must be specified for Leonard scaling."):
+    with pytest.raises(
+        ValueError, match=r"^Rake must be specified for Leonard scaling\.$"
+    ):
         func(magnitude_scaling.ScalingRelation.LEONARD2014, *args)
+
+
+class _ShiftedNorm:
+    """Stand-in for `scipy.stats.norm` whose samples are exactly `loc + k * scale`.
+
+    Makes random draws deterministic while still depending on both the
+    location and the scale requested by the code under test.
+    """
+
+    def __init__(self, k: float):
+        self.k = k
+
+    def __call__(self, loc: float = 0.0, scale: float = 1.0) -> Any:
+        sample = loc + self.k * scale
+        frozen = MagicMock()
+        frozen.rvs.return_value = sample
+        return frozen
+
+
+@pytest.mark.parametrize("area", [130.0, 1000.0, 5212.0])
+@pytest.mark.parametrize("k", [-1.5, 1.0, 2.0])
+def test_strasser_slab_area_to_magnitude_random_coefficients(area: float, k: float):
+    """Random Strasser samples perturb a (sigma 0.288) and b (sigma 0.093) additively."""
+    with patch("scipy.stats.norm", side_effect=_ShiftedNorm(k)):
+        magnitude = magnitude_scaling.strasser_slab_area_to_magnitude(area, random=True)
+    expected = (4.054 + 0.288 * k) + (0.981 + 0.093 * k) * np.log10(area)
+    assert magnitude == pytest.approx(expected)
+
+
+def _leonard_lw(rake: float) -> Callable[[BoldM, bool], tuple[float, float]]:
+    return lambda m, random: magnitude_scaling.leonard_magnitude_to_length_width(
+        moment.boldm_to_mw(m), rake, random=random
+    )
+
+
+LENGTH_WIDTH_RELATIONS = [
+    (magnitude_scaling.ScalingRelation.LEONARD2014, 90.0, _leonard_lw(90.0)),
+    (magnitude_scaling.ScalingRelation.LEONARD2014, 0.0, _leonard_lw(0.0)),
+    (
+        magnitude_scaling.ScalingRelation.CONTRERAS_INTERFACE2017,
+        None,
+        magnitude_scaling.contreras_interface_magnitude_to_length_width,
+    ),
+    (
+        magnitude_scaling.ScalingRelation.CONTRERAS_SLAB2020,
+        None,
+        magnitude_scaling.contreras_slab_magnitude_to_length_width,
+    ),
+]
+
+
+@pytest.mark.parametrize("scaling_relation, rake, direct", LENGTH_WIDTH_RELATIONS)
+@pytest.mark.parametrize("magnitude", [6.2, 7.0, 7.6])
+def test_magnitude_to_length_width_matches_relation(
+    scaling_relation: magnitude_scaling.ScalingRelation,
+    rake: float | None,
+    direct: Callable[[BoldM, bool], tuple[float, float]],
+    magnitude: float,
+):
+    """By default the dispatcher is deterministic and returns the selected relation's best-fit dimensions."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        # `random` is deliberately omitted to check that the default is deterministic.
+        length, width = magnitude_scaling.magnitude_to_length_width(
+            scaling_relation, BoldM(magnitude), rake=rake
+        )
+        expected_length, expected_width = direct(BoldM(magnitude), False)
+    assert length == pytest.approx(expected_length)
+    assert width == pytest.approx(expected_width)
+    assert length >= width
+
+
+@pytest.mark.parametrize("scaling_relation, rake, direct", LENGTH_WIDTH_RELATIONS)
+def test_magnitude_to_length_width_forwards_random(
+    scaling_relation: magnitude_scaling.ScalingRelation,
+    rake: float | None,
+    direct: Callable[[BoldM, bool], tuple[float, float]],
+):
+    """With random=True, the dispatcher samples the selected relation's uncertainties."""
+    magnitude = BoldM(7.0)
+    with (
+        patch("scipy.stats.norm", side_effect=_ShiftedNorm(1.0)),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("ignore")
+        sampled = magnitude_scaling.magnitude_to_length_width(
+            scaling_relation, magnitude, rake=rake, random=True
+        )
+        expected = direct(magnitude, True)
+        best_fit = direct(magnitude, False)
+    assert sampled == pytest.approx(expected)
+    # The perturbation must actually change the result for this test to be meaningful.
+    assert sampled != pytest.approx(best_fit)
