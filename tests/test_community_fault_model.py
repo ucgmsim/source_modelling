@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -109,40 +110,6 @@ def test_most_likely_nodal_plane():
     assert correct >= 305
 
 
-_CFM_SCHEMA = {
-    "geometry": "LineString",
-    "properties": {
-        "Name": "str:50",
-        "Fault_stat": "str:50",
-        "Domain_No": "int:10",
-        "Dip_pref": "int:10",
-        "Dip_min": "float:19.11",
-        "Dip_max": "float:19.11",
-        "Dip_dir": "str:254",
-        "Dom_sense": "str:50",
-        "Sub_sense": "str:50",
-        "Rake_pref": "int:10",
-        "Rake_minus": "int:10",
-        "Rake_plus": "int:10",
-        "SR_pref": "float:19.11",
-        "SR_min": "float:19.11",
-        "SR_max": "float:19.11",
-        "SRT_pref": "str:50",
-        "SRT_gen": "str:50",
-        "UpdDth_prf": "float:19.11",
-        "UpdDth_min": "float:19.11",
-        "UpdDth_max": "float:19.11",
-        "Depth_Dfc": "float:19.11",
-        "Method_Dfc": "int:10",
-        "Depth_D90": "float:19.11",
-        "Method_D90": "float:19.11",
-        "QualCode": "int:10",
-        "References": "str:200",
-        "Comments": "str:254",
-    },
-}
-
-
 def _cfm_properties(**overrides: object) -> dict[str, object]:
     properties: dict[str, object] = {
         "Name": "Test Fault",
@@ -178,23 +145,23 @@ def _cfm_properties(**overrides: object) -> dict[str, object]:
 
 
 def _write_cfm(path: Path, features: list[tuple[np.ndarray, dict[str, object]]]):
-    """Write (northing, easting) traces and properties as a CFM-like shapefile."""
-    import fiona
-
-    with fiona.open(
-        path, "w", driver="ESRI Shapefile", schema=_CFM_SCHEMA, crs="EPSG:2193"
-    ) as writer:
-        for trace, properties in features:
-            writer.write(
-                {
-                    "geometry": {
-                        "type": "LineString",
-                        # Shapefiles store (x=easting, y=northing).
-                        "coordinates": [tuple(p) for p in trace[:, ::-1]],
-                    },
-                    "properties": properties,
-                }
-            )
+    """Write (northing, easting) traces and properties as a CFM-like GeoJSON file."""
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    # GeoJSON stores (x=easting, y=northing).
+                    "coordinates": trace[:, ::-1].tolist(),
+                },
+                "properties": properties,
+            }
+            for trace, properties in features
+        ],
+    }
+    path.write_text(json.dumps(feature_collection), encoding="utf-8")
 
 
 def _trace_with_strike(target_strike: float) -> np.ndarray:
@@ -217,9 +184,9 @@ def _trace_with_strike(target_strike: float) -> np.ndarray:
 
 def test_load_community_fault_model_maps_properties(tmp_path: Path):
     trace = _trace_with_strike(30.0)
-    shp = tmp_path / "cfm.shp"
+    cfm_ffp = tmp_path / "cfm.geojson"
     _write_cfm(
-        shp,
+        cfm_ffp,
         [
             (trace, _cfm_properties()),
             (
@@ -237,7 +204,7 @@ def test_load_community_fault_model_maps_properties(tmp_path: Path):
         ],
     )
 
-    faults = community_fault_model.load_community_fault_model(shp)
+    faults = community_fault_model.load_community_fault_model(cfm_ffp)
     assert len(faults) == 2
     fault, other = faults
 
@@ -294,21 +261,20 @@ def test_load_community_fault_model_trace_orientation_boundary(
     tmp_path: Path, strike: float, reversed_: bool
 ):
     trace = _trace_with_strike(strike)
-    shp = tmp_path / "cfm.shp"
-    _write_cfm(shp, [(trace, _cfm_properties(Dip_dir="N"))])
-    (fault,) = community_fault_model.load_community_fault_model(shp)
+    cfm_ffp = tmp_path / "cfm.geojson"
+    _write_cfm(cfm_ffp, [(trace, _cfm_properties(Dip_dir="N"))])
+    (fault,) = community_fault_model.load_community_fault_model(cfm_ffp)
     expected = trace[::-1] if reversed_ else trace
     np.testing.assert_allclose(np.asarray(fault.trace.coords), expected)
 
 
-def test_load_community_fault_model_without_fiona(monkeypatch: pytest.MonkeyPatch):
+def test_load_community_fault_model_without_gis_libraries(
+    monkeypatch: pytest.MonkeyPatch,
+):
     # A None entry in sys.modules makes the import raise ImportError.
-    monkeypatch.setitem(sys.modules, "fiona", None)
-    with pytest.raises(ImportError) as excinfo:
-        community_fault_model.get_community_fault_model()
-    assert excinfo.value.__notes__ == [
-        "Fiona can be installed using the optional dependency group fiona, pip install source-modelling[fiona]."
-    ]
+    for module in ("fiona", "geopandas", "pyogrio", "osgeo"):
+        monkeypatch.setitem(sys.modules, module, None)
+    assert len(community_fault_model.get_community_fault_model()) == 880
 
 
 def test_community_fault_model_as_geodataframe_without_geopandas(
@@ -318,5 +284,5 @@ def test_community_fault_model_as_geodataframe_without_geopandas(
     with pytest.raises(ImportError) as excinfo:
         community_fault_model.community_fault_model_as_geodataframe()
     assert excinfo.value.__notes__ == [
-        "GeoPandas can be installed using the optional dependency group fiona, pip install source-modelling[fiona]."
+        "GeoPandas can be installed using the optional dependency group geopandas, pip install source-modelling[geopandas]."
     ]
