@@ -543,3 +543,30 @@ def test_write_gsf_defaults_single_missing_column(tmp_path: Path, missing: str):
     read_df = gsf.read_gsf(filepath)
     np.testing.assert_array_equal(read_df[missing].to_numpy(), [-1, -1])
     np.testing.assert_array_equal(read_df[present].to_numpy(), df[present].to_numpy())
+
+
+def test_fault_gsf_sub_resolution_segment():
+    """A plane shorter than resolution / 2 is discretised as a single patch."""
+    trace = np.array(
+        [[5180000.0, 1570000.0], [5180000.0, 1580000.0], [5180000.0, 1580400.0]]
+    )
+    fault = Fault(
+        [
+            Plane.from_nztm_trace(trace[i : i + 2], 0.0, 10.0, 60.0, 0.0)
+            for i in range(2)
+        ]
+    )
+    short_index = int(np.argmin([plane.length for plane in fault.planes]))
+    short_plane = fault.planes[short_index]
+    assert short_plane.length < 0.5
+    n_dip = round(short_plane.width)
+
+    gsf_df = gsf.source_to_gsf_dataframe(fault, 1.0)
+
+    short_patches = gsf_df[gsf_df["seg_no"] == short_index]
+    assert len(short_patches) == n_dip
+    assert short_patches["sub_dx"].to_numpy() == pytest.approx(short_plane.length)
+    assert short_patches["sub_dy"].to_numpy() == pytest.approx(
+        short_plane.width / n_dip
+    )
+    assert len(gsf_df[gsf_df["seg_no"] == 1 - short_index]) == 10 * n_dip
