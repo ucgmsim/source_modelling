@@ -63,21 +63,24 @@ def source_to_gsf_dataframe(
     else:
         raise TypeError(f"Unsupported source type: {type(source)}")
 
+    # Planes smaller than resolution / 2 still get one patch along that axis.
+    nxs = [max(1, round(plane.length / resolution)) for plane in segments]
+    nys = [max(1, round(plane.width / resolution)) for plane in segments]
     meshgrids = [
         grid.coordinate_patchgrid(
             plane.corners[0],
             plane.corners[1],
             plane.corners[-1],
             resolution,
-            nx=round(plane.length / resolution),
-            ny=round(plane.width / resolution),
+            nx=nx,
+            ny=ny,
         )
-        for plane in segments
+        for plane, nx, ny in zip(segments, nxs, nys)
     ]
 
     strike_rows: list[pd.DataFrame] = []
-    dxs = [plane.length / round(plane.length / resolution) for plane in segments]
-    dys = [plane.width / round(plane.width / resolution) for plane in segments]
+    dxs = [plane.length / nx for plane, nx in zip(segments, nxs)]
+    dys = [plane.width / ny for plane, ny in zip(segments, nys)]
     n_dip = meshgrids[0].shape[0]
 
     for dip_index in range(n_dip):
