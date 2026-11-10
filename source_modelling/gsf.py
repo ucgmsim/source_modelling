@@ -97,7 +97,7 @@ def source_to_gsf_dataframe(
                     }
                 )
             )
-    return pd.concat(strike_rows)
+    return pd.concat(strike_rows, ignore_index=True)
 
 
 def write_gsf(gsf_df: pd.DataFrame, gsf_filepath: Path):
@@ -156,7 +156,7 @@ def read_gsf(gsf_filepath: Path) -> pd.DataFrame:
     -------
     pd.DataFrame
         A DataFrame containing the GSF data.  Columns include:
-        'lon', 'lat', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', 'rake', 'slip',
+        'lon', 'lat', 'dep', 'sub_dx', 'sub_dy', 'loc_stk', 'loc_dip', 'loc_rake', 'slip',
         'init_time', and 'seg_no'.
     """
     with open(gsf_filepath, mode="r", encoding="utf-8") as gsf_file_handle:
