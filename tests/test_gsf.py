@@ -466,6 +466,43 @@ def test_fault_gsf_exact_patch_centres():
     np.testing.assert_allclose(gsf_df["sub_dy"].to_numpy(), 1.0)
 
 
+def test_fault_gsf_dataframe_has_unique_index():
+    """A multi-plane GSF frame has a fresh 0..n-1 index (issue #166)."""
+    north, east = 5_200_000.0, 1_570_000.0
+    fault = Fault(
+        planes=[
+            Plane(
+                bounds=np.array(
+                    [
+                        [north, east, 0.0],
+                        [north + 4000.0, east, 0.0],
+                        [north + 4000.0, east + 3000.0, 4000.0],
+                        [north, east + 3000.0, 4000.0],
+                    ]
+                )
+            ),
+            Plane(
+                bounds=np.array(
+                    [
+                        [north + 4000.0, east, 0.0],
+                        [north + 6000.0, east, 0.0],
+                        [north + 6000.0, east + 3000.0, 4000.0],
+                        [north + 4000.0, east + 3000.0, 4000.0],
+                    ]
+                )
+            ),
+        ]
+    )
+
+    gsf_df = gsf.source_to_gsf_dataframe(fault, 1.0)
+
+    assert gsf_df.index.is_unique
+    pd.testing.assert_index_equal(gsf_df.index, pd.RangeIndex(len(gsf_df)))
+    # Index-aligned assignment must line up row-for-row.
+    gsf_df["slip"] = pd.Series(np.arange(len(gsf_df), dtype=float))
+    np.testing.assert_array_equal(gsf_df["slip"].to_numpy(), np.arange(len(gsf_df)))
+
+
 def test_bad_gsf_type_message():
     """The TypeError names the type that was rejected."""
     with pytest.raises(TypeError, match=r"^Unsupported source type: <class 'str'>$"):
