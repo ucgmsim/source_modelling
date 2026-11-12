@@ -367,3 +367,161 @@ def test_dyne_cm_to_newton_metre():
     assert moment.moment_to_magnitude(dusky_sound_moment, bold_m=False) == (
         pytest.approx(8.0, abs=5e-2)
     )
+
+
+def _mock_fault(dip: float, bottom_m: float) -> Fault:
+    """Create a mock fault with the attributes used by `find_connected_faults`."""
+    fault = create_autospec(Fault, instance=True)
+    fault.dip = dip
+    fault.bottom_m = bottom_m
+    return fault
+
+
+@pytest.mark.parametrize(
+    "bottom_a_m, bottom_b_m, min_connected_depth, expected_min_depth",
+    [
+        # Both faults extend well below the minimum depth: use it unchanged.
+        (20_000.0, 30_000.0, None, 5.0),
+        (20_000.0, 30_000.0, 7.5, 7.5),
+        # A fault shallower than the minimum depth caps it just above its bottom.
+        (3_000.0, 30_000.0, None, 0.99 * 3.0),
+        (30_000.0, 4_000.0, None, 0.99 * 4.0),
+        (3_000.0, 4_000.0, 10.0, 0.99 * 3.0),
+        (4_000.0, 3_000.0, 10.0, 0.99 * 3.0),
+    ],
+)
+def test_find_connected_faults_measures_beneath_min_depth(
+    bottom_a_m: float,
+    bottom_b_m: float,
+    min_connected_depth: float | None,
+    expected_min_depth: float,
+):
+    """Closest points are found beneath min(min depth, 99% of each fault bottom in km).
+
+    The faults themselves and the closest points found must be passed through to
+    the distance calculation.
+    """
+    fault_a = _mock_fault(30.0, bottom_a_m)
+    fault_b = _mock_fault(30.0, bottom_b_m)
+    point_a = np.array([0.1, 0.2])
+    point_b = np.array([0.3, 0.4])
+    with (
+        patch(
+            "source_modelling.rupture_propagation.distance_between",
+            return_value=1000.0,
+        ) as distance_between,
+        patch(
+            "source_modelling.sources.closest_points_beneath",
+            return_value=(point_a, point_b),
+        ) as closest_points_beneath,
+    ):
+        if min_connected_depth is None:
+            ds = moment.find_connected_faults({"A": fault_a, "B": fault_b})
+        else:
+            ds = moment.find_connected_faults(
+                {"A": fault_a, "B": fault_b}, min_connected_depth=min_connected_depth
+            )
+
+    closest_points_beneath.assert_called_once()
+    args, call_kwargs = closest_points_beneath.call_args
+    assert not call_kwargs
+    assert len(args) == 3
+    assert args[0] is fault_a
+    assert args[1] is fault_b
+    assert args[2] == pytest.approx(expected_min_depth, rel=1e-12)
+
+    distance_between.assert_called_once()
+    args, call_kwargs = distance_between.call_args
+    assert not call_kwargs
+    assert len(args) == 4
+    assert args[0] is fault_a
+    assert args[1] is fault_b
+    assert args[2] is point_a
+    assert args[3] is point_b
+    assert ds.connected("A", "B")
+
+
+@pytest.mark.parametrize(
+    "distance_km, dip_b, separation_distance, dip_delta, expected_connected",
+    [
+        # Default separation distance is 2 km (strict inequality).
+        (1.99, 30.0, None, None, True),
+        (2.0, 30.0, None, None, False),
+        (2.5, 30.0, None, None, False),
+        (2.5, 30.0, 3.0, None, True),
+        # Default dip delta is 20 degrees (strict inequality).
+        (1.0, 49.5, None, None, True),
+        (1.0, 50.0, None, None, False),
+        (1.0, 50.5, None, None, False),
+        (1.0, 9.5, None, None, False),
+        (1.0, 50.5, None, 21.0, True),
+    ],
+)
+def test_find_connected_faults_default_thresholds(
+    distance_km: float,
+    dip_b: float,
+    separation_distance: float | None,
+    dip_delta: float | None,
+    expected_connected: bool,
+):
+    """The default separation distance and dip delta thresholds are exclusive bounds."""
+    faults: dict[str, Fault | Plane] = {
+        "A": _mock_fault(30.0, 20_000.0),
+        "B": _mock_fault(dip_b, 20_000.0),
+    }
+    with (
+        patch(
+            "source_modelling.rupture_propagation.distance_between",
+            return_value=distance_km * 1000,
+        ),
+        patch(
+            "source_modelling.sources.closest_points_beneath", return_value=("a", "b")
+        ),
+    ):
+        if separation_distance is not None:
+            ds = moment.find_connected_faults(
+                faults, separation_distance=separation_distance
+            )
+        elif dip_delta is not None:
+            ds = moment.find_connected_faults(faults, dip_delta=dip_delta)
+        else:
+            ds = moment.find_connected_faults(faults)
+    assert ds.connected("A", "B") == expected_connected
+
+
+def test_find_connected_faults_skips_connected_pairs_and_continues():
+    """Already-connected pairs are skipped, but later pairs are still checked.
+
+    A-B and A-C are close, so B and C are connected through A and the (B, C) pair
+    is not measured. D is only close to C, a pair checked after (B, C).
+    """
+    faults: dict[str, Fault | Plane] = {
+        name: _mock_fault(30.0, 20_000.0) for name in "ABCD"
+    }
+    names_by_id = {id(fault): name for name, fault in faults.items()}
+    close_pairs = {frozenset("AB"), frozenset("AC"), frozenset("CD")}
+    measured_pairs: list[frozenset[str]] = []
+
+    def fake_distance(
+        source_a: Fault | Plane, source_b: Fault | Plane, *_points: object
+    ) -> float:
+        pair = frozenset((names_by_id[id(source_a)], names_by_id[id(source_b)]))
+        measured_pairs.append(pair)
+        return 500.0 if pair in close_pairs else 50_000.0
+
+    with (
+        patch(
+            "source_modelling.rupture_propagation.distance_between",
+            side_effect=fake_distance,
+        ),
+        patch(
+            "source_modelling.sources.closest_points_beneath", return_value=("a", "b")
+        ),
+    ):
+        ds = moment.find_connected_faults(faults)
+
+    assert measured_pairs == [
+        frozenset(pair) for pair in ["AB", "AC", "AD", "BD", "CD"]
+    ]
+    assert ds.n_subsets == 1
+    assert ds.connected("B", "D")
