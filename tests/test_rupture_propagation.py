@@ -53,11 +53,11 @@ def graph_repr(graph: nx.Graph) -> str:
 )
 def test_disconnected_graph(graph: nx.Graph):
     with pytest.raises(
-        ValueError, match="The graph must be connected to find a spanning tree."
+        ValueError, match=r"^The graph must be connected to find a spanning tree\.$"
     ):
         rupture_propagation.most_likely_spanning_tree(graph)
     with pytest.raises(
-        ValueError, match="The graph must be connected to find a spanning tree."
+        ValueError, match=r"^The graph must be connected to find a spanning tree\.$"
     ):
         rupture_propagation.sampled_spanning_tree(graph, 1)
 
@@ -797,3 +797,139 @@ def test_prune_distance_graph_tolerance():
     assert rupture_propagation.prune_distance_graph(
         distances, cutoff=15_000.0, tolerance=0.0
     ) == {"a": {}}
+
+
+def _triangle(weight_01: float, weight_12: float, weight_02: float) -> nx.Graph:
+    return nx.Graph(
+        [
+            (0, 1, {"weight": weight_01}),
+            (1, 2, {"weight": weight_12}),
+            (0, 2, {"weight": weight_02}),
+        ]
+    )
+
+
+def _edge_set(graph: nx.Graph) -> set[frozenset]:
+    return {frozenset(edge) for edge in graph.edges}
+
+
+def test_spanning_tree_with_probabilities_exact():
+    # Odds of the edges are 4, 1 and 1. Each tree's unnormalised weight is
+    # the product of w for its edges and (1 - w) for the excluded edge.
+    graph = _triangle(0.8, 0.5, 0.5)
+    trees, probabilities = rupture_propagation.spanning_tree_with_probabilities(graph)
+    assert len(trees) == len(probabilities) == 3
+    result = {
+        frozenset(_edge_set(tree)): probability
+        for tree, probability in zip(trees, probabilities)
+    }
+    assert result == pytest.approx(
+        {
+            frozenset({frozenset((0, 1)), frozenset((1, 2))}): 0.8 * 0.5 * 0.5,
+            frozenset({frozenset((0, 1)), frozenset((0, 2))}): 0.8 * 0.5 * 0.5,
+            frozenset({frozenset((1, 2)), frozenset((0, 2))}): 0.5 * 0.5 * 0.2,
+        }
+    )
+    for tree in trees:
+        assert nx.is_tree(tree)
+        assert set(tree.nodes) == set(graph.nodes)
+
+
+@pytest.mark.parametrize(
+    "probability_threshold, expected_number_of_trees",
+    [
+        # The two trees with edge (0, 1) each carry 4/9 of the weight, the
+        # remaining tree 1/9.
+        (0.4, 1),
+        (0.85, 2),
+        (0.95, 3),
+    ],
+)
+def test_select_top_spanning_trees_exact_count(
+    probability_threshold: float, expected_number_of_trees: int
+):
+    graph = _triangle(0.8, 0.5, 0.5)
+    trees = rupture_propagation.select_top_spanning_trees(graph, probability_threshold)
+    assert len(trees) == expected_number_of_trees
+    # Trees are returned in descending order of probability, so the
+    # likely trees (containing the 0.8 edge) come first.
+    for tree in trees[:2]:
+        assert frozenset((0, 1)) in _edge_set(tree)
+    # The input graph is not modified.
+    assert graph[0][1]["weight"] == 0.8
+
+
+@pytest.mark.parametrize(
+    "probability_threshold, expected_number_of_trees",
+    [
+        # All three trees have weight 1/16 out of a total of 3/16, and these
+        # ratios are exact in floating point, so the threshold is met exactly.
+        (1 / 3, 1),
+        (2 / 3, 2),
+        (1.0, 3),
+    ],
+)
+def test_select_top_spanning_trees_threshold_is_inclusive(
+    probability_threshold: float, expected_number_of_trees: int
+):
+    graph = _triangle(0.2, 0.2, 0.2)
+    trees = rupture_propagation.select_top_spanning_trees(graph, probability_threshold)
+    assert len(trees) == expected_number_of_trees
+
+
+def test_most_likely_spanning_tree_returns_log_odds_and_attributes():
+    graph = nx.Graph()
+    graph.add_node("a", node_prior=0.1)
+    graph.add_node("b", node_prior=0.2)
+    graph.add_node("c", node_prior=0.3)
+    graph.add_edge("a", "b", weight=0.8, distance=100.0)
+    graph.add_edge("b", "c", weight=0.6, distance=200.0)
+    graph.add_edge("a", "c", weight=0.3, distance=300.0)
+
+    tree = rupture_propagation.most_likely_spanning_tree(graph)
+
+    assert dict(tree.nodes(data=True)) == {
+        "a": {"node_prior": 0.1},
+        "b": {"node_prior": 0.2},
+        "c": {"node_prior": 0.3},
+    }
+    assert _edge_set(tree) == {frozenset(("a", "b")), frozenset(("b", "c"))}
+    assert tree["a"]["b"]["weight"] == pytest.approx(np.log(0.8 / 0.2))
+    assert tree["b"]["c"]["weight"] == pytest.approx(np.log(0.6 / 0.4))
+    assert tree["a"]["b"]["distance"] == 100.0
+    assert tree["b"]["c"]["distance"] == 200.0
+    # The input graph is not modified.
+    assert graph["a"]["b"]["weight"] == 0.8
+
+
+def test_most_likely_spanning_tree_mixed_distance_attributes():
+    # Equal weights where only some edges carry a distance must still
+    # produce a spanning tree rather than failing to compare the keys.
+    graph = nx.Graph(
+        [
+            ("a", "b", {"weight": 0.99, "distance": 500.0}),
+            ("a", "c", {"weight": 0.99}),
+            ("b", "c", {"weight": 0.99, "distance": 100.0}),
+        ]
+    )
+    tree = rupture_propagation.most_likely_spanning_tree(graph)
+    assert nx.is_tree(tree)
+    assert set(tree.nodes) == {"a", "b", "c"}
+    # The longest jump is the one left out.
+    assert frozenset(("a", "b")) not in _edge_set(tree)
+
+
+def test_sample_rupture_propagation_rejects_source_and_distribution():
+    sources_map = {
+        name: sources.Point(np.array([-41.2865, lon, 0]), 1000, 1000, 0, 0, 0)
+        for name, lon in zip("AB", [174.7762, 174.7862])
+    }
+    with pytest.raises(
+        ValueError,
+        match="Cannot specify an initial source and initial source distribution",
+    ):
+        rupture_propagation.sample_rupture_propagation(
+            sources_map,  # ty: ignore[invalid-argument-type]
+            initial_source="A",
+            initial_source_distribution={"A": 0.5, "B": 0.5},
+        )
