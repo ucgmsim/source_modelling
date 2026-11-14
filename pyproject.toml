@@ -12,6 +12,7 @@ dynamic = ["version"]
 dependencies = [
   "fiona",
   "geopandas",
+  "h5py",
   "networkx",
   "numpy",
   "pandas",
@@ -41,6 +42,11 @@ dev = ["ty", "ruff", "deptry"]
 
 [tool.deptry]
 pep621_dev_dependency_groups = ["test", "dev", "types"]
+
+[tool.deptry.per_rule_ignores]
+# h5py is never imported directly: it is the backend h5netcdf needs for the
+# HDF5 SRF I/O, and h5netcdf>=1.8 no longer installs it.
+DEP002 = ["h5py"]
 
 
 [tool.ty.rules]
