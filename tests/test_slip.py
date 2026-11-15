@@ -180,3 +180,53 @@ def test_triangular_slip_peak_at_endpoint(peak: float):
     assert sp.integrate.trapezoid(result[inside], t[inside]) == pytest.approx(
         total_slip, rel=1e-4
     )
+
+
+@pytest.mark.parametrize(
+    "moment, expected_rise_time",
+    [(0.0, 0.0), (1e18, 0.312), (8e21, 6.24), (2.7e19, 0.936)],
+)
+def test_rise_time_from_moment_values(moment: float, expected_rise_time: float):
+    """Rise time is 3.12e-7 * cbrt(moment) (Baker et al. 2021, p. 202)."""
+    assert slip.rise_time_from_moment(moment) == pytest.approx(expected_rise_time)
+
+
+def test_rise_time_from_moment_vectorised():
+    """Rise time is computed element-wise for an array of moments."""
+    moments = np.array([1e15, 1e18, 1e21])
+    np.testing.assert_allclose(
+        slip.rise_time_from_moment(moments), [3.12e-2, 3.12e-1, 3.12]
+    )
+
+
+def test_slip_function_values():
+    """Pin exact slip rates at interior points for each slip function."""
+    t0, t1, total_slip = 2.0, 6.0, 8.0
+    t = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+
+    # Boxcar: constant slip / duration = 2 on [t0, t1].
+    np.testing.assert_allclose(
+        slip.box_car_slip(t, t0, t1, total_slip), [0, 2, 2, 2, 2, 2, 0]
+    )
+
+    # Isoceles triangle: peak height 2 * slip / duration = 4 at t = 4.
+    np.testing.assert_allclose(
+        slip.isoceles_triangular_slip(t, t0, t1, total_slip),
+        [0, 0, 2, 4, 2, 0, 0],
+        atol=1e-12,
+    )
+
+    # Asymmetric triangle with peak at t = 3: rises over 1s, falls over 3s.
+    np.testing.assert_allclose(
+        slip.triangular_slip(t, t0, t1, 3.0, total_slip),
+        [0, 0, 4, 8 / 3, 4 / 3, 0, 0],
+        atol=1e-12,
+    )
+
+    # Cosine: pi * slip / (2 * duration) * sin(pi * (t - t0) / duration).
+    amplitude = np.pi * total_slip / (2 * (t1 - t0))
+    np.testing.assert_allclose(
+        slip.cosine_slip(t, t0, t1, total_slip),
+        [0, 0, amplitude * np.sqrt(2) / 2, amplitude, amplitude * np.sqrt(2) / 2, 0, 0],
+        atol=1e-12,
+    )
