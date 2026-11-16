@@ -958,3 +958,96 @@ def test_hdf5_io_without_extra(
         christchurch_srf.write_sw4_hdf5(tmp_path / "sw4.h5")
     with pytest.raises(ImportError, match=r"source-modelling\[hdf5\]"):
         srf.SrfFile.from_hdf5(tmp_path / "srf.h5")
+
+
+def test_read_srf_from_buffer_matches_file():
+    """Reading raw SRF bytes (any buffer) gives the same SrfFile as reading the path."""
+    srf_ffp = SRF_DIR / "point_source_v2.srf"
+    from_path = srf.read_srf(srf_ffp)
+    raw = srf_ffp.read_bytes()
+    for buffer in (raw, bytearray(raw), memoryview(raw)):
+        from_buffer = srf.read_srf(buffer)
+        assert from_buffer.version == "2.0"
+        assert from_buffer.header.equals(from_path.header)
+        assert from_buffer.points.equals(from_path.points)
+        assert from_buffer.slipt1_array.shape == from_path.slipt1_array.shape
+        assert (from_buffer.slip != from_path.slip).nnz == 0
+
+
+def test_read_srf_from_malformed_buffer_raises_parse_error():
+    """Malformed SRF bytes raise ParseError just like a malformed file."""
+    with pytest.raises(parse_utils.ParseError, match="invalid number"):
+        srf.read_srf((SRF_DIR / "bad_int.srf").read_bytes())
+
+
+def test_parse_error_preserves_parser_message():
+    """The ParseError carries the parser's message, pointing at the bad line."""
+    with pytest.raises(parse_utils.ParseError) as exc_info:
+        srf.read_srf(SRF_DIR / "bad_int.srf")
+    message = str(exc_info.value)
+    assert message.startswith("line 3:")
+    assert "invalid number" in message
+    assert isinstance(exc_info.value.__cause__, ValueError)
+    assert str(exc_info.value.__cause__) == message
+
+
+def test_read_srf_without_slip_samples():
+    """An SRF whose points have no slip-rate samples has an empty (n, 0) slip array."""
+    srf_bytes = (
+        b"1.0\n"
+        b"PLANE 1\n"
+        b"  172.0  -43.0   2   1   2.0   1.0\n"
+        b"  45   80   0.0   0.0   0.5\n"
+        b"POINTS 2\n"
+        b"  172.0  -43.0   0.5   45   80   1.0e10   0.0   0.1\n"
+        b"  90   0.0   0   0.0   0   0.0   0\n"
+        b"  172.01  -43.01   0.5   45   80   1.0e10   0.0   0.1\n"
+        b"  90   0.0   0   0.0   0   0.0   0\n"
+    )
+    no_slip_srf = srf.read_srf(srf_bytes)
+    assert len(no_slip_srf.points) == 2
+    assert no_slip_srf.slipt1_array.shape == (2, 0)
+    assert no_slip_srf.slipt1_array.nnz == 0
+    assert no_slip_srf.nt == 0
+    assert no_slip_srf.points["slip"].tolist() == [0.0, 0.0]
+    assert no_slip_srf.points["rise"].tolist() == [0.0, 0.0]
+
+
+def test_segments_indexing_bounds():
+    """Segments support negative indices and reject indices outside [-n, n)."""
+    darfield_srf = srf.read_srf(SRF_DIR / "3366146.srf")
+    segments = darfield_srf.segments
+    n = len(segments)
+    assert n == len(darfield_srf.header)
+    sizes = (darfield_srf.header["nstk"] * darfield_srf.header["ndip"]).tolist()
+    offsets = np.concatenate([[0], np.cumsum(sizes)])
+    for i in range(n):
+        expected = darfield_srf.points.iloc[offsets[i] : offsets[i + 1]]
+        assert segments[i].equals(expected)
+        assert segments[i - n].equals(expected)
+    # The last segment ends exactly at the end of the points.
+    assert segments[n - 1].index[-1] == darfield_srf.points.index[-1]
+    for bad_index in (n, n + 1, -n - 1):
+        with pytest.raises(IndexError, match=r"^segment index out of range$"):
+            segments[bad_index]
+
+
+def test_segments_rejects_non_integer_index():
+    """Slicing segments is not yet supported and raises a TypeError."""
+    segments = srf.read_srf(SRF_DIR / "3468575.srf").segments
+    with pytest.raises(
+        TypeError, match=r"^Segment index must an integer, not slice or tuple$"
+    ):
+        segments[0:1]  # ty: ignore[invalid-argument-type] -- slicing is deliberately unsupported
+
+
+def test_hdf5_import_error_note(monkeypatch: pytest.MonkeyPatch):
+    """The ImportError for missing HDF5 extras carries the exact install hint."""
+    monkeypatch.setitem(sys.modules, "h5py", None)
+    with pytest.raises(ImportError) as exc_info:
+        srf.SrfFile.from_hdf5(Path("unused.h5"))
+    expected_note = (
+        "HDF5 support can be installed using the optional dependency group hdf5, "
+        "pip install source-modelling[hdf5]."
+    )
+    assert exc_info.value.__notes__ == [expected_note]
