@@ -520,3 +520,73 @@ def test_dump_plane_count_matches_data(sample_stoch_file_multi_plane: Path):
     assert int(lines[0]) == len(stoch_file.data)
     expected_lines = 1 + sum(2 + 3 * plane.header.ny for plane in stoch_file.data)
     assert len(lines) == expected_lines
+
+
+HEADER_FIELDS = [
+    ("longitude", "float"),
+    ("latitude", "float"),
+    ("nx", "int"),
+    ("ny", "int"),
+    ("dx", "float"),
+    ("dy", "float"),
+    ("strike", "int"),
+    ("dip", "int"),
+    ("average_rake", "int"),
+    ("dtop", "float"),
+    ("shypo", "float"),
+    ("dhypo", "float"),
+]
+HEADER_VALUES = [
+    "174.5",
+    "-41.3",
+    "10",
+    "5",
+    "1.0",
+    "1.0",
+    "45",
+    "60",
+    "90",
+    "0.5",
+    "2.5",
+    "1.5",
+]
+
+
+@pytest.mark.parametrize("index", range(len(HEADER_FIELDS)))
+def test_read_stoch_header_truncated_names_missing_field(index: int):
+    """A header cut short reports exactly which field was missing."""
+    label, _ = HEADER_FIELDS[index]
+    handle = io.StringIO(" ".join(HEADER_VALUES[:index]))
+    with pytest.raises(parse_utils.ParseError) as excinfo:
+        _read_stoch_header(handle)
+    assert str(excinfo.value) == f"Unexpected end of file while reading {label}"
+
+
+@pytest.mark.parametrize("index", range(len(HEADER_FIELDS)))
+def test_read_stoch_header_malformed_names_bad_field(index: int):
+    """A non-numeric header value reports the field name and offending token."""
+    label, kind = HEADER_FIELDS[index]
+    values = list(HEADER_VALUES)
+    values[index] = "oops"
+    handle = io.StringIO(" ".join(values))
+    with pytest.raises(parse_utils.ParseError) as excinfo:
+        _read_stoch_header(handle)
+    assert str(excinfo.value) == f'Expecting {kind} ({label}), got: "oops"'
+
+
+def test_read_stoch_header_rejects_float_for_int_field():
+    """Integer header fields (e.g. nx) do not accept fractional values."""
+    values = list(HEADER_VALUES)
+    values[2] = "10.5"
+    with pytest.raises(
+        parse_utils.ParseError, match=r'Expecting int \(nx\), got: "10.5"'
+    ):
+        _read_stoch_header(io.StringIO(" ".join(values)))
+
+
+def test_dump_empty_stoch_file_raises():
+    """Dumping a StochFile with no planes is refused and writes nothing."""
+    handle = io.StringIO()
+    with pytest.raises(ValueError, match="Cannot dump empty stoch file"):
+        StochFile([]).dump(handle)
+    assert handle.getvalue() == ""
