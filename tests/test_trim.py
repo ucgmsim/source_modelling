@@ -214,3 +214,70 @@ def test_trim_array_to_target_length_keep_threshold(
     """Trimming stops once both ends reach one third of the maximum slip."""
     slip = np.array([profile], dtype=float)
     assert trim.trim_array_to_target_length(slip, 1.0, 1.0, axis=1) == expected
+
+
+# The expected windows below all end on cells below the keep threshold (or on
+# zero cells that are stripped), so they hold whether or not the expansion
+# loops questioned in issue #86 are changed.
+
+
+def test_trim_array_to_target_length_tolerance_scales_with_dx() -> None:
+    """The stopping tolerance is 2 * dx, so it grows and shrinks with dx."""
+    slip = np.array([[0.5, 0, 3]])
+    # Length 3 * 2 = 6 is exactly 2 * dx = 4 away from 2: no trimming.
+    assert trim.trim_array_to_target_length(slip, 2.0, 2.0, axis=1) == (0, 3)
+    # Length 6 is 2 away from 4, well within 2 * dx = 4: no trimming.
+    assert trim.trim_array_to_target_length(slip, 2.0, 4.0, axis=1) == (0, 3)
+
+    slip = np.array([[0.5, 0.4, 3, 3, 0.4, 0.5]])
+    # Length 6 * 0.5 = 3 exceeds 1 + 2 * 0.5, so one low end cell is trimmed.
+    assert trim.trim_array_to_target_length(slip, 0.5, 1.0, axis=1) == (0, 5)
+
+
+def test_trim_array_to_target_length_tie_trims_right_end() -> None:
+    """When both ends are equally low, the right end is trimmed first."""
+    slip = np.array([[0.5, 3, 0, 0.5]])
+    # Trimming right twice reaches length 2, within tolerance of 1; the
+    # trailing zero is stripped. Trimming left first would keep (0, 4).
+    assert trim.trim_array_to_target_length(slip, 1.0, 1.0, axis=1) == (0, 2)
+
+
+def test_trim_array_to_target_length_trims_one_cell_at_a_time() -> None:
+    """The window shrinks one cell per step and stops as soon as it is in tolerance."""
+    slip = np.array([[3, 0.5, 0.4, 0.3, 0.2]])
+    assert trim.trim_array_to_target_length(slip, 1.0, 2.0, axis=1) == (0, 4)
+
+
+def test_trim_array_to_target_length_does_not_regrow_over_low_cells() -> None:
+    """A window ending on a sub-threshold cell is not widened afterwards."""
+    slip = np.array([[3, 0, 0.5]])
+    # Trimming stops at (0, 2); the trailing zero is then stripped. The
+    # remaining cell 0.5 is below 3 / 3 and must not be re-absorbed.
+    assert trim.trim_array_to_target_length(slip, 1.0, 0.5, axis=1) == (0, 1)
+
+
+# --- trim_dims_thingbaijam ------------------------------------------------
+
+
+def test_trim_dims_thingbaijam_keeps_top_by_default() -> None:
+    slip = np.zeros((5, 5))
+    slip[2, 2] = 1.0
+    assert trim.trim_dims_thingbaijam(slip, 1.0, 1.0) == (0, 3, 2, 3)
+    assert trim.trim_dims_thingbaijam(slip, 1.0, 1.0, keep_top=False) == (2, 3, 2, 3)
+
+
+def test_trim_dims_thingbaijam_uses_correct_axis_per_dimension() -> None:
+    """Length is measured and trimmed along columns, width along rows.
+
+    The 2 x 4 asperity over a low background gives an along-strike
+    autocorrelation length of ~8.04 (within tolerance of the 10 columns) and a
+    down-dip width of 4.5 (within tolerance of the 6 rows), so nothing is
+    trimmed. Mixing up the axes would give targets that force trimming.
+    """
+    slip = np.full((6, 10), 0.5)
+    slip[2:4, 3:7] = 3.0
+    assert trim.autocorrelation_dimension(slip, 1.0, axis=1) == pytest.approx(
+        8.035483870967742
+    )
+    assert trim.autocorrelation_dimension(slip, 1.0, axis=0) == pytest.approx(4.5)
+    assert trim.trim_dims_thingbaijam(slip, 1.0, 1.0, keep_top=False) == (0, 6, 0, 10)
