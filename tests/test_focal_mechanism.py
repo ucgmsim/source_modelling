@@ -335,3 +335,64 @@ def test_from_faults_rejects_mismatched_features(monkeypatch: pytest.MonkeyPatch
     )
     with pytest.raises(ValueError, match="does not match the features"):
         focal_mechanism.CMTClassifier.from_faults([])
+
+
+def test_moho_model_from_grid():
+    lat = np.array([-42.0, -41.0])
+    lon = np.array([170.0, 172.0, 174.0])
+    depth = np.array([[20.0, 30.0, 40.0], [10.0, 20.0, 30.0]])
+    moho_model = focal_mechanism.MohoModel(lat, lon, depth)
+
+    # Grid nodes are reproduced and values in between are bilinear.
+    assert moho_model.depth(-42.0, 170.0) == pytest.approx(20.0)
+    assert moho_model.depth(-41.0, 174.0) == pytest.approx(30.0)
+    assert moho_model.depth(-41.5, 171.0) == pytest.approx(20.0)
+    assert moho_model.depth(-41.25, 173.0) == pytest.approx(27.5)
+    # Longitudes in -180..180 are wrapped onto the 0..360 grid.
+    assert moho_model.depth(-41.5, 173.0 - 360.0) == pytest.approx(30.0)
+    # Outside the grid the Moho is infinitely deep rather than extrapolated.
+    assert moho_model.depth(-43.0, 172.0) == np.inf
+    assert moho_model.depth(-41.5, 175.0) == np.inf
+
+
+def test_slab_model_region_crossing_antimeridian():
+    # A region in 0..360 longitudes whose second-to-last longitude is exactly
+    # 180 and whose last longitude only just passes it: queries on either side
+    # of the antimeridian, in either convention, fall inside the region.
+    grids = {
+        "aaa_lat": np.array([-42.0, -41.0]),
+        "aaa_lon": np.array([179.0, 180.0, 180.5]),
+        "aaa_depth": np.array([[10.0, 20.0, 30.0], [10.0, 20.0, 30.0]]),
+        "aaa_dip": np.full((2, 3), 15.0),
+        "aaa_strike": np.full((2, 3), 45.0),
+    }
+    slab_model = focal_mechanism.SlabModel(grids)
+
+    east = slab_model.query(-41.5, -179.75)  # 180.25 E
+    assert east.present
+    assert (east.depth, east.dip, east.strike) == pytest.approx((25.0, 15.0, 45.0))
+    assert slab_model.query(-41.5, 180.25) == east
+    assert slab_model.query(-41.5, -180.0).depth == pytest.approx(20.0)
+    assert slab_model.query(-41.5, 179.5).depth == pytest.approx(15.0)
+    assert slab_model.query(-41.5, 179.5 - 360.0).depth == pytest.approx(15.0)
+
+
+def test_slab_model_region_in_signed_longitudes():
+    # A global region given in -180..180 longitudes, ending exactly at 180,
+    # must be queried in that convention.
+    grids = {
+        "aaa_lat": np.array([-42.0, -41.0]),
+        "aaa_lon": np.array([-180.0, -10.0, 10.0, 180.0]),
+        "aaa_depth": np.array([[5.0, 10.0, 30.0, 40.0], [5.0, 10.0, 30.0, 40.0]]),
+        "aaa_dip": np.full((2, 4), 20.0),
+        "aaa_strike": np.full((2, 4), 270.0),
+    }
+    slab_model = focal_mechanism.SlabModel(grids)
+
+    west = slab_model.query(-41.5, -5.0)
+    assert west.present
+    assert (west.depth, west.dip, west.strike) == pytest.approx((15.0, 20.0, 270.0))
+    assert slab_model.query(-41.5, 355.0) == west
+    assert slab_model.query(-41.5, 0.0).depth == pytest.approx(20.0)
+    assert slab_model.query(-41.5, -95.0).depth == pytest.approx(7.5)
+    assert not slab_model.query(-43.0, 0.0).present
