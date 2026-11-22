@@ -12,7 +12,7 @@ import scipy as sp
 import shapely
 
 from qcore import coordinates, geo
-from source_modelling import parse_utils, srf
+from source_modelling import parse_utils, srf, srf_parser
 
 SRF_DIR = Path(__file__).parent / "srfs"
 
@@ -423,6 +423,43 @@ def test_write_srf_rejects_slip_points_mismatch(tmp_path: Path):
     )
     with pytest.raises(ValueError):
         truncated.write_srf(tmp_path / "truncated_slip.srf")
+
+
+@pytest.mark.parametrize(
+    "row_ptr, indices, data",
+    [
+        # row_ptr[-1] exceeds len(data).
+        ([0, 5], [0, 1], [1.0, 2.0]),
+        # row_ptr[-1] is less than len(data).
+        ([0, 1], [0, 1], [1.0, 2.0]),
+        # row_ptr[0] != 0.
+        ([1, 2], [0, 1], [1.0, 2.0]),
+        # row_ptr is decreasing.
+        ([0, 3, 2, 2], [0, 1], [1.0, 2.0]),
+        # indices and data lengths differ.
+        ([0, 2], [0], [1.0, 2.0]),
+    ],
+)
+def test_write_srf_rejects_invalid_csr(
+    tmp_path: Path, row_ptr: list[int], indices: list[int], data: list[float]
+):
+    """srf_parser.write_srf must raise ValueError (not panic) on an invalid slipt1 CSR."""
+    n_rows = len(row_ptr) - 1
+    plane = srf_parser.PySrfPlane(0, 0, n_rows, 1, 1, 1, 0, 90, 0, 0, 0)
+    metadata = srf_parser.PySrfMetadata(
+        *[np.zeros(n_rows, dtype=np.float32) for _ in range(11)]
+    )
+    slipt1 = srf_parser.PyCsrMatrix(
+        np.array(row_ptr, dtype=np.uint64),
+        np.array(indices, dtype=np.uint64),
+        np.array(data, dtype=np.float32),
+    )
+    output = tmp_path / "invalid_csr.srf"
+    with pytest.raises(ValueError):
+        srf_parser.write_srf(
+            srf_parser.PySrfFile([plane], metadata, slipt1), str(output)
+        )
+    assert not output.exists()
 
 
 def test_planes_nstk_1_ndip_gt_1():
