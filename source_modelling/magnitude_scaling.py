@@ -63,6 +63,27 @@ def rake_type(rake: float) -> RakeType:
         return RakeType.REVERSE_OBLIQUE
 
 
+def _leonard_area_is_strike_slip(rake: float) -> bool:
+    """Determine if a rake is strike-slip for Leonard's area relations.
+
+    The rake is first wrapped into [-180, 180), so equivalent angles
+    (e.g. 270 and -90) are classified the same way. A rake is
+    strike-slip if |rake| <= 45 or |rake| >= 135 (boundaries inclusive).
+
+    Parameters
+    ----------
+    rake : float
+        Rake of the fault (degrees).
+
+    Returns
+    -------
+    bool
+        True if the rake is strike-slip for Leonard's area relations.
+    """
+    rake = (rake + 180) % 360 - 180
+    return (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135)
+
+
 def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) -> Mw:
     """Convert area to magnitude using the leonard scaling relationship [0]_.
 
@@ -96,9 +117,10 @@ def leonard_area_to_magnitude(area: float, rake: float, random: bool = False) ->
            (2014): 2953-2965.
     """
 
-    if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
-        return np.log10(area) + (
-            sp.stats.norm(loc=3.99, scale=0.26).rvs() if random else 3.99
+    if _leonard_area_is_strike_slip(rake):
+        return Mw(
+            np.log10(area)
+            + (sp.stats.norm(loc=3.99, scale=0.26).rvs() if random else 3.99)
         )
 
     # Leonard quotes assymetric uncertainties for the other rake types.
@@ -140,7 +162,7 @@ def leonard_magnitude_to_area(
            faults." Bulletin of the Seismological Society of America 104.6
            (2014): 2953-2965.
     """
-    if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
+    if _leonard_area_is_strike_slip(rake):
         return 10 ** (
             magnitude - (sp.stats.norm(loc=3.99, scale=0.26).rvs() if random else 3.99)
         )

@@ -635,6 +635,17 @@ def test_area_to_magnitude_calls_correct_function(
         (46.0, 4.0),
         (134.0, 4.0),
         (-134.0, 4.0),
+        # Equivalent angles outside (-180, 180] classify the same way.
+        (-45.0 + 360.0, 3.99),
+        (45.0 - 360.0, 3.99),
+        (135.0 - 360.0, 3.99),
+        (-135.0 + 360.0, 3.99),
+        (-46.0 + 360.0, 4.0),
+        (46.0 + 360.0, 4.0),
+        (134.0 + 360.0, 4.0),
+        (-134.0 - 360.0, 4.0),
+        (270.0, 4.0),
+        (450.0, 4.0),
     ],
 )
 def test_leonard_area_to_magnitude_rake_boundaries(
@@ -645,6 +656,20 @@ def test_leonard_area_to_magnitude_rake_boundaries(
     assert magnitude_scaling.leonard_area_to_magnitude(area, rake) == pytest.approx(
         np.log10(area) + expected_constant
     )
+
+
+@pytest.mark.parametrize("rake", [-90.0, 0.0, 45.0, 90.0, 134.0, 135.0, 180.0])
+@pytest.mark.parametrize("offset", [-360.0, 360.0, 720.0])
+def test_leonard_area_relations_wrap_rake(rake: float, offset: float):
+    """Leonard's area relations give the same result for rakes that differ by a multiple of 360 degrees."""
+    area = 1000.0
+    magnitude = Mw(7.0)
+    assert magnitude_scaling.leonard_area_to_magnitude(
+        area, rake + offset
+    ) == pytest.approx(magnitude_scaling.leonard_area_to_magnitude(area, rake))
+    assert magnitude_scaling.leonard_magnitude_to_area(
+        magnitude, rake + offset
+    ) == pytest.approx(magnitude_scaling.leonard_magnitude_to_area(magnitude, rake))
 
 
 @pytest.mark.parametrize(
