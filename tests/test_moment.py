@@ -1,3 +1,4 @@
+import re
 from unittest.mock import create_autospec, patch
 
 import numpy as np
@@ -525,3 +526,93 @@ def test_find_connected_faults_skips_connected_pairs_and_continues():
     ]
     assert ds.n_subsets == 1
     assert ds.connected("B", "D")
+
+
+UNITS_ERROR_MESSAGE = (
+    "Magnitude for moment is unreasonably large, did you provide moment in "
+    "dyne-cm instead of Nm?"
+)
+
+
+def test_moment_to_magnitude_defaults_to_bold_m():
+    """`bold_m` defaults to True, so the default uses equation 7 (log10 M0 = 1.5 M + 9.05)."""
+    moment_nm = 10**18.05
+    default = moment.moment_to_magnitude(moment_nm)
+    assert default == moment.moment_to_magnitude(moment_nm, bold_m=True)
+    assert default == pytest.approx(6.0, abs=1e-3)
+    assert moment.moment_to_magnitude(moment_nm, bold_m=False) == pytest.approx(
+        6.0 - (6.0667 - 6.0333), abs=1e-3
+    )
+
+
+def _moment_with_magnitude_exactly(magnitude: float, bold_m: bool) -> float:
+    """Find a float moment whose magnitude (equation 7 or 4) is exactly `magnitude`.
+
+    Starts from the analytic inverse and steps through neighbouring floats, since
+    rounding may leave the round-trip a few ulps off.
+    """
+    coefficient = (
+        moment.EQUATION_7_COEFFICIENT if bold_m else moment.EQUATION_4_COEFFICIENT
+    )
+    start = 10 ** ((magnitude + coefficient) * 3 / 2)
+    for direction in (np.inf, -np.inf):
+        candidate = start
+        for _ in range(200):
+            if 2 / 3 * np.log10(candidate) - coefficient == magnitude:
+                return float(candidate)
+            candidate = np.nextafter(candidate, direction)
+    pytest.skip("No float moment maps exactly to the requested magnitude.")
+
+
+@pytest.mark.parametrize("bold_m", [True, False])
+def test_moment_to_magnitude_limit_is_exclusive(bold_m: bool):
+    """A magnitude of exactly 10 is accepted; anything above it is rejected."""
+    boundary_moment = _moment_with_magnitude_exactly(10.0, bold_m)
+    assert moment.moment_to_magnitude(boundary_moment, bold_m=bold_m) == 10.0
+
+    # Just above the boundary, the magnitude exceeds 10 and must be rejected.
+    with pytest.raises(ValueError, match=f"^{re.escape(UNITS_ERROR_MESSAGE)}$"):
+        moment.moment_to_magnitude(boundary_moment * (1 + 1e-9), bold_m=bold_m)
+
+
+@pytest.mark.parametrize("bold_m", [True, False])
+@pytest.mark.parametrize("magnitude", [10.01, 10.5, 10.99])
+def test_moment_to_magnitude_rejects_magnitudes_above_ten(
+    magnitude: float, bold_m: bool
+):
+    """Magnitudes between 10 and 11 are already implausible and raise."""
+    if bold_m:
+        moment_nm = moment.magnitude_to_moment(moment.BoldM(magnitude), bold_m=True)
+    else:
+        moment_nm = moment.magnitude_to_moment(moment.Mw(magnitude), bold_m=False)
+    with pytest.raises(ValueError, match=f"^{re.escape(UNITS_ERROR_MESSAGE)}$"):
+        moment.moment_to_magnitude(moment_nm, bold_m=bold_m)
+
+
+def test_velocity_model_error_message_is_exact():
+    """The velocity model depth error explains the likely top/bottom depth mix-up."""
+    expected = (
+        "Velocity model does not begin at 0km depth (are you using bottom depth "
+        "instead of top depth)?"
+    )
+    bad_vm = pd.DataFrame({"depth_km": [0.5, 2.0]})
+    with pytest.raises(ValueError, match=f"^{re.escape(expected)}$"):
+        moment.velocity_model_layer_index(bad_vm, 1.0)
+
+
+@pytest.mark.parametrize(
+    "moment_nm, area_km2, vs, rho, expected_cm",
+    [
+        # slip = M0 / (A * rho * Vs^2), all in SI, then m -> cm.
+        (1e12, 1.0, 1.0, 1.0, 0.1),
+        (3.5e18, 120.0, 3.2, 2.7, 1e2 * 3.5e18 / (120e6 * 2.7e3 * 3.2e3**2)),
+        (7.0e16, 2.5, 0.5, 1.9, 1e2 * 7.0e16 / (2.5e6 * 1.9e3 * 0.5e3**2)),
+    ],
+)
+def test_point_source_slip_exact(
+    moment_nm: float, area_km2: float, vs: float, rho: float, expected_cm: float
+):
+    """Point source slip uses exact SI unit conversions (km^2 -> 1e6 m^2, etc.)."""
+    vm = pd.DataFrame({"depth_km": [0.0], "Vs": [vs], "rho": [rho]})
+    slip = moment.point_source_slip(moment_nm, area_km2, vm, 5.0)
+    assert slip == pytest.approx(expected_cm, rel=1e-12)
