@@ -168,6 +168,33 @@ pub fn write_srf(py: Python<'_>, py_srf_file: Py<PySrfFile>, file_path: &str) ->
         )));
     }
 
+    // Writing iterates slipt1 rows by slicing data[row_ptr[i]..row_ptr[i + 1]],
+    // so row_ptr must be a valid CSR indptr for data or the write panics.
+    let slipt1 = &srf_view.slipt1;
+    let n_values = slipt1.data.len();
+    if slipt1.row_ptr.first() != Some(&0) {
+        return Err(PyErr::new::<PyValueError, _>(
+            "slipt1 row_ptr must be non-empty and start at 0",
+        ));
+    }
+    if !slipt1.row_ptr.windows(2).all(|w| w[0] <= w[1]) {
+        return Err(PyErr::new::<PyValueError, _>(
+            "slipt1 row_ptr must be non-decreasing",
+        ));
+    }
+    let last_ptr = *slipt1.row_ptr.last().unwrap_or(&0);
+    if last_ptr != n_values {
+        return Err(PyErr::new::<PyValueError, _>(format!(
+            "slipt1 row_ptr ends at {last_ptr} but data has {n_values} values"
+        )));
+    }
+    if slipt1.indices.len() != n_values {
+        return Err(PyErr::new::<PyValueError, _>(format!(
+            "slipt1 has {} indices but {n_values} data values",
+            slipt1.indices.len()
+        )));
+    }
+
     // The view only borrows plain slices, so the whole write can run without
     // the GIL.
     py.detach(|| {
